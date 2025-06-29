@@ -9,7 +9,7 @@ import { CheckCircle, AlertCircle, Info, Loader2 } from 'lucide-react';
 
 interface LogEntry {
   message: string;
-  type: 'info' | 'success' | 'error' | 'progress';
+  type: 'info' | 'success' | 'error' | 'progress' | 'warning';
   timestamp: string;
   step?: string;
   current?: number;

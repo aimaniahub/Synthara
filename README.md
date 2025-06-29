@@ -144,3 +144,143 @@ Data Validation → Schema Consistency → Output Formatting → CSV Generation
 - **Performance Optimization**: Efficient processing of large-scale web content
 
 This platform represents a paradigm shift from traditional data generation to intelligent, content-driven dataset creation that maximizes the value of real-world web information.
+
+## 🚀 Quick Start & Deployment
+
+### Local Development
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/SumanthPrasadTM/Synthara.git
+   cd Synthara
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Set up environment variables**
+   ```bash
+   cp .env.example .env.local
+   # Edit .env.local with your API keys
+   ```
+
+4. **Run the development server**
+   ```bash
+   npm run dev
+   ```
+
+### 🌐 Deploy to Netlify
+
+#### Option 1: One-Click Deploy
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/SumanthPrasadTM/Synthara)
+
+#### Option 2: Manual Deployment
+
+1. **Prepare for deployment**
+   ```bash
+   npm run deploy:prepare
+   ```
+
+2. **Connect to Netlify**
+   - Push your code to GitHub
+   - Go to [Netlify Dashboard](https://app.netlify.com)
+   - Click "New site from Git"
+   - Connect your GitHub repository
+
+3. **Configure build settings**
+   - Build command: `npm run build:netlify`
+   - Publish directory: `.next`
+   - Node version: `18`
+
+4. **Set environment variables** in Netlify dashboard:
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   ANTHROPIC_API_KEY=your_anthropic_key
+   GOOGLE_GENERATIVE_AI_API_KEY=your_google_ai_key
+   SERPAPI_API_KEY=your_serpapi_key
+   FIRECRAWL_API_KEY=your_firecrawl_key
+   PREFERRED_AI_MODEL=anthropic/claude-3-5-sonnet-20241022
+   ```
+
+5. **Deploy**
+   - Click "Deploy site"
+   - Your app will be live at `https://your-site-name.netlify.app`
+
+### 📋 Required API Keys
+
+| Service | Purpose | Get API Key |
+|---------|---------|-------------|
+| **Supabase** | Database & Authentication | [supabase.com](https://supabase.com) |
+| **Anthropic** | Primary AI Model (Claude) | [console.anthropic.com](https://console.anthropic.com) |
+| **Google AI** | Fallback AI Model (Gemini) | [aistudio.google.com](https://aistudio.google.com) |
+| **SerpAPI** | Web Search Results | [serpapi.com](https://serpapi.com) |
+| **Firecrawl** | Web Content Scraping | [firecrawl.dev](https://firecrawl.dev) |
+
+### 🔧 Build Commands
+
+```bash
+# Development
+npm run dev
+
+# Production build
+npm run build
+
+# Type checking
+npm run typecheck
+
+# Clean build artifacts
+npm run clean
+
+# Optimize for deployment
+npm run optimize
+```
+
+### 🌟 Features Ready for Production
+
+- ✅ **Anthropic Claude Integration** - Primary AI model for superior reasoning
+- ✅ **Dynamic Content System** - Context-aware UI and intelligent examples
+- ✅ **Real Data Extraction** - No more placeholder or "undefined" values
+- ✅ **Web Scraping Pipeline** - Live data from research papers and websites
+- ✅ **Multi-Domain Support** - Medical, financial, IoT, social media, and more
+- ✅ **Responsive Design** - Works on desktop, tablet, and mobile
+- ✅ **Authentication** - Secure user management with Supabase
+- ✅ **Data Management** - Save, preview, and analyze generated datasets
+
+### 📊 Performance Optimizations
+
+- **Bundle Splitting** - Optimized chunk loading
+- **Image Optimization** - Automatic image compression and formats
+- **CSS Optimization** - Minimized and optimized stylesheets
+- **Tree Shaking** - Unused code elimination
+- **Lazy Loading** - Components loaded on demand
+
+### 🔒 Security Features
+
+- **Environment Variables** - Secure API key management
+- **CORS Protection** - Cross-origin request security
+- **Input Validation** - Comprehensive data validation
+- **Authentication** - Secure user sessions
+- **Rate Limiting** - API abuse prevention
+
+### 📈 Monitoring & Analytics
+
+The application includes built-in monitoring for:
+- API usage and performance
+- User activity tracking
+- Error logging and reporting
+- Dataset generation metrics
+
+### 🆘 Support & Documentation
+
+- **Help Center**: Available at `/help` route
+- **API Documentation**: Comprehensive API guides
+- **Community Support**: GitHub Issues and Discussions
+- **Professional Support**: Contact through the application
+
+---
+
+**Ready to deploy your AI-powered dataset generator? Click the deploy button above or follow the manual deployment guide!** 🚀

@@ -403,19 +403,20 @@ function createStructurePrompt(model: string) {
 CRITICAL: You must extract ACTUAL NUMBERS and VALUES from the content, not just create column names.
 
 MANDATORY DATA EXTRACTION REQUIREMENTS:
-1. EXTRACT REAL AFI VALUES: Find actual measurements like 15.2 cm, 8.5 cm, 22.1 cm from the content
-2. EXTRACT REAL GESTATIONAL AGES: Find actual weeks like 32, 28, 36 from research data
-3. EXTRACT REAL FETAL WEIGHTS: Find actual weights like 1800g, 2200g, 1500g from studies
-4. USE MEDICAL RANGES: Normal AFI 5-24 cm, oligohydramnios <2 cm, polyhydramnios >8 cm
+1. EXTRACT REAL VALUES: Find actual measurements, numbers, and data points from the content
+2. EXTRACT RELEVANT METRICS: Find domain-specific measurements and values from research data
+3. EXTRACT QUANTITATIVE DATA: Find numerical values, statistics, and measurements from studies
+4. USE DOMAIN RANGES: Apply appropriate ranges and standards mentioned in the content
 5. CREATE {{numRows}} ROWS with REAL NUMERICAL VALUES, not placeholder text
-6. FIND ACTUAL RESEARCH DATA: Extract measurements from case studies and clinical data
+6. FIND ACTUAL RESEARCH DATA: Extract measurements from case studies and research content
 7. USE STATISTICAL DATA: Extract means, ranges, and distributions mentioned in content
 
-EXAMPLE OF WHAT TO EXTRACT:
-- AFI values: 15.2, 8.5, 22.1, 5.8, 18.7 (from content ranges and studies)
-- Gestational ages: 32, 28, 36, 24, 40 (from research data)
-- Fetal weights: 1800, 2200, 1500, 3000, 2500 (from clinical studies)
-- Conditions: "normal", "oligohydramnios", "polyhydramnios" (from medical classifications)
+ADAPT TO USER REQUEST: Analyze the user's prompt to understand the domain and extract relevant data types
+- For medical requests: Extract clinical measurements, lab values, patient data
+- For financial requests: Extract market data, prices, trading volumes, financial metrics
+- For IoT requests: Extract sensor readings, device metrics, environmental data
+- For social media requests: Extract engagement metrics, user data, content performance
+- For general requests: Extract numerical values, categories, and statistical measures
 
 DO NOT CREATE GENERIC COLUMN NAMES - EXTRACT REAL NUMERICAL DATA FROM THE CONTENT!
 
@@ -473,15 +474,16 @@ SCHEMA OPTIMIZATION:
 - Design schema that captures the full richness of the available content
 
 MANDATORY OUTPUT FORMAT - EXTRACT REAL DATA:
-- generatedJsonString: '[{"afi_cm":15.2,"gestational_weeks":32,"fetal_weight_g":1800,"condition":"normal","mvp_cm":8.5},{"afi_cm":22.1,"gestational_weeks":28,"fetal_weight_g":2200,"condition":"polyhydramnios","mvp_cm":9.2}]'
-- detectedSchema: [{"name":"afi_cm","type":"number"},{"name":"gestational_weeks","type":"number"},{"name":"fetal_weight_g","type":"number"},{"name":"condition","type":"string"},{"name":"mvp_cm","type":"number"}]
-- feedback: "Extracted real AFI measurements, gestational ages, and fetal weights from medical research data and clinical studies."
+- generatedJsonString: '[{"column1":value1,"column2":value2,"column3":value3},{"column1":value4,"column2":value5,"column3":value6}]'
+- detectedSchema: [{"name":"column1","type":"number"},{"name":"column2","type":"string"},{"name":"column3","type":"number"}]
+- feedback: "Extracted real data from web content including relevant measurements, statistics, and domain-specific findings."
 
 CRITICAL REQUIREMENTS:
 - JSON keys MUST EXACTLY MATCH schema "name" fields
-- Extract REAL NUMBERS from content (AFI: 5-24 cm normal, <2 oligohydramnios, >8 polyhydramnios)
+- Extract REAL NUMBERS and VALUES from content based on the user's domain
 - Create {{numRows}} rows with ACTUAL DATA VALUES
-- Use medical ranges and research data from the content
+- Use domain-appropriate ranges and research data from the content
+- Adapt column names and data types to match the content and user request
 
 Now analyze the content comprehensively and create the most valuable dataset possible using dynamic schema discovery.`,
     });

@@ -73,10 +73,10 @@ export class AnthropicService {
       try {
         parsedResponse = JSON.parse(content.text);
         console.log(`[Anthropic] Parsed response:`, JSON.stringify(parsedResponse, null, 2));
-      } catch (parseError) {
+      } catch (parseError: any) {
         console.error(`[Anthropic] Failed to parse JSON response:`, parseError);
         console.error(`[Anthropic] Raw response:`, content.text);
-        throw new Error(`Anthropic returned invalid JSON: ${parseError.message}`);
+        throw new Error(`Anthropic returned invalid JSON: ${parseError?.message || 'Unknown error'}`);
       }
 
       if (!parsedResponse.jsonString || !parsedResponse.detectedSchema) {
@@ -90,9 +90,9 @@ export class AnthropicService {
           throw new Error('jsonString does not contain a valid JSON array');
         }
         console.log(`[Anthropic] Successfully processed content, generated ${parsedResponse.detectedSchema.length} columns`);
-      } catch (jsonValidationError) {
+      } catch (jsonValidationError: any) {
         console.error(`[Anthropic] Invalid JSON in jsonString:`, jsonValidationError);
-        throw new Error(`Anthropic returned invalid JSON data: ${jsonValidationError.message}`);
+        throw new Error(`Anthropic returned invalid JSON data: ${jsonValidationError?.message || 'Unknown error'}`);
       }
 
       return {
@@ -161,11 +161,15 @@ export class AnthropicService {
    * Build the structured data extraction prompt
    */
   private buildStructuredDataPrompt(request: StructuredDataRequest): string {
-    return `EXTRACT REAL NUMERICAL DATA FROM MEDICAL CONTENT
+    const domain = this.detectDomain(request.userPrompt);
+    const domainExamples = this.getDomainExamples(domain);
+
+    return `EXTRACT REAL NUMERICAL DATA FROM WEB CONTENT
 
 User Request: "${request.userPrompt}"
 Target Rows: ${request.numRows}
 Content Size: ${request.scrapedContent.length} characters
+Detected Domain: ${domain}
 
 CRITICAL: You must extract ACTUAL NUMBERS and VALUES from the content below, not just create column names.
 
@@ -173,19 +177,15 @@ Web Content:
 ${request.scrapedContent}
 
 MANDATORY DATA EXTRACTION REQUIREMENTS:
-1. EXTRACT REAL AFI VALUES: Find actual measurements like 15.2 cm, 8.5 cm, 22.1 cm from the content
-2. EXTRACT REAL GESTATIONAL AGES: Find actual weeks like 32, 28, 36 from research data
-3. EXTRACT REAL FETAL WEIGHTS: Find actual weights like 1800g, 2200g, 1500g from studies
-4. USE MEDICAL RANGES: Normal AFI 5-24 cm, oligohydramnios <2 cm, polyhydramnios >8 cm
+1. EXTRACT REAL VALUES: Find actual measurements, numbers, and data points from the content
+2. EXTRACT RELEVANT METRICS: Find domain-specific measurements and values from research data
+3. EXTRACT QUANTITATIVE DATA: Find numerical values, statistics, and measurements from studies
+4. USE DOMAIN RANGES: Apply appropriate ranges and standards mentioned in the content
 5. CREATE ${request.numRows} ROWS with REAL NUMERICAL VALUES, not placeholder text
-6. FIND ACTUAL RESEARCH DATA: Extract measurements from case studies and clinical data
+6. FIND ACTUAL RESEARCH DATA: Extract measurements from case studies and research content
 7. USE STATISTICAL DATA: Extract means, ranges, and distributions mentioned in content
 
-EXAMPLE OF WHAT TO EXTRACT:
-- AFI values: 15.2, 8.5, 22.1, 5.8, 18.7 (from content ranges and studies)
-- Gestational ages: 32, 28, 36, 24, 40 (from research data)
-- Fetal weights: 1800, 2200, 1500, 3000, 2500 (from clinical studies)
-- Conditions: "normal", "oligohydramnios", "polyhydramnios" (from medical classifications)
+${domainExamples}
 
 DO NOT CREATE GENERIC COLUMN NAMES - EXTRACT REAL NUMERICAL DATA FROM THE CONTENT!
 
@@ -238,18 +238,100 @@ SCHEMA OPTIMIZATION:
 
 MANDATORY OUTPUT FORMAT - EXTRACT REAL DATA:
 {
-  "jsonString": "[{\\"afi_cm\\": 15.2, \\"gestational_weeks\\": 32, \\"fetal_weight_g\\": 1800, \\"condition\\": \\"normal\\", \\"mvp_cm\\": 8.5}, {\\"afi_cm\\": 22.1, \\"gestational_weeks\\": 28, \\"fetal_weight_g\\": 2200, \\"condition\\": \\"polyhydramnios\\", \\"mvp_cm\\": 9.2}, ...]",
-  "detectedSchema": [{"name": "afi_cm", "type": "number"}, {"name": "gestational_weeks", "type": "number"}, {"name": "fetal_weight_g", "type": "number"}, {"name": "condition", "type": "string"}, {"name": "mvp_cm", "type": "number"}],
-  "feedback": "Extracted real AFI measurements, gestational ages, and fetal weights from medical research data and clinical studies in the content."
+  "jsonString": "[{\"column1\": value1, \"column2\": value2, \"column3\": value3}, {\"column1\": value4, \"column2\": value5, \"column3\": value6}, ...]",
+  "detectedSchema": [{"name": "column1", "type": "number"}, {"name": "column2", "type": "string"}, {"name": "column3", "type": "number"}],
+  "feedback": "Extracted real data from ${domain} content including relevant measurements, statistics, and research findings."
 }
 
 CRITICAL REQUIREMENTS:
 - JSON keys MUST EXACTLY MATCH schema "name" fields
-- Extract REAL NUMBERS from the content (AFI: 5-24 cm normal, <2 oligohydramnios, >8 polyhydramnios)
+- Extract REAL NUMBERS and VALUES from the content based on the domain
 - Create ${request.numRows} rows with ACTUAL DATA VALUES
-- Use medical ranges and research data from the content
+- Use domain-appropriate ranges and research data from the content
+- Adapt column names and data types to match the content and user request
 
 Important: Only return REAL data found in the content. Quality over quantity - real data is more valuable than hitting exact row count.`;
+  }
+
+  /**
+   * Detect domain from user prompt
+   */
+  private detectDomain(prompt: string): string {
+    const lowerPrompt = prompt.toLowerCase();
+
+    if (this.containsKeywords(lowerPrompt, ['medical', 'patient', 'clinical', 'health', 'diagnosis', 'treatment', 'hospital', 'afi', 'fetal', 'blood', 'heart rate'])) {
+      return 'medical';
+    }
+    if (this.containsKeywords(lowerPrompt, ['financial', 'stock', 'market', 'trading', 'investment', 'portfolio', 'price', 'revenue', 'profit'])) {
+      return 'financial';
+    }
+    if (this.containsKeywords(lowerPrompt, ['ecommerce', 'customer', 'purchase', 'product', 'sales', 'order', 'shopping', 'retail'])) {
+      return 'ecommerce';
+    }
+    if (this.containsKeywords(lowerPrompt, ['sensor', 'iot', 'device', 'temperature', 'humidity', 'monitoring', 'smart'])) {
+      return 'iot';
+    }
+    if (this.containsKeywords(lowerPrompt, ['social', 'media', 'post', 'like', 'share', 'comment', 'engagement'])) {
+      return 'social';
+    }
+
+    return 'general';
+  }
+
+  /**
+   * Get domain-specific examples
+   */
+  private getDomainExamples(domain: string): string {
+    switch (domain) {
+      case 'medical':
+        return `MEDICAL DATA EXAMPLES:
+- Extract measurements: heart rate (60-100 bpm), blood pressure (120/80 mmHg), temperature (36.5°C)
+- Extract lab values: glucose levels, cholesterol, hemoglobin counts
+- Extract clinical data: patient ages, treatment durations, diagnostic codes
+- Extract research metrics: study populations, treatment outcomes, statistical significance`;
+
+      case 'financial':
+        return `FINANCIAL DATA EXAMPLES:
+- Extract market data: stock prices, trading volumes, market cap values
+- Extract performance metrics: returns, volatility, beta coefficients
+- Extract economic indicators: interest rates, inflation rates, GDP figures
+- Extract trading data: bid/ask spreads, transaction amounts, portfolio allocations`;
+
+      case 'ecommerce':
+        return `ECOMMERCE DATA EXAMPLES:
+- Extract sales data: order amounts, quantities, discount percentages
+- Extract customer metrics: purchase frequency, lifetime value, satisfaction scores
+- Extract product data: prices, ratings, inventory levels, category performance
+- Extract behavioral data: click rates, conversion rates, cart abandonment rates`;
+
+      case 'iot':
+        return `IOT DATA EXAMPLES:
+- Extract sensor readings: temperature values, humidity percentages, pressure measurements
+- Extract device metrics: battery levels, signal strength, uptime percentages
+- Extract environmental data: air quality indices, noise levels, light intensity
+- Extract performance data: response times, error rates, throughput measurements`;
+
+      case 'social':
+        return `SOCIAL MEDIA DATA EXAMPLES:
+- Extract engagement metrics: likes, shares, comments, view counts
+- Extract user data: follower counts, posting frequency, engagement rates
+- Extract content metrics: reach, impressions, click-through rates
+- Extract sentiment data: positive/negative scores, emotion classifications`;
+
+      default:
+        return `GENERAL DATA EXAMPLES:
+- Extract numerical values: counts, measurements, percentages, ratios
+- Extract categorical data: classifications, types, statuses, categories
+- Extract temporal data: dates, times, durations, frequencies
+- Extract statistical data: means, medians, standard deviations, correlations`;
+    }
+  }
+
+  /**
+   * Check if text contains any of the specified keywords
+   */
+  private containsKeywords(text: string, keywords: string[]): boolean {
+    return keywords.some(keyword => text.includes(keyword));
   }
 
   /**

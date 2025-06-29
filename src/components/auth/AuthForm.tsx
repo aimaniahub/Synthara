@@ -109,7 +109,7 @@ export function AuthForm() {
               <Input
                 id="fullName"
                 type="text"
-                placeholder="Your full name"
+                placeholder="Enter your full name"
                 {...form.register("fullName")}
                 className="py-3 h-auto shadow-sm"
                 disabled={isSubmitting || isPending}
@@ -124,7 +124,7 @@ export function AuthForm() {
             <Input
               id="email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="Enter your email address"
               {...form.register("email")}
               className="py-3 h-auto shadow-sm"
               disabled={isSubmitting || isPending}
@@ -138,7 +138,7 @@ export function AuthForm() {
             <Input
               id="password"
               type="password"
-              placeholder="••••••••"
+              placeholder="Create a secure password"
               {...form.register("password")}
               className="py-3 h-auto shadow-sm"
               disabled={isSubmitting || isPending}

@@ -20,6 +20,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { logActivity, saveDataset } from '@/lib/supabase/actions';
 import { LiveLogger } from '@/components/ui/live-logger';
+import { dynamicContent, type ContentContext, type DynamicExample } from '@/services/dynamic-content-service';
+import DynamicExamples from '@/components/ui/dynamic-examples';
 
 const dataGenerationSchema = z.object({
   prompt: z.string().min(10, { message: "Prompt must be at least 10 characters long." }).max(2000, {message: "Prompt must be 2000 characters or less."}),
@@ -43,6 +45,8 @@ export function DataGenerationClient() {
   const [currentRequestData, setCurrentRequestData] = useState<any>(null);
   const [isProcessingFinalData, setIsProcessingFinalData] = useState(false);
   const [isGenerationInProgress, setIsGenerationInProgress] = useState(false);
+  const [dynamicPlaceholder, setDynamicPlaceholder] = useState<string>("Describe the type of data you want to generate...");
+  const [smartDefaults, setSmartDefaults] = useState<Record<string, any>>({});
 
   // Additional ref-based guard to prevent any possibility of duplicate requests
   const isRequestActiveRef = useRef(false);
@@ -70,6 +74,61 @@ export function DataGenerationClient() {
       useWebData: false,
     },
   });
+
+  // Watch for prompt changes to update dynamic content
+  const currentPrompt = form.watch("prompt");
+
+  // Update dynamic content based on user input
+  useEffect(() => {
+    const context: ContentContext = {
+      userPrompt: currentPrompt,
+    };
+
+    // Update placeholder text
+    const placeholderData = dynamicContent.generatePlaceholder(context);
+    setDynamicPlaceholder(placeholderData.text);
+
+    // Update smart defaults
+    const defaults = dynamicContent.generateSmartDefaults(context);
+    setSmartDefaults(defaults);
+
+    // Auto-update form defaults if user hasn't manually changed them
+    if (currentPrompt && currentPrompt.length > 20) {
+      const currentNumRows = form.getValues("numRows");
+      const currentUseWebData = form.getValues("useWebData");
+      const currentDatasetName = form.getValues("datasetName");
+
+      // Only update if user hasn't manually changed from defaults
+      if (currentNumRows === 10 || currentNumRows === smartDefaults.numRows) {
+        form.setValue("numRows", defaults.numRows);
+      }
+
+      if (!currentUseWebData && defaults.useWebData) {
+        form.setValue("useWebData", defaults.useWebData);
+      }
+
+      if (!currentDatasetName && defaults.datasetName) {
+        form.setValue("datasetName", defaults.datasetName);
+      }
+    }
+  }, [currentPrompt, form]);
+
+  // Handle example selection
+  const handleExampleSelect = (example: DynamicExample) => {
+    form.setValue("prompt", example.prompt);
+
+    // Apply smart defaults for the example
+    const context: ContentContext = {
+      userPrompt: example.prompt,
+    };
+    const defaults = dynamicContent.generateSmartDefaults(context);
+
+    form.setValue("numRows", defaults.numRows);
+    form.setValue("useWebData", defaults.useWebData);
+    if (defaults.datasetName) {
+      form.setValue("datasetName", defaults.datasetName);
+    }
+  };
   // Handle live logger completion
   const handleLiveLoggerComplete = async (result: GenerateDataOutput) => {
     console.log('[DataGeneration] Generation completed, clearing guards');
@@ -394,7 +453,7 @@ export function DataGenerationClient() {
               <Textarea
                 id="prompt"
                 {...form.register("prompt")}
-                placeholder="e.g., Generate a dataset of 50 fictional customers with names, emails, ages, and purchase history..."
+                placeholder={dynamicPlaceholder}
                 rows={4}
                 className="mt-2 text-base shadow-sm"
                 disabled={isGenerating}
@@ -556,7 +615,7 @@ export function DataGenerationClient() {
                             setDatasetName(e.target.value);
                             form.setValue("datasetName", e.target.value);
                         }}
-                        placeholder="Enter a name for this dataset"
+                        placeholder={smartDefaults.datasetName || "Enter a name for this dataset"}
                         className="flex-grow text-base shadow-sm"
                         disabled={isSaving || isGenerating}
                     />
@@ -635,6 +694,13 @@ export function DataGenerationClient() {
       </form>
 
       <div className="lg:col-span-1 space-y-8">
+        {/* Dynamic Examples */}
+        <DynamicExamples
+          userPrompt={currentPrompt || ""}
+          onExampleSelect={handleExampleSelect}
+          className="sticky top-20"
+        />
+
         {(isSuggesting || suggestedModel) &&
         <Card className="bg-accent/10 border-accent/50 shadow-lg sticky top-20">
           <CardHeader>
