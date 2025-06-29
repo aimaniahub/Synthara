@@ -2,7 +2,7 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   // Optimize for Netlify deployment
-  output: 'standalone',
+  // Note: Netlify handles the deployment, so we don't need 'standalone' output
 
   // Build configuration
   typescript: {

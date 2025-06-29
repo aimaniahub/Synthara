@@ -1,27 +1,12 @@
 [build]
+  command = "npm run build:netlify"
   publish = ".next"
-  command = "npm run build"
 
 [build.environment]
   NODE_VERSION = "18"
-  NPM_FLAGS = "--prefix=/dev/null"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-
-[functions]
-  node_bundler = "esbuild"
-
-# Redirect all server-side routes to Next.js
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/___netlify-handler"
-  status = 200
-
-[[redirects]]
-  from = "/_next/static/*"
-  to = "/static/:splat"
-  status = 200
 
 # Handle client-side routing
 [[redirects]]

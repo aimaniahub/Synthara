@@ -24,7 +24,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "build:analyze": "ANALYZE=true npm run build",
-    "build:netlify": "npm run typecheck && npm run build",
+    "build:netlify": "npm run clean && npm run build",
     "deploy:prepare": "bash scripts/deploy.sh",
     "postbuild": "echo 'Build completed successfully'",
     "clean": "rimraf .next out node_modules/.cache temp",
