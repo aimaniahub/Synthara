@@ -293,35 +293,28 @@ const refineSearchQueryPrompt = ai.definePrompt({
         searchQuery: z.string().describe("Optimized search query for Google search"),
         reasoning: z.string().describe("Brief explanation of how the query was refined")
     }) },
-    prompt: `You are an expert at creating simple, effective Google search queries.
+    prompt: `Extract the core search terms from this user request and create a simple Google search query.
 
-Given a user's data generation request, create a clean, direct search query using only the most essential keywords.
+RULES:
+1. Remove ALL instruction words: "generate", "create", "provide", "I need", "give me", "find", "get", "make", "build"
+2. Remove ALL data words: "data", "dataset", "table", "list", "information", "details"
+3. Keep ONLY the main topic and essential keywords
+4. Use 2-4 words maximum
+5. Use terms people actually search for on Google
 
-Guidelines:
-1. Remove ALL data generation language ("generate", "create", "provide", "dataset", "data for", "synthetic")
-2. Extract only the CORE topic and 2-4 most important keywords
-3. Keep it simple - use basic search terms that people would actually search for
-4. Focus on the main subject (e.g., "NSE FII DII", "job postings Bangalore", "iPhone prices")
-5. Add time keywords only if specifically mentioned (e.g., "June", "2024", "latest")
-6. Use common, searchable terms that appear in web content
+EXAMPLES:
+"I need a table listing common diseases affecting mango and apple trees" → "mango apple tree diseases"
+"Generate NSE FII and DII net inflow data for June" → "NSE FII DII"
+"Create customer data with demographics" → "customer demographics"
+"Provide job postings in Bangalore for AI/ML roles" → "AI ML jobs Bangalore"
+"Get latest iPhone models with prices" → "iPhone models prices"
+"Find startup funding information" → "startup funding"
+"Generate stock market data" → "stock market"
+"Create sales data for retail companies" → "retail sales"
 
-Examples:
-- "Generate NSE stock news data with sentiment from June 2025" → "NSE stock news June 2025"
-- "Provide the latest NSE FII and DII net inflow data for June" → "NSE FII DII June"
-- "Create customer data with demographics" → "customer demographics"
-- "Generate sales data for retail companies" → "retail sales data"
-- "Create dataset of latest iPhone models with prices" → "iPhone models prices 2024"
-- "Generate startup funding data" → "startup funding 2024"
-- "Find job postings in Bangalore for AI/ML roles" → "AI ML jobs Bangalore"
-- "Get company earnings data" → "company earnings"
-- "Latest stock market data" → "stock market data"
-- "FII DII investment flows" → "FII DII investment"
+User request: "{{userPrompt}}"
 
-Keep it SHORT and SIMPLE - aim for 2-4 main keywords that people would naturally search for.
-
-User's data generation prompt: "{{userPrompt}}"
-
-Create a simple, direct search query using only the most essential keywords.`,
+Extract only the core topic keywords (2-4 words max):`,
 });
 
 
@@ -499,6 +492,25 @@ function cleanAIResponse(response: string): string {
     }
 
     return cleaned.trim();
+}
+
+// Simple keyword extraction fallback (no AI needed)
+function extractSimpleKeywords(userPrompt: string): string {
+    // Remove common instruction words
+    const instructionWords = [
+        'generate', 'create', 'provide', 'give me', 'i need', 'find', 'get', 'make', 'build',
+        'data', 'dataset', 'table', 'list', 'information', 'details', 'for', 'with', 'of', 'the',
+        'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'from', 'by', 'as', 'is', 'are'
+    ];
+
+    // Split into words and filter
+    const words = userPrompt.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 2 && !instructionWords.includes(word));
+
+    // Take first 3-4 most important words
+    return words.slice(0, 4).join(' ');
 }
 
 // Helper function to generate simple fallback search queries
@@ -765,16 +777,26 @@ const generateFromWebFlow = ai.defineFlow(
         // Validate the response
         if (queryRefinement && queryRefinement.searchQuery && queryRefinement.searchQuery.trim()) {
             optimizedQuery = queryRefinement.searchQuery.trim();
-            logSuccess(`✅ Query optimized: "${optimizedQuery}"`);
-            feedbackLog += `Optimized search query: "${optimizedQuery}"\n`;
+            logSuccess(`✅ Query optimized by AI: "${optimizedQuery}"`);
+            feedbackLog += `AI optimized search query: "${optimizedQuery}"\n`;
             feedbackLog += `Reasoning: ${queryRefinement.reasoning || 'No reasoning provided'}\n`;
         } else {
             throw new Error("Query refinement returned empty or invalid result");
         }
     } catch (error: any) {
-        logError(`❌ Query refinement failed: ${error.message}. Using original prompt.`);
-        feedbackLog += `Query refinement failed, using original prompt: ${error.message}\n`;
-        optimizedQuery = input.prompt;
+        logError(`❌ AI query refinement failed: ${error.message}. Using simple keyword extraction.`);
+
+        // Fallback to simple keyword extraction
+        optimizedQuery = extractSimpleKeywords(input.prompt);
+
+        if (optimizedQuery && optimizedQuery.trim()) {
+            logSuccess(`✅ Query optimized by keyword extraction: "${optimizedQuery}"`);
+            feedbackLog += `Simple keyword extraction used: "${optimizedQuery}"\n`;
+        } else {
+            logError(`❌ Keyword extraction also failed. Using original prompt.`);
+            optimizedQuery = input.prompt;
+            feedbackLog += `Both AI and keyword extraction failed, using original prompt: ${error.message}\n`;
+        }
     }
 
     // Final validation to ensure we have a query
