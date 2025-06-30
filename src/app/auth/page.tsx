@@ -3,6 +3,9 @@ import { SyntharaLogo } from '@/components/icons/SyntharaLogo';
 import Link from 'next/link';
 import { Suspense } from 'react';
 
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 export default function AuthPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background via-secondary/70 to-background p-4">

@@ -25,7 +25,6 @@ type AuthFormValues = z.infer<typeof authSchema>;
 export function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = createSupabaseBrowserClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [authMessage, setAuthMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
   const [authMode, setAuthMode] = useState<'signIn' | 'signUp'>('signIn');
@@ -49,6 +48,12 @@ export function AuthForm() {
 
     startTransition(async () => {
       try {
+        const supabase = createSupabaseBrowserClient();
+
+        if (!supabase) {
+          throw new Error('Authentication service is not available. Please try again later.');
+        }
+
         if (authMode === 'signUp') {
           if (!data.fullName || data.fullName.trim() === '') {
             form.setError('fullName', { type: 'manual', message: 'Full name is required for sign up.' });

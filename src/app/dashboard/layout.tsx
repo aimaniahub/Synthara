@@ -1,6 +1,9 @@
 
 "use client";
 
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 import {
   SidebarProvider,
   Sidebar,
@@ -25,9 +28,15 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+
+    // If Supabase client is not available (e.g., during build), skip auth
+    if (!supabase) {
+      return;
+    }
+
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_OUT' || !session) {
@@ -44,7 +53,7 @@ export default function DashboardLayout({
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [router, supabase]);
+  }, [router]);
 
 
   return (

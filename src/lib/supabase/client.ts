@@ -2,6 +2,21 @@
 import { createBrowserClient } from '@supabase/ssr';
 
 export function createSupabaseBrowserClient() {
+  // During build time, environment variables might not be available
+  // Return null to handle gracefully during static generation
+  if (typeof window === 'undefined') {
+    // We're on the server during build time
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey ||
+        supabaseUrl === 'YOUR_SUPABASE_URL_HERE' ||
+        supabaseAnonKey === 'YOUR_SUPABASE_ANON_KEY_HERE') {
+      console.warn('[Supabase Client] Environment variables not set during build time. This is expected during deployment.');
+      return null;
+    }
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

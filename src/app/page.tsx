@@ -1,6 +1,9 @@
 
 "use client"; // Needs to be client for Supabase auth check
 
+// Force dynamic rendering to prevent build-time errors
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -46,27 +49,40 @@ const teamMembers = [
 export default function HomePage() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
-    async function getUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+    // Only initialize Supabase client on the client side
+    const supabase = createSupabaseBrowserClient();
+
+    // If Supabase client is not available (e.g., during build), skip auth
+    if (!supabase) {
       setLoading(false);
+      return;
+    }
+
+    async function getUser() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUser(user);
+      } catch (error) {
+        console.warn('[HomePage] Auth check failed:', error);
+      } finally {
+        setLoading(false);
+      }
     }
     getUser();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        setLoading(false); 
+        setLoading(false);
       }
     });
-    
+
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, []);
 
 
   return (
