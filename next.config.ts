@@ -28,6 +28,12 @@ const nextConfig: NextConfig = {
   // Ensure App Router is used exclusively
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
 
+  // Force App Router configuration
+
+  // Disable static optimization completely
+  trailingSlash: false,
+  skipTrailingSlashRedirect: true,
+
 
 
   // Webpack optimizations
@@ -46,6 +52,8 @@ const nextConfig: NextConfig = {
       ...config.resolve.alias,
       '@opentelemetry/exporter-jaeger': false,
       '@opentelemetry/sdk-node': false,
+      // Force disable any Html imports
+      'next/document': false,
     };
 
     // Ignore Html import warnings from dependencies
@@ -55,6 +63,7 @@ const nextConfig: NextConfig = {
       /require\.extensions is not supported by webpack/,
       /Module not found: Can't resolve '@opentelemetry\/exporter-jaeger'/,
       /Module not found: Can't resolve '@opentelemetry\/sdk-node'/,
+      /Module not found: Can't resolve 'next\/document'/,
     ];
 
     return config;
