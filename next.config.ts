@@ -20,6 +20,11 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  // Experimental features
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
+
   // Webpack optimizations
   webpack: (config, { isServer }) => {
     if (!isServer) {
@@ -30,6 +35,12 @@ const nextConfig: NextConfig = {
         tls: false,
       };
     }
+
+    // Ignore Html import warnings from dependencies
+    config.ignoreWarnings = [
+      /Html should not be imported outside of pages\/_document/,
+      /Critical dependency: the request of a dependency is an expression/,
+    ];
 
     return config;
   },
