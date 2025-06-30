@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build:netlify"
+  command = "npm run build"
   publish = ".next"
 
 [build.environment]
@@ -7,12 +7,6 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-
-# Handle client-side routing
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
 
 # Headers for security and performance
 [[headers]]

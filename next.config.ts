@@ -1,9 +1,6 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  // Optimize for Netlify deployment
-  // Note: Netlify handles the deployment, so we don't need 'standalone' output
-
   // Build configuration
   typescript: {
     ignoreBuildErrors: true,
@@ -14,18 +11,13 @@ const nextConfig: NextConfig = {
 
   // Image optimization
   images: {
-    unoptimized: true, // Required for static export
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',
         hostname: '**',
       },
     ],
-  },
-
-  // Performance optimizations
-  experimental: {
-    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
 
   // Webpack optimizations
@@ -39,27 +31,7 @@ const nextConfig: NextConfig = {
       };
     }
 
-    // Optimize bundle size
-    config.optimization = {
-      ...config.optimization,
-      splitChunks: {
-        chunks: 'all',
-        cacheGroups: {
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            chunks: 'all',
-          },
-        },
-      },
-    };
-
     return config;
-  },
-
-  // Environment variables
-  env: {
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
   },
 };
 
