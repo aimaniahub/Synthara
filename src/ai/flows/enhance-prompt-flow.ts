@@ -8,8 +8,7 @@
  * - EnhancePromptOutput - The return type for the enhancePrompt function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {ai, z} from '@/ai/genkit';
 
 const EnhancePromptInputSchema = z.object({
   currentPrompt: z.string().describe('The user\'s current data generation prompt that needs enhancement.'),

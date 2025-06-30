@@ -7,8 +7,7 @@
  * - AnalyzeDatasetSnippetOutput - The return type for the analyzeDatasetSnippet function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {ai, z} from '@/ai/genkit';
 import { AnthropicService } from '@/services/anthropic-service';
 
 const AnalyzeDatasetSnippetInputSchema = z.object({

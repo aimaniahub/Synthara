@@ -15,8 +15,7 @@
  * - GenerateFromWebOutput - The return type for the generateFromWeb function.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { ai, z } from '@/ai/genkit';
 import { getGoogleSearchResults, type SearchResult } from '@/services/serpapi-service';
 import { scrapeContent } from '@/services/firecrawl-service';
 import { type GenerateDataOutput, type Column } from './generate-data-flow';

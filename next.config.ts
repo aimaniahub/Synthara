@@ -36,12 +36,20 @@ const nextConfig: NextConfig = {
       };
     }
 
+    // Completely ignore problematic OpenTelemetry modules
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@opentelemetry/exporter-jaeger': false,
+      '@opentelemetry/sdk-node': false,
+    };
+
     // Ignore Html import warnings from dependencies
     config.ignoreWarnings = [
       /Html should not be imported outside of pages\/_document/,
       /Critical dependency: the request of a dependency is an expression/,
       /require\.extensions is not supported by webpack/,
       /Module not found: Can't resolve '@opentelemetry\/exporter-jaeger'/,
+      /Module not found: Can't resolve '@opentelemetry\/sdk-node'/,
     ];
 
     return config;

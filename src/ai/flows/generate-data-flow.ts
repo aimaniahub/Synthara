@@ -10,8 +10,7 @@
  * - Column - The type definition for a column schema.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {ai, z} from '@/ai/genkit';
 
 // Define and export types separately to avoid exporting non-function objects from a 'use server' file.
 export interface Column {

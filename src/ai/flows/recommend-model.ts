@@ -8,8 +8,7 @@
  * - RecommendModelOutput - The return type for the recommendModel function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {ai, z} from '@/ai/genkit';
 
 const RecommendModelInputSchema = z.object({
   prompt: z.string().describe('The natural language prompt for data generation.'),
