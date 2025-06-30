@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // Image optimization
+  // Image optimization for Netlify
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -20,10 +20,15 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // Force dynamic rendering for error pages
+  // Experimental features
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
+
+  // Ensure App Router is used exclusively
+  pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
+
+
 
   // Webpack optimizations
   webpack: (config, { isServer }) => {
