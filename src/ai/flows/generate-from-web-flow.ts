@@ -391,34 +391,32 @@ function createStructurePrompt(model: string) {
             scrapedContent: z.string(),
         }) },
         output: { schema: LLMGenerateDataOutputSchema },
-        prompt: `EXTRACT REAL NUMERICAL DATA FROM MEDICAL CONTENT
+        prompt: `EXTRACT STRUCTURED DATA FROM WEB CONTENT
 
-CRITICAL: You must extract ACTUAL NUMBERS and VALUES from the content, not just create column names.
+You are a data extraction expert. Analyze the web content and extract structured data that matches the user's specific request.
 
-MANDATORY DATA EXTRACTION REQUIREMENTS:
-1. EXTRACT REAL VALUES: Find actual measurements, numbers, and data points from the content
-2. EXTRACT RELEVANT METRICS: Find domain-specific measurements and values from research data
-3. EXTRACT QUANTITATIVE DATA: Find numerical values, statistics, and measurements from studies
-4. USE DOMAIN RANGES: Apply appropriate ranges and standards mentioned in the content
-5. CREATE {{numRows}} ROWS with REAL NUMERICAL VALUES, not placeholder text
-6. FIND ACTUAL RESEARCH DATA: Extract measurements from case studies and research content
-7. USE STATISTICAL DATA: Extract means, ranges, and distributions mentioned in content
+STEP-BY-STEP PROCESS:
+1. UNDERSTAND THE REQUEST: Analyze what specific data the user is asking for
+2. SCAN THE CONTENT: Look for relevant sections that contain the requested information
+3. EXTRACT DATA: Pull out specific values, names, numbers, dates from the content
+4. DESIGN SCHEMA: Create column names and types based on extracted data and user needs
+5. GENERATE ROWS: Create {{numRows}} rows using extracted data and logical variations
 
-ADAPT TO USER REQUEST: Analyze the user's prompt to understand the domain and extract relevant data types
-- For medical requests: Extract clinical measurements, lab values, patient data
-- For financial requests: Extract market data, prices, trading volumes, financial metrics
-- For IoT requests: Extract sensor readings, device metrics, environmental data
-- For social media requests: Extract engagement metrics, user data, content performance
-- For general requests: Extract numerical values, categories, and statistical measures
+DOMAIN-SPECIFIC EXTRACTION EXAMPLES:
+- For "NSE FII DII data": Extract investment flows, dates, amounts, investor types, market indices, percentage changes
+- For "job postings": Extract company names, job titles, salary ranges, experience requirements, locations, skills
+- For "product prices": Extract product names, prices, specifications, availability, ratings, categories
+- For "stock market data": Extract stock symbols, prices, volumes, changes, market cap, trading data
+- For "financial data": Extract metrics, ratios, trends, comparisons, performance indicators, dates
+- For "research data": Extract variables, results, correlations, statistical measures, study details
 
-DO NOT CREATE GENERIC COLUMN NAMES - EXTRACT REAL NUMERICAL DATA FROM THE CONTENT!
-
-REAL DATA EXTRACTION REQUIREMENTS:
-13. Extract ACTUAL NUMBERS from the content - not placeholder text
-14. Find real AFI measurements, gestational ages, weights, and medical values
-15. Use ranges mentioned in content to create realistic data points
-16. Generate {{numRows}} rows of REAL DATA VALUES, not just column descriptions
-17. Each row must contain actual numerical values and meaningful data
+EXTRACTION REQUIREMENTS:
+1. Extract ACTUAL VALUES from the content - not placeholder text
+2. Find real numbers, names, dates, and specific data points mentioned in the content
+3. Use ranges and patterns mentioned in content to create realistic variations
+4. Generate {{numRows}} rows with REAL DATA VALUES that match the user's request
+5. Each row must contain meaningful data relevant to the user's specific query
+6. Focus on the user's domain - if they ask for financial data, extract financial information
 
 USER REQUEST: {{userPrompt}}
 TARGET ROWS: {{numRows}} (create comprehensive dataset by discovering and utilizing all available content)
@@ -485,6 +483,24 @@ Now analyze the content comprehensively and create the most valuable dataset pos
     return prompt;
 }
 
+// Helper function to clean AI response from markdown code blocks
+function cleanAIResponse(response: string): string {
+    if (typeof response !== 'string') {
+        return response;
+    }
+
+    // Remove markdown code blocks
+    let cleaned = response.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+    // Try to find JSON content between braces
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        cleaned = jsonMatch[0];
+    }
+
+    return cleaned.trim();
+}
+
 // Helper function to generate simple fallback search queries
 function generateFallbackQueries(optimizedQuery: string, originalPrompt: string): string[] {
     const fallbackQueries: string[] = [];
@@ -542,9 +558,32 @@ async function tryAIModelsWithFallback(
     scrapedContent: string,
     logger: any
 ): Promise<any> {
-    // Step 1: Try Anthropic Claude first for large content processing
+    // Step 1: Try Gemini models first (as requested)
+    const modelsToTry = [LARGE_CONTENT_MODEL, ...FALLBACK_MODELS.filter(m => m !== LARGE_CONTENT_MODEL)];
+
+    for (let i = 0; i < modelsToTry.length; i++) {
+        const model = modelsToTry[i];
+        try {
+            logger.log(`🤖 Trying Gemini model: ${model} (attempt ${i + 1}/${modelsToTry.length})`);
+
+            const prompt = createStructurePrompt(model);
+            const result = await prompt({
+                userPrompt,
+                numRows,
+                scrapedContent,
+            });
+
+            logger.success(`✅ Gemini model ${model} succeeded`);
+            return result;
+        } catch (error: any) {
+            logger.error(`⚠️ Gemini model ${model} failed: ${error.message}`);
+            console.error(`[WebFlow] Gemini ${model} error:`, error);
+        }
+    }
+
+    // Step 2: Fallback to Anthropic Claude if all Gemini models fail
     try {
-        logger.log(`🚀 Trying Anthropic Claude for large content processing (${scrapedContent.length} chars)...`);
+        logger.log(`🚀 Trying Anthropic Claude as fallback for large content processing (${scrapedContent.length} chars)...`);
 
         const anthropicService = createAnthropicService();
         if (anthropicService) {
@@ -584,59 +623,19 @@ async function tryAIModelsWithFallback(
             logger.success(`✅ Anthropic Claude succeeded! Generated ${parsedData.length} rows with ${result.detectedSchema.length} columns`);
             return convertedResult;
         } else {
-            logger.log(`⚠️ Anthropic not available, falling back to Gemini models...`);
+            logger.log(`⚠️ Anthropic not available, no more fallback options`);
         }
     } catch (error: any) {
-        logger.error(`⚠️ Anthropic failed: ${error.message}, falling back to Gemini models...`);
-    }
+        logger.error(`⚠️ Anthropic fallback also failed: ${error.message}`);
 
-    // Step 2: Fallback to Gemini models if Anthropic fails
-    const modelsToTry = [LARGE_CONTENT_MODEL, ...FALLBACK_MODELS.filter(m => m !== LARGE_CONTENT_MODEL)];
-
-    for (let i = 0; i < modelsToTry.length; i++) {
-        const model = modelsToTry[i];
-        try {
-            logger.log(`🤖 Trying Gemini model: ${model} (attempt ${i + 1}/${modelsToTry.length})`);
-
-            const prompt = createStructurePrompt(model);
-            const result = await prompt({
-                userPrompt,
-                numRows,
-                scrapedContent,
-            });
-
-            logger.success(`✅ Gemini model ${model} succeeded`);
-            return result;
-
-        } catch (error: any) {
-            const isOverloaded = error.message?.includes('503') || error.message?.includes('overloaded') || error.message?.includes('Service Unavailable');
-            const isQuotaError = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('Too Many Requests');
-            const isNotFound = error.message?.includes('NOT_FOUND') || error.message?.includes('not found');
-            const isContentTooLarge = error.message.includes('too large') || error.message.includes('token limit') || error.message.includes('context length');
-
-            if (isContentTooLarge) {
-                logger.error(`⚠️ Model ${model} failed due to large content, trying next model...`);
-            } else if (isOverloaded) {
-                logger.error(`⚠️ Model ${model} is overloaded (503), trying next model...`);
-            } else if (isQuotaError) {
-                logger.error(`⚠️ Model ${model} quota exceeded (429), trying next model...`);
-            } else if (isNotFound) {
-                logger.error(`⚠️ Model ${model} not found, trying next model...`);
-            } else {
-                logger.error(`❌ Model ${model} failed: ${error.message}`);
-            }
-
-            // If this is the last model, throw the error
-            if (i === modelsToTry.length - 1) {
-                throw new Error(`All AI models failed. Last error from ${model}: ${error.message}`);
-            }
-
-            // Wait a bit before trying the next model
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        // Check if it's a credit/quota issue
+        if (error.message?.includes('credit balance') || error.message?.includes('quota')) {
+            logger.error(`💳 Anthropic API credits exhausted. Please add credits to your Anthropic account.`);
         }
     }
 
-    throw new Error('No AI models available');
+    // If we reach here, all AI models have failed
+    throw new Error('All AI models failed to process the content. Please try again or check your API configurations.');
 }
 
 const structureScrapedDataPrompt = ai.definePrompt({
@@ -1049,6 +1048,19 @@ const generateFromWebFlow = ai.defineFlow(
         if (aiProcessingSucceeded && llmOutput) {
             console.log(`[WebFlow] AI response received: Success`);
             console.log(`[WebFlow] llmOutput structure:`, JSON.stringify(llmOutput, null, 2));
+
+            // Handle case where response is a string (markdown wrapped JSON)
+            if (typeof llmOutput === 'string') {
+                try {
+                    const cleanedResponse = cleanAIResponse(llmOutput);
+                    const parsedResponse = JSON.parse(cleanedResponse);
+                    llmOutput = parsedResponse;
+                    console.log(`[WebFlow] Cleaned and parsed string response:`, JSON.stringify(llmOutput, null, 2));
+                } catch (parseError) {
+                    console.error(`[WebFlow] Failed to parse string response:`, parseError);
+                    console.error(`[WebFlow] Raw response:`, llmOutput);
+                }
+            }
 
             // Handle both Anthropic format (direct properties) and Gemini format (generatedJsonString)
             jsonString = llmOutput?.jsonString || llmOutput?.output?.jsonString || llmOutput?.generatedJsonString;
