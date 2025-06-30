@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // Experimental features
+  // Force dynamic rendering for error pages
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
@@ -40,6 +40,8 @@ const nextConfig: NextConfig = {
     config.ignoreWarnings = [
       /Html should not be imported outside of pages\/_document/,
       /Critical dependency: the request of a dependency is an expression/,
+      /require\.extensions is not supported by webpack/,
+      /Module not found: Can't resolve '@opentelemetry\/exporter-jaeger'/,
     ];
 
     return config;

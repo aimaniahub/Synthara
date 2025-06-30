@@ -1,30 +1,67 @@
-import Link from 'next/link'
-
 export default function NotFound() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-gray-900">
-      <div className="text-center space-y-6 max-w-md mx-auto px-4">
-        <div className="space-y-2">
-          <h1 className="text-6xl font-bold text-blue-600">404</h1>
-          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Page Not Found</h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            The page you're looking for doesn't exist or has been moved.
-          </p>
-        </div>
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#ffffff',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>
+      <div style={{
+        textAlign: 'center',
+        maxWidth: '400px',
+        padding: '20px'
+      }}>
+        <h1 style={{
+          fontSize: '4rem',
+          fontWeight: 'bold',
+          color: '#2563eb',
+          margin: '0 0 20px 0'
+        }}>404</h1>
+        <h2 style={{
+          fontSize: '1.5rem',
+          fontWeight: '600',
+          color: '#111827',
+          margin: '0 0 10px 0'
+        }}>Page Not Found</h2>
+        <p style={{
+          color: '#6b7280',
+          margin: '0 0 30px 0'
+        }}>
+          The page you're looking for doesn't exist or has been moved.
+        </p>
 
-        <div className="space-y-3">
-          <Link
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <a
             href="/dashboard"
-            className="inline-block w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center"
+            style={{
+              display: 'block',
+              padding: '12px 24px',
+              backgroundColor: '#2563eb',
+              color: 'white',
+              textDecoration: 'none',
+              borderRadius: '6px',
+              textAlign: 'center'
+            }}
           >
             Go to Dashboard
-          </Link>
-          <Link
+          </a>
+          <a
             href="/"
-            className="inline-block w-full px-4 py-2 border border-gray-300 text-gray-700 dark:text-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-center"
+            style={{
+              display: 'block',
+              padding: '12px 24px',
+              border: '1px solid #d1d5db',
+              color: '#374151',
+              textDecoration: 'none',
+              borderRadius: '6px',
+              textAlign: 'center'
+            }}
           >
             Back to Home
-          </Link>
+          </a>
         </div>
       </div>
     </div>
