@@ -293,43 +293,35 @@ const refineSearchQueryPrompt = ai.definePrompt({
         searchQuery: z.string().describe("Optimized search query for Google search"),
         reasoning: z.string().describe("Brief explanation of how the query was refined")
     }) },
-    prompt: `You are an expert at converting data generation requests into effective Google search queries.
+    prompt: `You are an expert at creating simple, effective Google search queries.
 
-Given a user's data generation prompt, create an optimized Google search query that will find the most relevant, current information.
+Given a user's data generation request, create a clean, direct search query using only the most essential keywords.
 
 Guidelines:
-1. Remove data generation language ("generate", "synthetic dataset", "create data for", "include columns for")
-2. Extract the core subject/topic and key attributes from the request
-3. Focus on the main entity/topic (e.g., "NSE stock news", "company earnings", "market data")
-4. Add time-specific keywords when dates are mentioned (e.g., "2025", "recent", "latest")
-5. Include industry-specific terms and official sources
-6. Keep it concise but specific - aim for 3-8 keywords
-7. Prioritize finding structured data sources, official sources, or comprehensive listings
+1. Remove ALL data generation language ("generate", "create", "provide", "dataset", "data for", "synthetic")
+2. Extract only the CORE topic and 2-4 most important keywords
+3. Keep it simple - use basic search terms that people would actually search for
+4. Focus on the main subject (e.g., "NSE FII DII", "job postings Bangalore", "iPhone prices")
+5. Add time keywords only if specifically mentioned (e.g., "June", "2024", "latest")
+6. Use common, searchable terms that appear in web content
 
 Examples:
-- "Generate NSE stock news data with sentiment from June 2025" → "NSE India stock market news live prices June 2025"
-- "Provide the latest NSE FII and DII net inflow data for June" → "NSE FII DII net inflow data June 2025 foreign institutional investors"
-- "Create customer data with demographics" → "customer demographics data statistics"
-- "Generate sales data for retail companies" → "retail sales data companies statistics"
-- "Generate synthetic customer data for e-commerce" → "customer demographics ecommerce statistics 2024"
-- "Create dataset of latest iPhone models with prices" → "iPhone 15 models prices specifications 2024"
-- "Generate startup funding data" → "startup funding rounds 2024 venture capital"
-- "NSE stock prices with sentiment" → "NSE live stock prices market news sentiment analysis"
-- "Indian stock market data" → "NSE BSE live stock prices Indian market data"
-- "FII DII investment data" → "foreign institutional investors domestic institutional investors India NSE data"
+- "Generate NSE stock news data with sentiment from June 2025" → "NSE stock news June 2025"
+- "Provide the latest NSE FII and DII net inflow data for June" → "NSE FII DII June"
+- "Create customer data with demographics" → "customer demographics"
+- "Generate sales data for retail companies" → "retail sales data"
+- "Create dataset of latest iPhone models with prices" → "iPhone models prices 2024"
+- "Generate startup funding data" → "startup funding 2024"
+- "Find job postings in Bangalore for AI/ML roles" → "AI ML jobs Bangalore"
+- "Get company earnings data" → "company earnings"
+- "Latest stock market data" → "stock market data"
+- "FII DII investment flows" → "FII DII investment"
 
-Special considerations:
-- For stock/financial data: Include exchange names (NSE, BSE, NYSE), specific terms like "stock prices", "market data", "live prices", "current prices"
-- For NSE stocks: Add "NSE India", "Indian stock market", "live NSE data", "real time NSE prices"
-- For news data: Add "news", "headlines", "articles", "latest news", "recent news" to find current sources
-- For sentiment analysis: Include "sentiment", "analysis", "opinion" keywords
-- For time-specific data: Always include the time period mentioned, add "current", "latest", "real time" for recent data
-- For live data: Include "live", "real time", "current", "today", "latest" keywords
-- For geographic data: Include country/region names when specified
+Keep it SHORT and SIMPLE - aim for 2-4 main keywords that people would naturally search for.
 
 User's data generation prompt: "{{userPrompt}}"
 
-Create an optimized search query that will find the best web sources for this data. Focus on extracting the core topic and relevant keywords, removing data generation language.`,
+Create a simple, direct search query using only the most essential keywords.`,
 });
 
 
@@ -493,48 +485,54 @@ Now analyze the content comprehensively and create the most valuable dataset pos
     return prompt;
 }
 
-// Helper function to generate fallback search queries
+// Helper function to generate simple fallback search queries
 function generateFallbackQueries(optimizedQuery: string, originalPrompt: string): string[] {
     const fallbackQueries: string[] = [];
 
-    // Extract key terms from the original prompt
+    // Extract only the most important keywords
     const keyTerms = originalPrompt.toLowerCase()
         .replace(/[^\w\s]/g, ' ')
         .split(/\s+/)
-        .filter(term => term.length > 2 && !['the', 'and', 'for', 'with', 'data', 'generate', 'create', 'provide'].includes(term));
+        .filter(term => term.length > 2 &&
+            !['the', 'and', 'for', 'with', 'data', 'generate', 'create', 'provide', 'latest', 'get', 'find'].includes(term));
 
-    // Strategy 1: Use broader terms from original prompt
+    // Strategy 1: Use just the main 2-3 keywords
     if (keyTerms.length >= 2) {
-        fallbackQueries.push(keyTerms.slice(0, 4).join(' '));
+        fallbackQueries.push(keyTerms.slice(0, 3).join(' '));
     }
 
-    // Strategy 2: Remove time-specific terms and try broader search
+    // Strategy 2: Remove time words for broader search
     const broaderQuery = optimizedQuery
-        .replace(/\b(june|july|august|2024|2025|latest|recent|current)\b/gi, '')
+        .replace(/\b(june|july|august|2024|2025|latest|recent|current|today)\b/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
-    if (broaderQuery && broaderQuery !== optimizedQuery) {
+    if (broaderQuery && broaderQuery !== optimizedQuery && broaderQuery.length > 3) {
         fallbackQueries.push(broaderQuery);
     }
 
-    // Strategy 3: For financial data, try common financial terms
-    if (originalPrompt.toLowerCase().includes('nse') || originalPrompt.toLowerCase().includes('stock')) {
-        fallbackQueries.push('NSE stock market data India');
-        fallbackQueries.push('Indian stock market live data');
+    // Strategy 3: Simple domain-specific fallbacks
+    const prompt = originalPrompt.toLowerCase();
+
+    if (prompt.includes('nse') || prompt.includes('stock')) {
+        fallbackQueries.push('NSE stock');
+        fallbackQueries.push('Indian stock market');
     }
 
-    if (originalPrompt.toLowerCase().includes('fii') || originalPrompt.toLowerCase().includes('dii')) {
-        fallbackQueries.push('FII DII data NSE India');
-        fallbackQueries.push('foreign institutional investors India data');
+    if (prompt.includes('fii') || prompt.includes('dii')) {
+        fallbackQueries.push('FII DII');
+        fallbackQueries.push('foreign investors India');
     }
 
-    // Strategy 4: Generic fallback based on domain
-    if (originalPrompt.toLowerCase().includes('market') || originalPrompt.toLowerCase().includes('financial')) {
-        fallbackQueries.push('financial market data India');
+    if (prompt.includes('job') || prompt.includes('employment')) {
+        fallbackQueries.push('jobs India');
     }
 
-    // Remove duplicates and empty queries
-    return [...new Set(fallbackQueries)].filter(q => q && q.trim().length > 0);
+    if (prompt.includes('price') || prompt.includes('cost')) {
+        fallbackQueries.push('prices India');
+    }
+
+    // Remove duplicates and very short queries
+    return [...new Set(fallbackQueries)].filter(q => q && q.trim().length > 5);
 }
 
 // Helper function to try AI models with fallback - Now uses Anthropic Claude for large content
