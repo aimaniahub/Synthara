@@ -37,7 +37,11 @@ export async function getGoogleSearchResults(query: string): Promise<SearchResul
 
         if (json.error) {
             console.error('[SerpApiService] Error from SerpApi:', json.error);
-            throw new Error(json.error);
+            // Provide more helpful error messages
+            if (json.error.includes("Google hasn't returned any results")) {
+                throw new Error(`No search results found for "${query}". Try using broader or different search terms.`);
+            }
+            throw new Error(`Search API error: ${json.error}`);
         }
 
         if (json.organic_results) {

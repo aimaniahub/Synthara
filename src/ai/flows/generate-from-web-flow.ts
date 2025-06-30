@@ -308,6 +308,7 @@ Guidelines:
 
 Examples:
 - "Generate NSE stock news data with sentiment from June 2025" → "NSE India stock market news live prices June 2025"
+- "Provide the latest NSE FII and DII net inflow data for June" → "NSE FII DII net inflow data June 2025 foreign institutional investors"
 - "Create customer data with demographics" → "customer demographics data statistics"
 - "Generate sales data for retail companies" → "retail sales data companies statistics"
 - "Generate synthetic customer data for e-commerce" → "customer demographics ecommerce statistics 2024"
@@ -315,6 +316,7 @@ Examples:
 - "Generate startup funding data" → "startup funding rounds 2024 venture capital"
 - "NSE stock prices with sentiment" → "NSE live stock prices market news sentiment analysis"
 - "Indian stock market data" → "NSE BSE live stock prices Indian market data"
+- "FII DII investment data" → "foreign institutional investors domestic institutional investors India NSE data"
 
 Special considerations:
 - For stock/financial data: Include exchange names (NSE, BSE, NYSE), specific terms like "stock prices", "market data", "live prices", "current prices"
@@ -489,6 +491,50 @@ Now analyze the content comprehensively and create the most valuable dataset pos
 
     promptCache.set(cacheKey, prompt);
     return prompt;
+}
+
+// Helper function to generate fallback search queries
+function generateFallbackQueries(optimizedQuery: string, originalPrompt: string): string[] {
+    const fallbackQueries: string[] = [];
+
+    // Extract key terms from the original prompt
+    const keyTerms = originalPrompt.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .split(/\s+/)
+        .filter(term => term.length > 2 && !['the', 'and', 'for', 'with', 'data', 'generate', 'create', 'provide'].includes(term));
+
+    // Strategy 1: Use broader terms from original prompt
+    if (keyTerms.length >= 2) {
+        fallbackQueries.push(keyTerms.slice(0, 4).join(' '));
+    }
+
+    // Strategy 2: Remove time-specific terms and try broader search
+    const broaderQuery = optimizedQuery
+        .replace(/\b(june|july|august|2024|2025|latest|recent|current)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (broaderQuery && broaderQuery !== optimizedQuery) {
+        fallbackQueries.push(broaderQuery);
+    }
+
+    // Strategy 3: For financial data, try common financial terms
+    if (originalPrompt.toLowerCase().includes('nse') || originalPrompt.toLowerCase().includes('stock')) {
+        fallbackQueries.push('NSE stock market data India');
+        fallbackQueries.push('Indian stock market live data');
+    }
+
+    if (originalPrompt.toLowerCase().includes('fii') || originalPrompt.toLowerCase().includes('dii')) {
+        fallbackQueries.push('FII DII data NSE India');
+        fallbackQueries.push('foreign institutional investors India data');
+    }
+
+    // Strategy 4: Generic fallback based on domain
+    if (originalPrompt.toLowerCase().includes('market') || originalPrompt.toLowerCase().includes('financial')) {
+        fallbackQueries.push('financial market data India');
+    }
+
+    // Remove duplicates and empty queries
+    return [...new Set(fallbackQueries)].filter(q => q && q.trim().length > 0);
 }
 
 // Helper function to try AI models with fallback - Now uses Anthropic Claude for large content
@@ -739,22 +785,45 @@ const generateFromWebFlow = ai.defineFlow(
         return { generatedRows: [], detectedSchema: [], feedback: `Error: No valid search query available. Original prompt: "${input.prompt}"` };
     }
 
-    // 2. Search the web with optimized query
+    // 2. Search the web with optimized query (with fallback strategies)
     let searchResults: SearchResult[];
     try {
         logProgress('Web Search', 3, 7, 'Searching the web for relevant sources');
         log(`🌐 Searching Google for: "${optimizedQuery}"...`);
 
         searchResults = await getGoogleSearchResults(optimizedQuery);
+
+        // If no results, try fallback search strategies
         if (searchResults.length === 0) {
-            throw new Error("No relevant search results found.");
+            log(`⚠️ No results for optimized query, trying fallback searches...`);
+
+            // Fallback 1: Try broader search terms
+            const fallbackQueries = generateFallbackQueries(optimizedQuery, input.prompt);
+
+            for (const fallbackQuery of fallbackQueries) {
+                try {
+                    log(`🔄 Trying fallback query: "${fallbackQuery}"`);
+                    searchResults = await getGoogleSearchResults(fallbackQuery);
+                    if (searchResults.length > 0) {
+                        logSuccess(`✅ Found ${searchResults.length} results with fallback query`);
+                        feedbackLog += `Used fallback search query: "${fallbackQuery}"\n`;
+                        break;
+                    }
+                } catch (fallbackError) {
+                    log(`⚠️ Fallback query failed: ${fallbackError}`);
+                }
+            }
+        }
+
+        if (searchResults.length === 0) {
+            throw new Error("No relevant search results found after trying multiple search strategies.");
         }
 
         logSuccess(`✅ Found ${searchResults.length} potential sources`);
         feedbackLog += `Found ${searchResults.length} potential sources.\n`;
     } catch (error: any) {
         logError(`❌ Web search failed: ${error.message}`);
-        return { generatedRows: [], detectedSchema: [], feedback: `Failed during web search: ${error.message}` };
+        return { generatedRows: [], detectedSchema: [], feedback: `Failed during web search: ${error.message}. Try using more general search terms or check if the data exists online.` };
     }
 
     // 3. Filter links with AI (with fallback to manual selection)
@@ -1052,7 +1121,25 @@ const generateFromWebFlow = ai.defineFlow(
 
         if (!Array.isArray(parsedRows) || parsedRows.length === 0) {
             logError(`❌ Invalid data format: expected non-empty array, got ${typeof parsedRows} with ${Array.isArray(parsedRows) ? parsedRows.length : 'N/A'} items`);
-            throw new Error(`AI generated invalid data: expected non-empty array, got ${typeof parsedRows}`);
+
+            // Provide more helpful feedback based on the content
+            let helpfulMessage = "AI was unable to extract structured data from the scraped content.";
+            if (processedContent.length < 100) {
+                helpfulMessage += " The scraped content was too short or didn't contain relevant data.";
+            } else if (!processedContent.toLowerCase().includes(input.prompt.toLowerCase().split(' ')[0])) {
+                helpfulMessage += " The scraped content may not be relevant to your query.";
+            } else {
+                helpfulMessage += " The content may not contain the specific data you're looking for in a structured format.";
+            }
+
+            helpfulMessage += " Try refining your search terms or looking for different data sources.";
+
+            return {
+                generatedRows: [],
+                generatedCsv: '',
+                detectedSchema: [],
+                feedback: `${feedbackLog}\n\n${helpfulMessage}\n\nScraped content preview:\n${processedContent.substring(0, 500)}...`
+            };
         }
 
         const generatedCsv = await jsonToCsv(parsedRows);

@@ -116,11 +116,11 @@ export default function DataAnalysisPage() {
 
   useEffect(() => {
     if (analysisResult?.dataQualitySummary) {
-      const { featureSuitability, structuralIntegrity, valueConsistency } = analysisResult.dataQualitySummary;
+      const { featureSuitability = 0, structuralIntegrity = 0, valueConsistency = 0 } = analysisResult.dataQualitySummary;
       const newChartData = [
-          { name: 'Feature Suitability', value: featureSuitability, label: 'Feature Suitability' },
-          { name: 'Structural Integrity', value: structuralIntegrity, label: 'Structural Integrity' },
-          { name: 'Value Consistency', value: valueConsistency, label: 'Value Consistency' },
+          { name: 'Feature Suitability', value: featureSuitability || 0, label: 'Feature Suitability' },
+          { name: 'Structural Integrity', value: structuralIntegrity || 0, label: 'Structural Integrity' },
+          { name: 'Value Consistency', value: valueConsistency || 0, label: 'Value Consistency' },
         ];
       setChartData(newChartData);
       setStatBlockMetrics(newChartData); // Use the same data for stat blocks
@@ -145,10 +145,10 @@ export default function DataAnalysisPage() {
         const input: AnalyzeDatasetSnippetInput = { dataSnippetJson: currentSnippetJsonForAnalysis };
         const result = await analyzeDatasetSnippet(input);
         setAnalysisResult(result);
-        if (result.overallMlReadiness.score > 0 || result.keyObservationsForML.length > 0) {
+        if ((result.overallMlReadiness?.score || 0) > 0 || (result.keyObservationsForML?.length || 0) > 0) {
             toast({ title: "ML Analysis Complete", description: "AI insights are ready for review.", variant: "default" });
         } else {
-             toast({ title: "Analysis Limited", description: result.overallMlReadiness.summary || "AI could not extract detailed insights. Check data or try a different snippet.", variant: "default" });
+             toast({ title: "Analysis Limited", description: result.overallMlReadiness?.summary || "AI could not extract detailed insights. Check data or try a different snippet.", variant: "default" });
         }
 
         await logActivity({
@@ -273,10 +273,10 @@ export default function DataAnalysisPage() {
                         <div className="p-6 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-lg shadow-md border border-primary/20">
                             <Label className="text-sm font-medium text-muted-foreground mb-1 block text-center">Overall ML Readiness Score</Label>
                             <div className="text-center">
-                                <p className="text-7xl font-bold text-primary my-2">{analysisResult.overallMlReadiness.score}%</p>
+                                <p className="text-7xl font-bold text-primary my-2">{analysisResult.overallMlReadiness?.score || 0}%</p>
                             </div>
-                            <Progress value={analysisResult.overallMlReadiness.score} className="w-full h-3 mb-4" />
-                            <p className="text-center text-muted-foreground mt-3 max-w-3xl mx-auto leading-relaxed">{analysisResult.overallMlReadiness.summary}</p>
+                            <Progress value={analysisResult.overallMlReadiness?.score || 0} className="w-full h-3 mb-4" />
+                            <p className="text-center text-muted-foreground mt-3 max-w-3xl mx-auto leading-relaxed">{analysisResult.overallMlReadiness?.summary || 'Analysis completed'}</p>
                         </div>
                         <Card className="shadow-lg">
                             <CardHeader>
@@ -286,7 +286,7 @@ export default function DataAnalysisPage() {
                             <CardContent>
                                 <div className="grid grid-cols-2 gap-4 mb-6">
                                     <div className="p-4 bg-muted/30 rounded-lg text-center shadow">
-                                        <p className="text-3xl font-bold text-foreground">{analysisResult.dataQualitySummary.overallScore}%</p>
+                                        <p className="text-3xl font-bold text-foreground">{analysisResult.dataQualitySummary?.overallScore || 0}%</p>
                                         <p className="text-sm text-muted-foreground">Overall Quality</p>
                                     </div>
                                     {statBlockMetrics.map(metric => (
@@ -322,14 +322,14 @@ export default function DataAnalysisPage() {
             </TabsContent>
 
             <TabsContent value="insights" className="space-y-8">
-                 {analysisResult.keyObservationsForML.length > 0 && (
+                 {(analysisResult.keyObservationsForML?.length || 0) > 0 && (
                     <Card className="shadow-xl">
                     <CardHeader>
                         <CardTitle className="font-headline text-xl flex items-center"><SearchCheck className="mr-2.5 text-primary h-6 w-6"/>Key Observations for ML</CardTitle>
                         <CardDescription>Noteworthy points from the data snippet relevant to machine learning.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {analysisResult.keyObservationsForML.map((item, index) => (
+                        {(analysisResult.keyObservationsForML || []).map((item, index) => (
                         <div key={index} className="p-4 border-l-4 border-primary bg-primary/5 rounded-r-md shadow-sm hover:shadow-md transition-shadow">
                             <h4 className="font-semibold text-foreground mb-1 flex items-center"><Lightbulb className="w-4 h-4 mr-2 text-primary/80"/>{item.observation}</h4>
                             <p className="text-sm text-muted-foreground leading-relaxed pl-6"><strong>Implication:</strong> {item.implication}</p>
@@ -339,14 +339,14 @@ export default function DataAnalysisPage() {
                     </Card>
                 )}
 
-                {analysisResult.potentialMlIssues.length > 0 && (
+                {(analysisResult.potentialMlIssues?.length || 0) > 0 && (
                     <Card className="shadow-xl">
                     <CardHeader>
                         <CardTitle className="font-headline text-xl flex items-center"><AlertTriangle className="mr-2.5 text-destructive h-6 w-6"/>Potential ML Issues</CardTitle>
                         <CardDescription>Identified issues that might affect model training and how to address them.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {analysisResult.potentialMlIssues.map((item, index) => (
+                        {(analysisResult.potentialMlIssues || []).map((item, index) => (
                         <div key={index} className="p-4 border-l-4 border-destructive bg-destructive/5 rounded-r-md shadow-sm hover:shadow-md transition-shadow">
                             <h4 className="font-semibold text-destructive mb-1 flex items-center"><AlertTriangle className="w-4 h-4 mr-2"/>Issue: {item.issue}</h4>
                             <p className="text-sm text-foreground/90 leading-relaxed pl-6"><strong>Recommendation:</strong> {item.recommendation}</p>
@@ -355,7 +355,7 @@ export default function DataAnalysisPage() {
                     </CardContent>
                     </Card>
                 )}
-                {analysisResult.keyObservationsForML.length === 0 && analysisResult.potentialMlIssues.length === 0 && (
+                {(analysisResult.keyObservationsForML?.length || 0) === 0 && (analysisResult.potentialMlIssues?.length || 0) === 0 && (
                      <Card className="shadow-xl">
                         <CardContent className="text-center py-10">
                             <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
@@ -373,13 +373,13 @@ export default function DataAnalysisPage() {
                         <CardDescription>Suggestions from the AI to enhance your data for ML.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-8">
-                        {analysisResult.suggestedMlModels.length > 0 && (
+                        {(analysisResult.suggestedMlModels?.length || 0) > 0 && (
                             <Card className="shadow-lg border-primary/20">
                                 <CardHeader>
                                     <CardTitle className="font-headline text-lg flex items-center"><BrainCircuit className="mr-2 text-primary h-5 w-5"/>Suggested ML Models</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    {analysisResult.suggestedMlModels.map((model, index) => (
+                                    {(analysisResult.suggestedMlModels || []).map((model, index) => (
                                         <div key={index} className="p-3 border rounded-md bg-muted/40 shadow-sm">
                                             <h5 className="font-semibold text-primary">{model.modelName}</h5>
                                             <p className="text-sm text-muted-foreground">{model.suitabilityReason}</p>
@@ -389,16 +389,16 @@ export default function DataAnalysisPage() {
                             </Card>
                         )}
 
-                        {(analysisResult.featureEngineeringSuggestions.length > 0 || analysisResult.preprocessingRecommendations.length > 0 || analysisResult.visualizationSuggestions.length > 0) ? (
+                        {((analysisResult.featureEngineeringSuggestions?.length || 0) > 0 || (analysisResult.preprocessingRecommendations?.length || 0) > 0 || (analysisResult.visualizationSuggestions?.length || 0) > 0) ? (
                             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-                                {analysisResult.featureEngineeringSuggestions.length > 0 && (
+                                {(analysisResult.featureEngineeringSuggestions?.length || 0) > 0 && (
                                     <Card className="shadow-lg h-full">
                                     <CardHeader>
                                         <CardTitle className="font-headline text-lg flex items-center"><Wand2 className="mr-2 text-primary h-5 w-5"/>Feature Engineering</CardTitle>
                                     </CardHeader>
                                     <CardContent>
                                         <ul className="space-y-2.5 list-disc list-inside text-sm text-muted-foreground">
-                                        {analysisResult.featureEngineeringSuggestions.map((suggestion, index) => (
+                                        {(analysisResult.featureEngineeringSuggestions || []).map((suggestion, index) => (
                                             <li key={index}>{suggestion}</li>
                                         ))}
                                         </ul>
@@ -406,14 +406,14 @@ export default function DataAnalysisPage() {
                                     </Card>
                                 )}
 
-                                {analysisResult.preprocessingRecommendations.length > 0 && (
+                                {(analysisResult.preprocessingRecommendations?.length || 0) > 0 && (
                                     <Card className="shadow-lg h-full">
                                     <CardHeader>
                                         <CardTitle className="font-headline text-lg flex items-center"><ListChecks className="mr-2 text-primary h-5 w-5"/>Preprocessing Steps</CardTitle>
                                     </CardHeader>
                                     <CardContent>
                                         <ul className="space-y-2.5 list-disc list-inside text-sm text-muted-foreground">
-                                        {analysisResult.preprocessingRecommendations.map((rec, index) => (
+                                        {(analysisResult.preprocessingRecommendations || []).map((rec, index) => (
                                             <li key={index}>{rec}</li>
                                         ))}
                                         </ul>
@@ -421,14 +421,14 @@ export default function DataAnalysisPage() {
                                     </Card>
                                 )}
 
-                                {analysisResult.visualizationSuggestions.length > 0 && (
+                                {(analysisResult.visualizationSuggestions?.length || 0) > 0 && (
                                     <Card className="shadow-lg h-full">
                                     <CardHeader>
                                         <CardTitle className="font-headline text-lg flex items-center"><BarChartHorizontalBig className="mr-2 text-primary h-5 w-5"/>Visualization Ideas</CardTitle>
                                     </CardHeader>
                                     <CardContent>
                                         <ul className="space-y-2.5 list-disc list-inside text-sm text-muted-foreground">
-                                        {analysisResult.visualizationSuggestions.map((vis, index) => (
+                                        {(analysisResult.visualizationSuggestions || []).map((vis, index) => (
                                             <li key={index}>{vis}</li>
                                         ))}
                                         </ul>
@@ -437,7 +437,7 @@ export default function DataAnalysisPage() {
                                 )}
                             </div>
                         ) : (
-                             analysisResult.suggestedMlModels.length === 0 && ( 
+                             (analysisResult.suggestedMlModels?.length || 0) === 0 && (
                             <div className="text-center py-8">
                                 <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
                                 <p className="text-muted-foreground">No specific AI recommendations were generated for this snippet.</p>
