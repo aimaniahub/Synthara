@@ -116,7 +116,7 @@ export default function DataAnalysisPage() {
 
   useEffect(() => {
     if (analysisResult?.dataQualitySummary) {
-      const { featureSuitability = 0, structuralIntegrity = 0, valueConsistency = 0 } = analysisResult.dataQualitySummary;
+      const { featureSuitability = 0, structuralIntegrity = 0, valueConsistency = 0 } = analysisResult.dataQualitySummary || {};
       const newChartData = [
           { name: 'Feature Suitability', value: featureSuitability || 0, label: 'Feature Suitability' },
           { name: 'Structural Integrity', value: structuralIntegrity || 0, label: 'Structural Integrity' },
@@ -331,8 +331,8 @@ export default function DataAnalysisPage() {
                     <CardContent className="space-y-4">
                         {(analysisResult.keyObservationsForML || []).map((item, index) => (
                         <div key={index} className="p-4 border-l-4 border-primary bg-primary/5 rounded-r-md shadow-sm hover:shadow-md transition-shadow">
-                            <h4 className="font-semibold text-foreground mb-1 flex items-center"><Lightbulb className="w-4 h-4 mr-2 text-primary/80"/>{item.observation}</h4>
-                            <p className="text-sm text-muted-foreground leading-relaxed pl-6"><strong>Implication:</strong> {item.implication}</p>
+                            <h4 className="font-semibold text-foreground mb-1 flex items-center"><Lightbulb className="w-4 h-4 mr-2 text-primary/80"/>{item?.observation || 'Observation'}</h4>
+                            <p className="text-sm text-muted-foreground leading-relaxed pl-6"><strong>Implication:</strong> {item?.implication || 'No implication provided'}</p>
                         </div>
                         ))}
                     </CardContent>
@@ -348,8 +348,8 @@ export default function DataAnalysisPage() {
                     <CardContent className="space-y-4">
                         {(analysisResult.potentialMlIssues || []).map((item, index) => (
                         <div key={index} className="p-4 border-l-4 border-destructive bg-destructive/5 rounded-r-md shadow-sm hover:shadow-md transition-shadow">
-                            <h4 className="font-semibold text-destructive mb-1 flex items-center"><AlertTriangle className="w-4 h-4 mr-2"/>Issue: {item.issue}</h4>
-                            <p className="text-sm text-foreground/90 leading-relaxed pl-6"><strong>Recommendation:</strong> {item.recommendation}</p>
+                            <h4 className="font-semibold text-destructive mb-1 flex items-center"><AlertTriangle className="w-4 h-4 mr-2"/>Issue: {item?.issue || 'Issue detected'}</h4>
+                            <p className="text-sm text-foreground/90 leading-relaxed pl-6"><strong>Recommendation:</strong> {item?.recommendation || 'No recommendation provided'}</p>
                         </div>
                         ))}
                     </CardContent>
@@ -381,8 +381,8 @@ export default function DataAnalysisPage() {
                                 <CardContent className="space-y-3">
                                     {(analysisResult.suggestedMlModels || []).map((model, index) => (
                                         <div key={index} className="p-3 border rounded-md bg-muted/40 shadow-sm">
-                                            <h5 className="font-semibold text-primary">{model.modelName}</h5>
-                                            <p className="text-sm text-muted-foreground">{model.suitabilityReason}</p>
+                                            <h5 className="font-semibold text-primary">{model?.modelName || 'ML Model'}</h5>
+                                            <p className="text-sm text-muted-foreground">{model?.suitabilityReason || 'No reason provided'}</p>
                                         </div>
                                     ))}
                                 </CardContent>

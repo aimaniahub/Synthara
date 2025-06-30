@@ -164,93 +164,82 @@ export class AnthropicService {
     const domain = this.detectDomain(request.userPrompt);
     const domainExamples = this.getDomainExamples(domain);
 
-    return `EXTRACT REAL NUMERICAL DATA FROM WEB CONTENT
+    return `EXTRACT AND STRUCTURE DATA FROM WEB CONTENT
 
 User Request: "${request.userPrompt}"
 Target Rows: ${request.numRows}
 Content Size: ${request.scrapedContent.length} characters
-Detected Domain: ${domain}
 
-CRITICAL: You must extract ACTUAL NUMBERS and VALUES from the content below, not just create column names.
+TASK: Analyze the web content below and extract structured data that matches the user's request.
 
 Web Content:
 ${request.scrapedContent}
 
-MANDATORY DATA EXTRACTION REQUIREMENTS:
-1. EXTRACT REAL VALUES: Find actual measurements, numbers, and data points from the content
-2. EXTRACT RELEVANT METRICS: Find domain-specific measurements and values from research data
-3. EXTRACT QUANTITATIVE DATA: Find numerical values, statistics, and measurements from studies
-4. USE DOMAIN RANGES: Apply appropriate ranges and standards mentioned in the content
-5. CREATE ${request.numRows} ROWS with REAL NUMERICAL VALUES, not placeholder text
-6. FIND ACTUAL RESEARCH DATA: Extract measurements from case studies and research content
-7. USE STATISTICAL DATA: Extract means, ranges, and distributions mentioned in content
+EXTRACTION STRATEGY:
+1. READ the user's request carefully to understand what data they need
+2. SCAN the content for relevant information that matches their request
+3. EXTRACT actual data points, numbers, names, dates, and values from the content
+4. CREATE a logical schema based on what data is available and what the user needs
+5. GENERATE ${request.numRows} rows using the extracted data and intelligent variations
+
+SCHEMA CREATION GUIDELINES:
+- Design columns based on the user's request AND available content
+- Use descriptive column names that match the data type
+- Include relevant data types: String, Integer, Float, Date, Boolean
+- Focus on the most valuable data for the user's needs
 
 ${domainExamples}
 
-DO NOT CREATE GENERIC COLUMN NAMES - EXTRACT REAL NUMERICAL DATA FROM THE CONTENT!
+DATA EXTRACTION EXAMPLES:
+For "NSE FII DII data for June":
+- Look for: Foreign investment flows, institutional investor data, NSE statistics, market data
+- Extract: Investment amounts, dates, investor types, market indices, percentage changes
+- Schema: Date, FII_Inflow, DII_Inflow, Net_Investment, Market_Index, Change_Percent
 
-REAL DATA EXTRACTION REQUIREMENTS:
-13. Extract ACTUAL NUMBERS from the content - not placeholder text
-14. Find real AFI measurements, gestational ages, weights, and medical values
-15. Use ranges mentioned in content to create realistic data points
-16. Generate ${request.numRows} rows of REAL DATA VALUES, not just column descriptions
-17. Each row must contain actual numerical values and meaningful data
+For "Job postings in Bangalore":
+- Look for: Company names, job titles, salary ranges, experience requirements, locations
+- Extract: Job details, company information, compensation data, skill requirements
+- Schema: Company, Job_Title, Salary_Min, Salary_Max, Experience_Years, Skills_Required
 
-DYNAMIC SCHEMA CREATION EXAMPLES:
-Instead of forcing data into predetermined columns, discover what's available:
-- If content has rich medical data: Create columns for symptoms, measurements, conditions, treatments, outcomes
-- If content has financial data: Create columns for metrics, ratios, trends, comparisons, forecasts
-- If content has research data: Create columns for variables, results, correlations, statistical measures
-- If content has case studies: Create columns for scenarios, parameters, outcomes, insights
-- If content has time-series data: Create columns for dates, values, changes, trends, patterns
+For "iPhone prices and models":
+- Look for: Model names, prices, specifications, availability, storage options
+- Extract: Product details, pricing information, technical specifications
+- Schema: Model_Name, Price, Storage_GB, Screen_Size, Release_Date, Availability
 
-COMPREHENSIVE EXTRACTION STRATEGIES:
-- Analyze content structure first, then design optimal schema
-- Extract from ALL data formats: tables, lists, paragraphs, research sections, statistical data
-- Create meaningful relationships between different data points
-- Use contextual information to enrich the dataset
-- Extract both explicit data and derived insights
-- Utilize reference ranges, normal values, and comparative data
-- Include metadata and contextual information that adds value
+CONTENT ANALYSIS APPROACH:
+1. Identify the main topic and relevant sections in the content
+2. Extract specific data points that match the user's request
+3. Create realistic variations and additional rows based on patterns found
+4. Ensure data consistency and logical relationships between columns
+5. Use actual values from content as the foundation for generated data
 
-CONTENT-DRIVEN DATA GENERATION:
-Your goal is to create the most comprehensive and valuable dataset possible from the available content:
+STEP-BY-STEP PROCESS:
+1. ANALYZE USER REQUEST: Understand exactly what data the user wants
+2. SCAN CONTENT: Look for relevant sections that contain the requested information
+3. EXTRACT DATA: Pull out specific values, names, numbers, dates from the content
+4. DESIGN SCHEMA: Create column names and types based on extracted data and user needs
+5. GENERATE ROWS: Create ${request.numRows} rows using extracted data and logical variations
 
-FOR SYNTHETIC DATA REQUESTS:
-- Analyze all patterns, ranges, correlations, and relationships in the content
-- Use medical/scientific knowledge from the content to generate realistic variations
-- Create data points that represent different scenarios, conditions, and cases mentioned
-- Utilize statistical distributions, normal ranges, and pathological ranges found in content
-- Generate realistic combinations of parameters based on content relationships
-
-FOR REAL DATA EXTRACTION:
-- Extract every piece of valuable data from the content
-- Don't limit extraction to obvious data - look for derived insights and contextual information
-- Include comparative data, reference values, and statistical measures
-- Extract data from research findings, case studies, and examples
-- Capture relationships and correlations mentioned in the content
-
-SCHEMA OPTIMIZATION:
-- Let the content dictate the optimal column structure
-- Create columns that maximize the value and comprehensiveness of the dataset
-- Include both quantitative and qualitative data that adds insight
-- Design schema that captures the full richness of the available content
-
-MANDATORY OUTPUT FORMAT - EXTRACT REAL DATA:
+OUTPUT FORMAT:
 {
-  "jsonString": "[{\"column1\": value1, \"column2\": value2, \"column3\": value3}, {\"column1\": value4, \"column2\": value5, \"column3\": value6}, ...]",
-  "detectedSchema": [{"name": "column1", "type": "number"}, {"name": "column2", "type": "string"}, {"name": "column3", "type": "number"}],
-  "feedback": "Extracted real data from ${domain} content including relevant measurements, statistics, and research findings."
+  "jsonString": "[{\"column1\": \"value1\", \"column2\": 123, \"column3\": \"value3\"}, {\"column1\": \"value4\", \"column2\": 456, \"column3\": \"value6\"}]",
+  "detectedSchema": [
+    {"name": "column1", "type": "String"},
+    {"name": "column2", "type": "Integer"},
+    {"name": "column3", "type": "String"}
+  ],
+  "feedback": "Successfully extracted and structured data from web content based on user request."
 }
 
-CRITICAL REQUIREMENTS:
-- JSON keys MUST EXACTLY MATCH schema "name" fields
-- Extract REAL NUMBERS and VALUES from the content based on the domain
-- Create ${request.numRows} rows with ACTUAL DATA VALUES
-- Use domain-appropriate ranges and research data from the content
-- Adapt column names and data types to match the content and user request
+REQUIREMENTS:
+- Column names in jsonString MUST match schema "name" fields exactly
+- Use appropriate data types: String, Integer, Float, Date, Boolean
+- Extract real values from content when possible
+- Generate realistic variations to reach target row count
+- Focus on data that directly addresses the user's request
+- Ensure data consistency and logical relationships
 
-Important: Only return REAL data found in the content. Quality over quantity - real data is more valuable than hitting exact row count.`;
+Remember: The goal is to create a useful dataset that matches what the user asked for, using the web content as the source of real information.`;
   }
 
   /**
