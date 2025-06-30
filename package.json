@@ -24,11 +24,13 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "build:analyze": "ANALYZE=true npm run build",
-    "build:netlify": "npm run clean && npm run build",
-    "deploy:prepare": "bash scripts/deploy.sh",
+    "build:vercel": "npm run clean && npm run build",
+    "deploy:vercel": "vercel --prod",
+    "deploy:preview": "vercel",
     "postbuild": "echo 'Build completed successfully'",
     "clean": "rimraf .next out node_modules/.cache temp",
-    "optimize": "npm run clean && npm ci && npm run build"
+    "optimize": "npm run clean && npm ci && npm run build",
+    "vercel-build": "npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.0",

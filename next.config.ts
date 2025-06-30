@@ -9,30 +9,36 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // Image optimization for Netlify
+  // Image optimization for Vercel (enable optimization)
   images: {
-    unoptimized: true,
+    unoptimized: false, // Enable Vercel's image optimization
     remotePatterns: [
       {
         protocol: 'https',
         hostname: '**',
       },
     ],
+    formats: ['image/webp', 'image/avif'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
 
-  // Experimental features
+  // Experimental features optimized for Vercel
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
 
+  // Server external packages for Vercel
+  serverExternalPackages: ['@anthropic-ai/sdk', '@google/generative-ai'],
+
   // Ensure App Router is used exclusively
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
 
-  // Force App Router configuration
-
-  // Disable static optimization completely
+  // Vercel-optimized configuration
   trailingSlash: false,
-  skipTrailingSlashRedirect: true,
+
+  // Output configuration for Vercel
+  output: 'standalone',
 
 
 
