@@ -58,17 +58,17 @@ export function DashboardHeader() {
   };
 
   const commonRightContent = (
-    <div className="flex items-center gap-3 md:gap-4">
+    <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
       <ThemeToggle />
-      <Button variant="ghost" size="icon" className="rounded-full text-muted-foreground hover:text-foreground" aria-label="Notifications">
-        <Bell className="h-5 w-5" />
+      <Button variant="ghost" size="icon" className="rounded-full text-muted-foreground hover:text-foreground hidden sm:flex" aria-label="Notifications">
+        <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="rounded-full">
-            <Avatar className="h-9 w-9 border-2 border-primary/50">
+            <Avatar className="h-8 w-8 sm:h-9 sm:w-9 border-2 border-primary/50">
               <AvatarImage src={user?.user_metadata?.avatar_url || ""} alt={user?.email || "User Avatar"}/>
-              <AvatarFallback>{user?.email ? user.email.charAt(0).toUpperCase() : "U"}</AvatarFallback>
+              <AvatarFallback className="text-xs sm:text-sm">{user?.email ? user.email.charAt(0).toUpperCase() : "U"}</AvatarFallback>
             </Avatar>
             <span className="sr-only">Toggle user menu</span>
           </Button>
@@ -110,12 +110,12 @@ export function DashboardHeader() {
   );
 
   const searchBar = (
-     <form className="relative flex-1 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 sm:h-4.5 sm:w-4.5 text-muted-foreground" />
+     <form className="relative flex-1 max-w-sm lg:max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
             type="search"
-            placeholder="Search dashboard..."
-            className="pl-10 pr-4 py-2 sm:py-2.5 text-sm rounded-lg shadow-inner bg-background focus:bg-card border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary"
+            placeholder="Search..."
+            className="pl-10 pr-4 py-2 text-sm rounded-lg shadow-inner bg-background focus:bg-card border-border hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary"
             aria-label="Search"
             disabled
         />
@@ -135,19 +135,19 @@ export function DashboardHeader() {
   }
   
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b bg-card px-4 md:px-6 shadow-md">
-      <div className="flex items-center gap-2 md:gap-4">
+    <header className="sticky top-0 z-40 flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 border-b bg-card px-3 sm:px-4 md:px-6 shadow-md">
+      <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0">
         {isMobile && (
-          <SidebarTrigger className="md:hidden -ml-2 text-muted-foreground hover:text-foreground">
-            <Menu className="h-6 w-6"/>
+          <SidebarTrigger className="md:hidden -ml-1 sm:-ml-2 text-muted-foreground hover:text-foreground">
+            <Menu className="h-5 w-5 sm:h-6 sm:w-6"/>
           </SidebarTrigger>
         )}
-         <Link href="/dashboard" className="block">
-            <SyntharaLogo className="h-9 w-auto" />
+         <Link href="/dashboard" className="block flex-shrink-0">
+            <SyntharaLogo className="h-7 sm:h-8 md:h-9 w-auto" />
          </Link>
-        <div className="hidden md:block">{searchBar}</div>
+        <div className="hidden md:block flex-1">{searchBar}</div>
       </div>
-      
+
       {commonRightContent}
     </header>
   );

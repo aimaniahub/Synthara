@@ -385,7 +385,7 @@ export function DataGenerationClient() {
   };
 
   return (
-    <div className="grid gap-8 lg:grid-cols-3 items-start">
+    <div className="grid gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-3 items-start">
       <form
         onSubmit={(e) => {
           if (isGenerationInProgress || isRequestActiveRef.current) {
@@ -396,23 +396,24 @@ export function DataGenerationClient() {
           }
           return form.handleSubmit(onSubmit)(e);
         }}
-        className="lg:col-span-2 space-y-8"
+        className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8"
         style={{ pointerEvents: isGenerationInProgress ? 'none' : 'auto' }}
       >
         <Card className="shadow-xl">
-          <CardHeader>
-            <CardTitle className="font-headline text-3xl">Describe Your Data Needs</CardTitle>
+          <CardHeader className="pb-4 sm:pb-6">
+            <CardTitle className="font-headline text-xl sm:text-2xl lg:text-3xl">Describe Your Data Needs</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          <CardContent className="space-y-4 sm:space-y-6">
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <Label htmlFor="prompt" className="text-lg font-semibold">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0 mb-2">
+                <Label htmlFor="prompt" className="text-base sm:text-lg font-semibold">
                   What data do you want to generate?
                 </Label>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="w-full sm:w-auto"
                   onClick={async () => {
                     const currentPrompt = form.getValues("prompt");
                     if (!currentPrompt || currentPrompt.trim().length < 10) {
@@ -455,7 +456,7 @@ export function DataGenerationClient() {
                 {...form.register("prompt")}
                 placeholder={dynamicPlaceholder}
                 rows={4}
-                className="mt-2 text-base shadow-sm"
+                className="mt-2 text-sm sm:text-base shadow-sm"
                 disabled={isGenerating}
               />
               {form.formState.errors.prompt && (
@@ -463,42 +464,46 @@ export function DataGenerationClient() {
               )}
             </div>
 
-            <div>
-              <Label htmlFor="numRows" className="text-lg font-semibold">Number of Rows</Label>
-              <Input
-                id="numRows"
-                type="number"
-                {...form.register("numRows")}
-                className="mt-2 text-base shadow-sm"
-                disabled={isGenerating}
-                min={1}
-                max={100}
-              />
-              {form.formState.errors.numRows && (
-                <p className="text-sm text-destructive mt-1">{form.formState.errors.numRows.message}</p>
-              )}
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div>
+                <Label htmlFor="numRows" className="text-base sm:text-lg font-semibold">Number of Rows</Label>
+                <Input
+                  id="numRows"
+                  type="number"
+                  {...form.register("numRows")}
+                  className="mt-2 text-sm sm:text-base shadow-sm"
+                  disabled={isGenerating}
+                  min={1}
+                  max={100}
+                />
+                {form.formState.errors.numRows && (
+                  <p className="text-sm text-destructive mt-1">{form.formState.errors.numRows.message}</p>
+                )}
+              </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex-1 mr-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="useWebData"
-                    checked={form.watch("useWebData")}
-                    onCheckedChange={(checked) => form.setValue("useWebData", checked)}
-                    disabled={isGenerating}
-                  />
-                  <Label htmlFor="useWebData" className="text-lg font-semibold">
-                    Use Live Web Data
-                  </Label>
+              <div className="flex items-end">
+                <div className="w-full">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Switch
+                      id="useWebData"
+                      checked={form.watch("useWebData")}
+                      onCheckedChange={(checked) => form.setValue("useWebData", checked)}
+                      disabled={isGenerating}
+                    />
+                    <Label htmlFor="useWebData" className="text-sm sm:text-base font-semibold">
+                      Use Live Web Data
+                    </Label>
+                  </div>
                 </div>
               </div>
-              <div className="flex flex-col items-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={async () => {
                     const currentPrompt = form.getValues("prompt");
                     if (!currentPrompt || currentPrompt.trim().length < 10) {
                       toast({
@@ -530,18 +535,17 @@ export function DataGenerationClient() {
                     }
                   }}
                   disabled={isGenerating || isSuggesting}
-                  className="mt-2"
+                  className="w-full sm:w-auto"
                 >
                   {isSuggesting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Brain className="mr-2 h-4 w-4" />}
                   Get AI Suggestion
                 </Button>
-              </div>
-            </div>
 
-            <Button type="submit" disabled={isGenerating || isGenerationInProgress} className="w-full">
-              {(isGenerating || isGenerationInProgress) ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
-              {isGenerationInProgress ? 'Processing...' : isGenerating ? 'Generating...' : 'Generate Data'}
-            </Button>
+              <Button type="submit" disabled={isGenerating || isGenerationInProgress} className="w-full sm:flex-1">
+                {(isGenerating || isGenerationInProgress) ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Sparkles className="mr-2 h-4 w-4" />}
+                {isGenerationInProgress ? 'Processing...' : isGenerating ? 'Generating...' : 'Generate Data'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

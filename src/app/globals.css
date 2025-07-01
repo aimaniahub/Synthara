@@ -106,3 +106,59 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Mobile-first responsive utilities */
+  .container-responsive {
+    @apply w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8;
+  }
+
+  .text-responsive {
+    @apply text-sm sm:text-base;
+  }
+
+  .heading-responsive {
+    @apply text-lg sm:text-xl md:text-2xl lg:text-3xl;
+  }
+
+  .card-responsive {
+    @apply p-3 sm:p-4 md:p-6;
+  }
+
+  .button-responsive {
+    @apply px-3 py-2 sm:px-4 sm:py-2.5 text-sm sm:text-base;
+  }
+
+  .grid-responsive {
+    @apply grid gap-3 sm:gap-4 md:gap-6 lg:gap-8;
+  }
+
+  .space-responsive {
+    @apply space-y-3 sm:space-y-4 md:space-y-6 lg:space-y-8;
+  }
+
+  /* Mobile table improvements */
+  .table-mobile {
+    @apply text-xs sm:text-sm;
+  }
+
+  .table-mobile th {
+    @apply px-2 py-2 sm:px-4 sm:py-3;
+  }
+
+  .table-mobile td {
+    @apply px-2 py-2 sm:px-4 sm:py-3;
+  }
+
+  /* Mobile form improvements */
+  .form-mobile input,
+  .form-mobile textarea,
+  .form-mobile select {
+    @apply text-sm sm:text-base;
+  }
+
+  /* Mobile sidebar improvements */
+  .sidebar-mobile {
+    @apply w-64 sm:w-72;
+  }
+}

@@ -57,15 +57,16 @@ export default function DashboardLayout({
 
 
   return (
-    <SidebarProvider defaultOpen>
-      <Sidebar 
-        side="left" 
-        collapsible="icon" 
+    <SidebarProvider defaultOpen={false}>
+      {/* Desktop Sidebar */}
+      <Sidebar
+        side="left"
+        collapsible="icon"
         className="hidden md:flex flex-col border-r border-sidebar-border shadow-lg"
         style={{
           // @ts-ignore
-          '--sidebar-width': '17rem', 
-          '--sidebar-width-icon': '3.5rem', 
+          '--sidebar-width': '17rem',
+          '--sidebar-width-icon': '3.5rem',
         }}
       >
         <SidebarHeader className="p-4 h-16 flex items-center border-b border-sidebar-border">
@@ -84,11 +85,38 @@ export default function DashboardLayout({
           <SidebarNav navItems={helpNavItems} />
         </SidebarFooter>
       </Sidebar>
-      
+
+      {/* Mobile Sidebar */}
+      <Sidebar
+        side="left"
+        collapsible="offcanvas"
+        className="md:hidden flex flex-col border-r border-sidebar-border shadow-lg"
+        style={{
+          // @ts-ignore
+          '--sidebar-width': '16rem',
+        }}
+      >
+        <SidebarHeader className="p-4 h-16 flex items-center border-b border-sidebar-border">
+           <Link href="/dashboard" className="flex items-center gap-2.5">
+            <SyntharaLogo className="h-8 w-auto text-sidebar-primary" />
+            <span className="font-headline text-xl font-semibold text-sidebar-foreground">
+              Synthara
+            </span>
+          </Link>
+        </SidebarHeader>
+        <SidebarContent className="flex-grow p-0 overflow-y-auto">
+          <SidebarNav navItems={mainNavItems} groupLabel="Main Tools" />
+          <SidebarNav navItems={userNavItems} groupLabel="User Account" />
+        </SidebarContent>
+        <SidebarFooter className="p-2 border-t border-sidebar-border">
+          <SidebarNav navItems={helpNavItems} />
+        </SidebarFooter>
+      </Sidebar>
+
       <div className="flex flex-col flex-1 min-h-screen bg-secondary/30 dark:bg-background">
         <DashboardHeader />
         <SidebarInset className="flex-1 overflow-y-auto">
-          <main className="p-6 md:p-8 lg:p-10">
+          <main className="p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10">
             {children}
           </main>
         </SidebarInset>
