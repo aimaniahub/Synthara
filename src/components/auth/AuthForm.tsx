@@ -91,16 +91,16 @@ export function AuthForm() {
 
   return (
     <Card className="w-full shadow-xl">
-      <CardHeader className="text-center">
-        <CardTitle className="font-headline text-2xl sm:text-3xl">
+      <CardHeader className="text-center pb-4 sm:pb-6">
+        <CardTitle className="font-headline text-xl sm:text-2xl lg:text-3xl">
           {authMode === 'signIn' ? 'Welcome Back!' : 'Create Account'}
         </CardTitle>
-        <CardDescription className="text-md">
+        <CardDescription className="text-sm sm:text-base">
           {authMode === 'signIn' ? 'Sign in to access your Synthara dashboard.' : 'Sign up to start generating synthetic data.'}
         </CardDescription>
       </CardHeader>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4 sm:space-y-6">
           {authMessage && (
             <Alert variant={authMessage.type === 'error' ? "destructive" : "default"} className={`${authMessage.type === 'success' ? 'bg-green-500/10 border-green-500/50 text-green-700 dark:text-green-400 [&>svg]:text-green-600 dark:[&>svg]:text-green-500' : ''}`}>
               {authMessage.type === 'error' ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle className="h-5 w-5" />}
@@ -110,71 +110,77 @@ export function AuthForm() {
           )}
           {authMode === 'signUp' && (
             <div className="space-y-1.5">
-              <Label htmlFor="fullName" className="text-base">Full Name</Label>
+              <Label htmlFor="fullName" className="text-sm sm:text-base">Full Name</Label>
               <Input
                 id="fullName"
                 type="text"
                 placeholder="Enter your full name"
                 {...form.register("fullName")}
-                className="py-3 h-auto shadow-sm"
+                className="py-2.5 sm:py-3 h-auto shadow-sm text-sm sm:text-base"
                 disabled={isSubmitting || isPending}
               />
               {form.formState.errors.fullName && (
-                <p className="text-sm text-destructive mt-1">{form.formState.errors.fullName.message}</p>
+                <p className="text-xs sm:text-sm text-destructive mt-1">{form.formState.errors.fullName.message}</p>
               )}
             </div>
           )}
           <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-base">Email</Label>
+            <Label htmlFor="email" className="text-sm sm:text-base">Email</Label>
             <Input
               id="email"
               type="email"
               placeholder="Enter your email address"
               {...form.register("email")}
-              className="py-3 h-auto shadow-sm"
+              className="py-2.5 sm:py-3 h-auto shadow-sm text-sm sm:text-base"
               disabled={isSubmitting || isPending}
             />
             {form.formState.errors.email && (
-              <p className="text-sm text-destructive mt-1">{form.formState.errors.email.message}</p>
+              <p className="text-xs sm:text-sm text-destructive mt-1">{form.formState.errors.email.message}</p>
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="password" className="text-base">Password</Label>
+            <Label htmlFor="password" className="text-sm sm:text-base">Password</Label>
             <Input
               id="password"
               type="password"
               placeholder="Create a secure password"
               {...form.register("password")}
-              className="py-3 h-auto shadow-sm"
+              className="py-2.5 sm:py-3 h-auto shadow-sm text-sm sm:text-base"
               disabled={isSubmitting || isPending}
             />
             {form.formState.errors.password && (
-              <p className="text-sm text-destructive mt-1">{form.formState.errors.password.message}</p>
+              <p className="text-xs sm:text-sm text-destructive mt-1">{form.formState.errors.password.message}</p>
             )}
           </div>
         </CardContent>
-        <CardFooter className="flex flex-col gap-4">
-          <Button type="submit" className="w-full text-lg py-3" disabled={isSubmitting || isPending}>
+        <CardFooter className="flex flex-col gap-3 sm:gap-4">
+          <Button type="submit" className="w-full text-sm sm:text-base lg:text-lg py-2.5 sm:py-3" disabled={isSubmitting || isPending}>
             {isSubmitting || isPending ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
             ) : authMode === 'signIn' ? (
-              <LogIn className="mr-2 h-5 w-5" />
+              <LogIn className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
             ) : (
-              <UserPlus className="mr-2 h-5 w-5" />
+              <UserPlus className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
             )}
             {authMode === 'signIn' ? 'Sign In' : 'Sign Up'}
           </Button>
           <Button
             type="button"
             variant="link"
+            className="text-xs sm:text-sm"
             onClick={() => {
               setAuthMode(authMode === 'signIn' ? 'signUp' : 'signIn');
               setAuthMessage(null);
-              form.reset(); 
+              form.reset();
             }}
             disabled={isSubmitting || isPending}
           >
-            {authMode === 'signIn' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+            <span className="hidden sm:inline">
+              {authMode === 'signIn' ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
+            </span>
+            <span className="sm:hidden">
+              {authMode === 'signIn' ? "Sign Up" : "Sign In"}
+            </span>
           </Button>
         </CardFooter>
       </form>

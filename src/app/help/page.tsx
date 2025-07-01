@@ -44,21 +44,24 @@ const tutorialCategories = [
 export default function HelpPage() {
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="py-4 border-b border-border sticky top-0 bg-background/80 backdrop-blur-md z-50">
-        <nav className="container mx-auto px-4 flex justify-between items-center">
-          <Link href="/" aria-label="Synthara AI Homepage">
-            <SyntharaLogo className="h-10 w-auto" />
+      <header className="py-3 sm:py-4 border-b border-border sticky top-0 bg-background/80 backdrop-blur-md z-50">
+        <nav className="container mx-auto px-3 sm:px-4 lg:px-8 flex justify-between items-center">
+          <Link href="/" aria-label="Synthara AI Homepage" className="flex-shrink-0">
+            <SyntharaLogo className="h-8 sm:h-9 lg:h-10 w-auto" />
           </Link>
-          <Button variant="outline" asChild>
-            <Link href="/dashboard">Go to Dashboard</Link>
+          <Button variant="outline" size="sm" asChild className="text-xs sm:text-sm">
+            <Link href="/dashboard">
+              <span className="hidden sm:inline">Go to Dashboard</span>
+              <span className="sm:hidden">Dashboard</span>
+            </Link>
           </Button>
         </nav>
       </header>
 
-      <main className="flex-grow container mx-auto px-4 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-3xl sm:text-4xl font-headline font-bold text-foreground mb-3">Help &amp; Support Center</h1>
-          <p className="text-lg text-muted-foreground">Find answers, get help, and learn more about Synthara AI.</p>
+      <main className="flex-grow container mx-auto px-3 sm:px-4 lg:px-8 py-8 sm:py-12">
+        <div className="text-center mb-8 sm:mb-12">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-headline font-bold text-foreground mb-3">Help &amp; Support Center</h1>
+          <p className="text-base sm:text-lg text-muted-foreground px-4">Find answers, get help, and learn more about Synthara AI.</p>
         </div>
 
         <div className="mb-10 relative">
@@ -72,12 +75,12 @@ export default function HelpPage() {
         </div>
 
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
           {/* Main Content: FAQs and Contact Form */}
-          <div className="md:col-span-2 space-y-10">
+          <div className="md:col-span-2 space-y-6 sm:space-y-8 lg:space-y-10">
             <Card>
-              <CardHeader>
-                <CardTitle className="font-headline text-2xl">Frequently Asked Questions</CardTitle>
+              <CardHeader className="pb-4 sm:pb-6">
+                <CardTitle className="font-headline text-xl sm:text-2xl">Frequently Asked Questions</CardTitle>
               </CardHeader>
               <CardContent>
                 <Accordion type="single" collapsible className="w-full">
@@ -96,11 +99,11 @@ export default function HelpPage() {
             </Card>
 
             <Card>
-              <CardHeader>
-                <CardTitle className="font-headline text-2xl">Contact Support</CardTitle>
-                <CardDescription>Can't find an answer? Reach out to our support team.</CardDescription>
+              <CardHeader className="pb-4 sm:pb-6">
+                <CardTitle className="font-headline text-xl sm:text-2xl">Contact Support</CardTitle>
+                <CardDescription className="text-sm sm:text-base">Can't find an answer? Reach out to our support team.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 sm:space-y-4">
                 <div>
                   <Label htmlFor="issueCategory">Issue Category</Label>
                   <Select>
@@ -124,20 +127,26 @@ export default function HelpPage() {
                   <Textarea id="message" placeholder="Provide details about your issue or question" rows={5} />
                 </div>
               </CardContent>
-              <CardFooter className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-0">
-                <Button type="submit">Send Message</Button>
-                <Button variant="outline">
-                  <MessageSquare className="mr-2 h-4 w-4" /> Live Chat (Coming Soon)
+              <CardFooter className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
+                <Button type="submit" className="w-full sm:w-auto">Send Message</Button>
+                <Button variant="outline" className="w-full sm:w-auto">
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  <span className="hidden sm:inline">Live Chat (Coming Soon)</span>
+                  <span className="sm:hidden">Live Chat</span>
                 </Button>
               </CardFooter>
             </Card>
           </div>
 
           {/* Sidebar: Tutorials, Community, Feature Request */}
-          <div className="space-y-8">
+          <div className="space-y-6 sm:space-y-8">
             <Card>
-              <CardHeader>
-                <CardTitle className="font-headline text-xl flex items-center"><BookOpen className="mr-2 text-primary"/>Tutorials &amp; Documentation</CardTitle>
+              <CardHeader className="pb-4 sm:pb-6">
+                <CardTitle className="font-headline text-lg sm:text-xl flex items-center">
+                  <BookOpen className="mr-2 text-primary"/>
+                  <span className="hidden sm:inline">Tutorials &amp; Documentation</span>
+                  <span className="sm:hidden">Tutorials</span>
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3">

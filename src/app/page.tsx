@@ -87,12 +87,14 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      <header className="py-4 border-b border-border sticky top-0 bg-background/90 backdrop-blur-lg z-50">
-        <nav className="container mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <Link href="/" aria-label="Synthara AI Homepage">
-            <SyntharaLogo className="h-10 w-auto" />
+      <header className="py-3 sm:py-4 border-b border-border sticky top-0 bg-background/90 backdrop-blur-lg z-50">
+        <nav className="container mx-auto px-3 sm:px-4 lg:px-8 flex justify-between items-center">
+          <Link href="/" aria-label="Synthara AI Homepage" className="flex-shrink-0">
+            <SyntharaLogo className="h-8 sm:h-9 lg:h-10 w-auto" />
           </Link>
-          <div className="space-x-3">
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-3">
              <Button variant="ghost" asChild>
               <Link href="#features">Features</Link>
             </Button>
@@ -114,27 +116,55 @@ export default function HomePage() {
                 </Button>
             )}
           </div>
+
+          {/* Mobile Navigation */}
+          <div className="flex md:hidden items-center space-x-2">
+            <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
+              <Link href="#features">Features</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
+              <Link href="#team">Team</Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
+              <Link href="/help">Help Center</Link>
+            </Button>
+            {loading ? (
+                <Button size="sm" disabled className="shadow-md">Loading...</Button>
+            ) : user ? (
+                <Button size="sm" asChild className="shadow-md hover:shadow-lg transition-shadow">
+                    <Link href="/dashboard">Go to Dashboard</Link>
+                </Button>
+            ) : (
+                <Button size="sm" asChild className="shadow-md hover:shadow-lg transition-shadow">
+                    <Link href="/auth"><LogIn className="mr-1 h-4 w-4"/>Login</Link>
+                </Button>
+            )}
+          </div>
         </nav>
       </header>
 
       <main className="flex-grow">
         {/* Hero Section */}
-        <section className="relative py-20 md:py-32 text-center overflow-hidden">
+        <section className="relative py-12 sm:py-16 md:py-20 lg:py-32 text-center overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-background via-secondary/70 to-background opacity-75"></div>
           <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/50 via_transparent to_transparent"></div>
-          
+
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <h1 className="font-headline text-4xl sm:text-5xl md:text-7xl font-bold mb-8 text-foreground leading-tight">
+            <h1 className="font-headline text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-7xl font-bold mb-6 sm:mb-8 text-foreground leading-tight">
               Unlock the Power of <span className="text-primary">Synthetic Data</span>
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground mb-12 max-w-3xl mx-auto">
+            <p className="text-sm sm:text-base md:text-lg lg:text-xl text-muted-foreground mb-8 sm:mb-10 lg:mb-12 max-w-3xl mx-auto px-4">
               Synthara AI empowers you to generate, analyze, and utilize high-quality synthetic data for your most demanding projects. Accelerate innovation, protect privacy, and build better.
             </p>
-            <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-                <Button size="lg" asChild className="shadow-lg hover:shadow-xl transition-shadow !py-7 !text-lg !px-10">
-                <Link href="/dashboard/generate">Start Generating Data <ArrowRight className="ml-2 h-5 w-5" /></Link>
+            <div className="flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4">
+                <Button size="lg" asChild className="shadow-lg hover:shadow-xl transition-shadow w-full sm:w-auto py-3 sm:py-4 lg:py-7 text-sm sm:text-base lg:text-lg px-6 sm:px-8 lg:px-10">
+                <Link href="/dashboard/generate">
+                  <span className="hidden sm:inline">Start Generating Data</span>
+                  <span className="sm:hidden">Start Generating</span>
+                  <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
+                </Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild className="shadow-lg hover:shadow-xl transition-shadow !py-7 !text-lg !px-10">
+                <Button size="lg" variant="outline" asChild className="shadow-lg hover:shadow-xl transition-shadow w-full sm:w-auto py-3 sm:py-4 lg:py-7 text-sm sm:text-base lg:text-lg px-6 sm:px-8 lg:px-10">
                 <Link href="#features">Explore Features</Link>
                 </Button>
             </div>
@@ -192,16 +222,16 @@ export default function HomePage() {
             <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-semibold text-center mb-12 md:mb-16 text-foreground">
               Core Platform Features
             </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
               {features.map((feature) => (
                 <Card key={feature.name} className="shadow-xl hover:shadow-heavy-lg transition-shadow bg-card transform hover:-translate-y-1">
-                  <CardHeader className="flex flex-row items-start gap-4 p-6">
-                    <div className="p-3 bg-primary/10 rounded-lg mt-1">
-                        <feature.icon className="w-8 h-8 text-primary" />
+                  <CardHeader className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4 p-4 sm:p-6">
+                    <div className="p-2 sm:p-3 bg-primary/10 rounded-lg mt-1 mx-auto sm:mx-0">
+                        <feature.icon className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
                     </div>
-                    <div>
-                        <CardTitle className="font-headline text-xl mb-1">{feature.name}</CardTitle>
-                        <CardDescription className="text-muted-foreground leading-relaxed">{feature.description}</CardDescription>
+                    <div className="text-center sm:text-left">
+                        <CardTitle className="font-headline text-lg sm:text-xl mb-1">{feature.name}</CardTitle>
+                        <CardDescription className="text-muted-foreground leading-relaxed text-sm sm:text-base">{feature.description}</CardDescription>
                     </div>
                   </CardHeader>
                 </Card>
@@ -216,17 +246,17 @@ export default function HomePage() {
             <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-semibold text-center mb-12 md:mb-16 text-foreground">
               Built For Innovators Like You
             </h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
               {targetAudiences.map((audience) => (
-                <Card key={audience.name} className="text-center shadow-xl hover:shadow-heavy-lg transition-shadow bg-card p-4">
-                  <CardHeader className="items-center">
-                     <div className="p-4 bg-accent/10 rounded-full mb-4 inline-block">
-                        <audience.icon className="w-12 h-12 text-accent" />
+                <Card key={audience.name} className="text-center shadow-xl hover:shadow-heavy-lg transition-shadow bg-card p-3 sm:p-4">
+                  <CardHeader className="items-center pb-3 sm:pb-6">
+                     <div className="p-3 sm:p-4 bg-accent/10 rounded-full mb-3 sm:mb-4 inline-block">
+                        <audience.icon className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-accent" />
                     </div>
-                    <CardTitle className="font-headline text-xl">{audience.name}</CardTitle>
+                    <CardTitle className="font-headline text-lg sm:text-xl">{audience.name}</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">{audience.description}</p>
+                  <CardContent className="pt-0">
+                    <p className="text-xs sm:text-sm text-muted-foreground">{audience.description}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -266,24 +296,27 @@ export default function HomePage() {
         <section id="team" className="py-16 md:py-24 bg-background">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-4">
-              <h3 className="text-xl font-semibold text-primary tracking-wider">AIML</h3>
-              <h4 className="text-md text-muted-foreground">Government Engineering College Challakere</h4>
+              <h3 className="text-lg sm:text-xl font-semibold text-primary tracking-wider">AIML</h3>
+              <h4 className="text-sm sm:text-base text-muted-foreground">Government Engineering College Challakere</h4>
             </div>
-            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-semibold text-center mb-12 md:mb-16 text-foreground">
+            <h2 className="font-headline text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold text-center mb-8 sm:mb-12 md:mb-16 text-foreground">
               Meet the Team
             </h2>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {/* Mobile: 2x2 Grid, Tablet: 2x2, Desktop: 4x1 */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
               {teamMembers.map((member) => (
                 <Card key={member.name} className="text-center shadow-xl hover:shadow-heavy-lg transition-shadow bg-card overflow-hidden">
-                  <div className="aspect-square bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
-                      <div className="text-4xl mb-2">👤</div>
-                      <p className="text-sm">{member.name}</p>
+                  {/* Medium Circle Image Holder */}
+                  <div className="p-4 sm:p-6 flex justify-center">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-full bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center border-2 border-primary/20">
+                      <div className="text-center text-muted-foreground">
+                        <div className="text-2xl sm:text-3xl md:text-4xl">👤</div>
+                      </div>
                     </div>
                   </div>
-                  <CardHeader className="p-6">
-                    <CardTitle className="font-headline text-xl">{member.name}</CardTitle>
-                    <CardDescription className="text-primary">{member.role}</CardDescription>
+                  <CardHeader className="p-3 sm:p-4 lg:p-6 pt-0">
+                    <CardTitle className="font-headline text-sm sm:text-base lg:text-xl">{member.name}</CardTitle>
+                    <CardDescription className="text-primary text-xs sm:text-sm">{member.role}</CardDescription>
                   </CardHeader>
                 </Card>
               ))}

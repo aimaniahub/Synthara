@@ -153,31 +153,47 @@ export default function ProfilePage() {
 
 
   return (
-    <div className="space-y-10 md:space-y-12">
+    <div className="space-y-6 sm:space-y-8 lg:space-y-10 xl:space-y-12">
       <div>
-        <h1 className="text-3xl sm:text-4xl font-headline font-bold text-foreground">Profile &amp; Settings</h1>
-        <p className="text-lg text-muted-foreground mt-1">Manage your account information, preferences, and security settings.</p>
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-headline font-bold text-foreground">Profile &amp; Settings</h1>
+        <p className="text-sm sm:text-base lg:text-lg text-muted-foreground mt-1">Manage your account information, preferences, and security settings.</p>
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 mb-8 h-auto p-1.5 rounded-lg shadow-sm">
-          <TabsTrigger value="profile" className="py-2.5 text-base"><User className="mr-2 h-5 w-5 inline-block sm:hidden md:inline-block"/>Profile</TabsTrigger>
-          <TabsTrigger value="preferences" className="py-2.5 text-base"><Palette className="mr-2 h-5 w-5 inline-block sm:hidden md:inline-block"/>Preferences</TabsTrigger>
-          <TabsTrigger value="security" className="py-2.5 text-base"><Shield className="mr-2 h-5 w-5 inline-block sm:hidden md:inline-block"/>Security</TabsTrigger>
-          <TabsTrigger value="notifications" className="py-2.5 text-base"><Bell className="mr-2 h-5 w-5 inline-block sm:hidden md:inline-block"/>Notifications</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 mb-6 sm:mb-8 h-auto p-1 sm:p-1.5 rounded-lg shadow-sm">
+          <TabsTrigger value="profile" className="py-2 sm:py-2.5 text-xs sm:text-sm lg:text-base">
+            <User className="mr-1 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5 inline-block sm:hidden md:inline-block"/>
+            <span className="hidden sm:inline">Profile</span>
+            <span className="sm:hidden">Profile</span>
+          </TabsTrigger>
+          <TabsTrigger value="preferences" className="py-2 sm:py-2.5 text-xs sm:text-sm lg:text-base">
+            <Palette className="mr-1 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5 inline-block sm:hidden md:inline-block"/>
+            <span className="hidden sm:inline">Preferences</span>
+            <span className="sm:hidden">Prefs</span>
+          </TabsTrigger>
+          <TabsTrigger value="security" className="py-2 sm:py-2.5 text-xs sm:text-sm lg:text-base">
+            <Shield className="mr-1 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5 inline-block sm:hidden md:inline-block"/>
+            <span className="hidden sm:inline">Security</span>
+            <span className="sm:hidden">Security</span>
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="py-2 sm:py-2.5 text-xs sm:text-sm lg:text-base">
+            <Bell className="mr-1 sm:mr-2 h-4 w-4 sm:h-5 sm:w-5 inline-block sm:hidden md:inline-block"/>
+            <span className="hidden sm:inline">Notifications</span>
+            <span className="sm:hidden">Notifs</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
           <Card className="shadow-xl">
-            <CardHeader>
-              <CardTitle className="font-headline text-2xl">Personal Information</CardTitle>
-              <CardDescription className="text-md">Update your personal details here. Click 'Edit Profile' to make changes.</CardDescription>
+            <CardHeader className="pb-4 sm:pb-6">
+              <CardTitle className="font-headline text-lg sm:text-xl lg:text-2xl">Personal Information</CardTitle>
+              <CardDescription className="text-sm sm:text-base">Update your personal details here. Click 'Edit Profile' to make changes.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-8 pt-2">
-              <div className="flex items-center space-x-6">
+            <CardContent className="space-y-6 sm:space-y-8 pt-2">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6">
                 <div className="relative group">
-                  <Avatar 
-                    className="h-24 w-24 border-4 border-primary/20 shadow-md cursor-pointer"
+                  <Avatar
+                    className="h-20 w-20 sm:h-24 sm:w-24 border-4 border-primary/20 shadow-md cursor-pointer"
                     onClick={() => isEditingProfile && fileInputRef.current?.click()}
                   >
                     <AvatarImage src={avatarPreview || ""} alt="User Avatar"/>
