@@ -57,38 +57,38 @@ export default async function DashboardPage() {
 
 
   return (
-    <div className="space-y-10 md:space-y-12">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-6 sm:space-y-8 lg:space-y-10 xl:space-y-12">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-headline font-bold text-foreground">Welcome Back, {userName}!</h1>
-          <p className="text-lg text-muted-foreground mt-1">Here's what's happening with your Synthara projects.</p>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-headline font-bold text-foreground">Welcome Back, {userName}!</h1>
+          <p className="text-sm sm:text-base lg:text-lg text-muted-foreground mt-1">Here's what's happening with your Synthara projects.</p>
         </div>
-        <Button size="lg" asChild className="shadow-md hover:shadow-lg transition-shadow">
+        <Button size="lg" asChild className="shadow-md hover:shadow-lg transition-shadow w-full sm:w-auto">
           <Link href="/dashboard/generate">
-            <PlusCircle className="mr-2 h-5 w-5" /> New Dataset
+            <PlusCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> New Dataset
           </Link>
         </Button>
       </div>
 
       {/* Quick Action Cards */}
       <section>
-        <h2 className="text-2xl sm:text-3xl font-headline font-semibold mb-6 text-foreground">Quick Actions</h2>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <h2 className="text-xl sm:text-2xl lg:text-3xl font-headline font-semibold mb-4 sm:mb-6 text-foreground">Quick Actions</h2>
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {quickActions.map((action) => (
             <Card key={action.title} className="shadow-lg hover:shadow-xl transition-shadow duration-300 ease-in-out transform hover:-translate-y-1 bg-card flex flex-col">
               <CardHeader className="pb-3">
-                <div className="p-3 bg-primary/10 rounded-lg inline-block mb-3 self-start">
-                    <action.Icon className="h-7 w-7 text-primary" />
+                <div className="p-2 sm:p-3 bg-primary/10 rounded-lg inline-block mb-2 sm:mb-3 self-start">
+                    <action.Icon className="h-5 w-5 sm:h-6 sm:w-6 lg:h-7 lg:w-7 text-primary" />
                 </div>
-                <CardTitle className="text-xl font-headline">{action.title}</CardTitle>
+                <CardTitle className="text-lg sm:text-xl font-headline">{action.title}</CardTitle>
               </CardHeader>
               <CardContent className="flex-grow">
-                <p className="text-sm text-muted-foreground leading-relaxed">{action.description}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">{action.description}</p>
               </CardContent>
               <CardFooter>
-                <Button variant="default" className="w-full group" asChild>
+                <Button variant="default" className="w-full group text-sm" asChild>
                   <Link href={action.href}>
-                    {action.cta} <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform"/>
+                    {action.cta} <ArrowRight className="ml-2 h-3 w-3 sm:h-4 sm:w-4 group-hover:translate-x-1 transition-transform"/>
                   </Link>
                 </Button>
               </CardFooter>
@@ -97,10 +97,10 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-3">
+      <div className="grid gap-6 sm:gap-8 grid-cols-1 lg:grid-cols-3">
         {/* Recent Activity Feed */}
         <section className="lg:col-span-2">
-          <h2 className="text-2xl sm:text-3xl font-headline font-semibold mb-6 text-foreground">Recent Activity</h2>
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-headline font-semibold mb-4 sm:mb-6 text-foreground">Recent Activity</h2>
           <Card className="shadow-xl">
             <CardHeader>
                 <CardTitle className="text-xl font-headline">Activity Feed</CardTitle>
@@ -148,7 +148,7 @@ export default async function DashboardPage() {
 
         {/* Last Generated Dataset */}
         <section>
-          <h2 className="text-2xl sm:text-3xl font-headline font-semibold mb-6 text-foreground">Last Dataset</h2>
+          <h2 className="text-xl sm:text-2xl lg:text-3xl font-headline font-semibold mb-4 sm:mb-6 text-foreground">Last Dataset</h2>
           <Card className="shadow-xl hover:shadow-heavy-lg transition-shadow flex flex-col h-full">
             <CardHeader>
               <div className="flex items-center gap-3 mb-1">

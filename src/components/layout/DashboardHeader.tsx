@@ -124,12 +124,11 @@ export function DashboardHeader() {
 
   if (!hasMounted) {
     return (
-      <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b bg-card px-4 md:px-6 shadow-md">
-        <div className="flex items-center gap-4">
-            <div className="h-8 w-8 rounded-md bg-muted md:hidden" /> {/* SidebarTrigger placeholder */}
-            <div className="h-8 w-32 rounded-md bg-muted hidden md:block" /> {/* Logo placeholder */}
+      <header className="sticky top-0 z-40 flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 border-b bg-card px-3 sm:px-4 md:px-6 shadow-md">
+        <div className="flex items-center gap-2 sm:gap-4">
+            <div className="h-5 w-5 sm:h-6 sm:w-6 rounded-md bg-muted" /> {/* SidebarTrigger placeholder */}
         </div>
-        <div className="h-9 w-24 rounded-md bg-muted md:w-32" /> {/* Right content placeholder */}
+        <div className="h-8 w-20 sm:h-9 sm:w-24 md:w-32 rounded-md bg-muted" /> {/* Right content placeholder */}
       </header>
     );
   }
@@ -137,14 +136,9 @@ export function DashboardHeader() {
   return (
     <header className="sticky top-0 z-40 flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 border-b bg-card px-3 sm:px-4 md:px-6 shadow-md">
       <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0">
-        {isMobile && (
-          <SidebarTrigger className="md:hidden -ml-1 sm:-ml-2 text-muted-foreground hover:text-foreground">
-            <Menu className="h-5 w-5 sm:h-6 sm:w-6"/>
-          </SidebarTrigger>
-        )}
-         <Link href="/dashboard" className="block flex-shrink-0">
-            <SyntharaLogo className="h-7 sm:h-8 md:h-9 w-auto" />
-         </Link>
+        <SidebarTrigger className="text-muted-foreground hover:text-foreground">
+          <Menu className="h-5 w-5 sm:h-6 sm:w-6"/>
+        </SidebarTrigger>
         <div className="hidden md:block flex-1">{searchBar}</div>
       </div>
 

@@ -57,22 +57,22 @@ export default function DashboardLayout({
 
 
   return (
-    <SidebarProvider defaultOpen={false}>
-      {/* Desktop Sidebar */}
-      <Sidebar
-        side="left"
-        collapsible="icon"
-        className="hidden md:flex flex-col border-r border-sidebar-border shadow-lg"
-        style={{
-          // @ts-ignore
-          '--sidebar-width': '17rem',
-          '--sidebar-width-icon': '3.5rem',
-        }}
-      >
-        <SidebarHeader className="p-4 h-16 flex items-center border-b border-sidebar-border">
+    <SidebarProvider defaultOpen={true} className="sidebar-provider">
+        {/* Desktop Sidebar */}
+        <Sidebar
+          side="left"
+          collapsible="icon"
+          className="hidden md:flex flex-col border-r border-sidebar-border shadow-lg"
+          style={{
+            // @ts-ignore
+            '--sidebar-width': '17rem',
+            '--sidebar-width-icon': '3.5rem',
+          }}
+        >
+        <SidebarHeader className="p-4 h-14 sm:h-16 flex items-center border-b border-sidebar-border">
            <Link href="/dashboard" className="flex items-center gap-2.5 group-data-[collapsible=icon]:justify-center">
-            <SyntharaLogo className="h-9 w-auto text-sidebar-primary group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8" />
-            <span className="font-headline text-2xl font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+            <SyntharaLogo className="h-8 sm:h-9 w-auto text-sidebar-primary group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7" />
+            <span className="font-headline text-xl sm:text-2xl font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
               Synthara
             </span>
           </Link>
@@ -93,14 +93,14 @@ export default function DashboardLayout({
         className="md:hidden flex flex-col border-r border-sidebar-border shadow-lg"
         style={{
           // @ts-ignore
-          '--sidebar-width': '16rem',
+          '--sidebar-width': '18rem',
         }}
       >
-        <SidebarHeader className="p-4 h-16 flex items-center border-b border-sidebar-border">
-           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <SyntharaLogo className="h-8 w-auto text-sidebar-primary" />
+        <SidebarHeader className="p-4 h-14 sm:h-16 flex items-center border-b border-sidebar-border">
+           <Link href="/dashboard" className="flex items-center gap-3">
+            <SyntharaLogo className="h-8 w-auto text-sidebar-primary flex-shrink-0" />
             <span className="font-headline text-xl font-semibold text-sidebar-foreground">
-              Synthara
+              Synthara AI
             </span>
           </Link>
         </SidebarHeader>
@@ -113,13 +113,13 @@ export default function DashboardLayout({
         </SidebarFooter>
       </Sidebar>
 
-      <div className="flex flex-col flex-1 min-h-screen bg-secondary/30 dark:bg-background">
+      <div className="flex flex-col flex-1 min-h-screen bg-secondary/30 dark:bg-background" data-sidebar="inset">
         <DashboardHeader />
-        <SidebarInset className="flex-1 overflow-y-auto">
-          <main className="p-3 sm:p-4 md:p-6 lg:p-8 xl:p-10">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10 xl:p-12">
+          <div className="mx-auto max-w-7xl w-full">
             {children}
-          </main>
-        </SidebarInset>
+          </div>
+        </main>
       </div>
     </SidebarProvider>
   );
