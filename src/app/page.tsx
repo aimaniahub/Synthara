@@ -86,268 +86,358 @@ export default function HomePage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      <header className="py-3 sm:py-4 border-b border-border sticky top-0 bg-background/90 backdrop-blur-lg z-50">
-        <nav className="container mx-auto px-3 sm:px-4 lg:px-8 flex justify-between items-center">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 relative overflow-hidden">
+      {/* Background geometric patterns */}
+      <div className="absolute inset-0 opacity-20">
+        <svg className="absolute top-0 left-0 w-full h-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+          <path d="M0,0 Q250,100 500,0 T1000,0 L1000,300 Q750,200 500,300 T0,300 Z" fill="url(#gradient1)" />
+          <path d="M0,700 Q250,600 500,700 T1000,700 L1000,1000 L0,1000 Z" fill="url(#gradient2)" />
+          <defs>
+            <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="rgba(139, 92, 246, 0.3)" />
+              <stop offset="100%" stopColor="rgba(79, 70, 229, 0.3)" />
+            </linearGradient>
+            <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="rgba(79, 70, 229, 0.3)" />
+              <stop offset="100%" stopColor="rgba(139, 92, 246, 0.3)" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <header className="relative z-50 py-4 border-b border-white/10 backdrop-blur-md bg-white/5">
+        <nav className="container mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <Link href="/" aria-label="Synthara AI Homepage" className="flex-shrink-0">
-            <SyntharaLogo className="h-8 sm:h-9 lg:h-10 w-auto" />
+            <SyntharaLogo className="h-8 sm:h-9 lg:h-10 w-auto text-white" />
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-3">
-             <Button variant="ghost" asChild>
-              <Link href="#features">Features</Link>
+          <div className="hidden md:flex items-center space-x-8">
+            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+              <Link href="#features">Platform</Link>
             </Button>
-            <Button variant="ghost" asChild>
-              <Link href="#team">Team</Link>
+            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+              <Link href="#solutions">Solutions</Link>
             </Button>
-             <Button variant="ghost" asChild>
-              <Link href="/help">Help Center</Link>
+            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+              <Link href="#team">Resources</Link>
             </Button>
+            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+              <Link href="/help">Customers</Link>
+            </Button>
+            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+              <Link href="#pricing">Pricing</Link>
+            </Button>
+
+            <Button variant="outline" asChild className="border-white/20 text-white hover:bg-white/10">
+              <Link href="/help">Get Demo</Link>
+            </Button>
+
             {loading ? (
-                <Button size="lg" disabled className="shadow-md">Loading...</Button>
+                <Button disabled className="bg-emerald-500 hover:bg-emerald-600 text-white">Loading...</Button>
             ) : user ? (
-                <Button size="lg" asChild className="shadow-md hover:shadow-lg transition-shadow">
+                <Button asChild className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg">
                     <Link href="/dashboard">Go to Dashboard</Link>
                 </Button>
             ) : (
-                <Button size="lg" asChild className="shadow-md hover:shadow-lg transition-shadow">
-                    <Link href="/auth"><LogIn className="mr-2 h-5 w-5"/>Login / Sign Up</Link>
+                <Button asChild className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg">
+                    <Link href="/auth">Start for Free →</Link>
                 </Button>
+            )}
+
+            {!loading && !user && (
+              <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+                <Link href="/auth">Sign In</Link>
+              </Button>
             )}
           </div>
 
           {/* Mobile Navigation */}
           <div className="flex md:hidden items-center space-x-2">
-            <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
-              <Link href="#features">Features</Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
-              <Link href="#team">Team</Link>
-            </Button>
-            <Button variant="ghost" size="sm" asChild className="hidden sm:flex">
-              <Link href="/help">Help Center</Link>
-            </Button>
             {loading ? (
-                <Button size="sm" disabled className="shadow-md">Loading...</Button>
+                <Button size="sm" disabled className="bg-emerald-500 text-white">Loading...</Button>
             ) : user ? (
-                <Button size="sm" asChild className="shadow-md hover:shadow-lg transition-shadow">
-                    <Link href="/dashboard">Go to Dashboard</Link>
+                <Button size="sm" asChild className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                    <Link href="/dashboard">Dashboard</Link>
                 </Button>
             ) : (
-                <Button size="sm" asChild className="shadow-md hover:shadow-lg transition-shadow">
-                    <Link href="/auth"><LogIn className="mr-1 h-4 w-4"/>Login</Link>
+                <Button size="sm" asChild className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                    <Link href="/auth">Start Free</Link>
                 </Button>
             )}
           </div>
         </nav>
       </header>
 
-      <main className="flex-grow">
+      <main className="flex-grow relative z-10">
         {/* Hero Section */}
-        <section className="relative py-12 sm:py-16 md:py-20 lg:py-32 text-center overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-background via-secondary/70 to-background opacity-75"></div>
-          <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/50 via_transparent to_transparent"></div>
+        <section className="relative py-16 sm:py-20 md:py-24 lg:py-32 overflow-hidden">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+              {/* Left Content */}
+              <div className="text-left">
+                <h1 className="font-headline text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 text-white leading-tight">
+                  Secure secrets.<br />
+                  Prevent breaches.<br />
+                  <span className="text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text">
+                    Keep teams moving.
+                  </span>
+                </h1>
+                <p className="text-lg sm:text-xl text-white/80 mb-8 max-w-2xl leading-relaxed">
+                  Securely manage, orchestrate, and govern your secrets and non-human identities at scale with Synthara's cloud platform integrated with your favorite DevOps tools for secure workflows.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button size="lg" asChild className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl px-8 py-4 text-lg font-semibold">
+                    <Link href={user ? "/dashboard/generate" : "/auth"}>
+                      Start for Free →
+                    </Link>
+                  </Button>
+                </div>
+              </div>
 
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <h1 className="font-headline text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-7xl font-bold mb-6 sm:mb-8 text-foreground leading-tight">
-              Unlock the Power of <span className="text-primary">Synthetic Data</span>
-            </h1>
-            <p className="text-sm sm:text-base md:text-lg lg:text-xl text-muted-foreground mb-8 sm:mb-10 lg:mb-12 max-w-3xl mx-auto px-4">
-              Synthara AI empowers you to generate, analyze, and utilize high-quality synthetic data for your most demanding projects. Accelerate innovation, protect privacy, and build better.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4">
-                <Button size="lg" asChild className="shadow-lg hover:shadow-xl transition-shadow w-full sm:w-auto py-3 sm:py-4 lg:py-7 text-sm sm:text-base lg:text-lg px-6 sm:px-8 lg:px-10">
-                <Link href="/dashboard/generate">
-                  <span className="hidden sm:inline">Start Generating Data</span>
-                  <span className="sm:hidden">Start Generating</span>
-                  <ArrowRight className="ml-2 h-4 w-4 sm:h-5 sm:w-5" />
-                </Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild className="shadow-lg hover:shadow-xl transition-shadow w-full sm:w-auto py-3 sm:py-4 lg:py-7 text-sm sm:text-base lg:text-lg px-6 sm:px-8 lg:px-10">
-                <Link href="#features">Explore Features</Link>
-                </Button>
-            </div>
-            <div className="mt-16 md:mt-24 max-w-5xl mx-auto">
-              <div className="relative rounded-xl shadow-heavy-lg overflow-hidden border-4 border-primary/20 bg-gradient-to-br from-primary/10 to-accent/10">
-                <div className="aspect-video flex items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <div className="text-6xl mb-4">🚀</div>
-                    <p className="text-lg">Synthara AI Platform</p>
-                    <p className="text-sm">Advanced Data Generation</p>
+              {/* Right Content - Product Demo */}
+              <div className="relative">
+                <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900 border border-white/10">
+                  {/* Mock browser header */}
+                  <div className="flex items-center gap-2 px-4 py-3 bg-gray-800 border-b border-gray-700">
+                    <div className="flex gap-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <div className="flex-1 text-center">
+                      <div className="text-sm text-gray-400">synthara.ai/dashboard</div>
+                    </div>
+                  </div>
+
+                  {/* Mock dashboard content */}
+                  <div className="p-6 bg-gray-900 min-h-[400px]">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-white font-semibold text-lg">Projects</h3>
+                      <div className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                        Take a self-guided tour
+                      </div>
+                    </div>
+
+                    {/* Mock project cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {[
+                        { name: 'Customer Analytics', type: 'Tabular Data', status: 'Active' },
+                        { name: 'Product Reviews', type: 'Text Corpus', status: 'Processing' },
+                        { name: 'Sales Forecast', type: 'Time Series', status: 'Complete' },
+                        { name: 'User Behavior', type: 'JSON Data', status: 'Active' }
+                      ].map((project, index) => (
+                        <div key={index} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-white font-medium text-sm">{project.name}</h4>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              project.status === 'Active' ? 'bg-green-500/20 text-green-400' :
+                              project.status === 'Processing' ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-blue-500/20 text-blue-400'
+                            }`}>
+                              {project.status}
+                            </span>
+                          </div>
+                          <p className="text-gray-400 text-xs">{project.type}</p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Purpose & Vision Block */}
-        <section className="py-16 md:py-24 bg-background">
+        {/* Features Section */}
+        <section id="features" className="py-16 md:py-24 bg-white/5 backdrop-blur-sm">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12 md:mb-16">
-              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-semibold mb-6 text-foreground">
-                Our Purpose & Vision
+              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+                Powerful Platform Features
               </h2>
-              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-                We believe in a future where data is abundant, accessible, and privacy-preserving. Synthara AI is built to democratize data-driven innovation by providing powerful, intuitive tools for synthetic data.
+              <p className="text-lg text-white/70 max-w-3xl mx-auto">
+                Everything you need to generate, manage, and deploy synthetic data at scale with enterprise-grade security and performance.
               </p>
             </div>
-            <div className="grid md:grid-cols-3 gap-8">
-              {[
-                { title: 'Accelerate Innovation', description: 'Break data bottlenecks and fuel faster development cycles.', icon: Zap },
-                { title: 'Enhance Privacy', description: 'Protect sensitive information while enabling data exploration.', icon: ShieldCheck },
-                { title: 'Empower Decisions', description: 'Make data-informed choices with robust, customizable datasets.', icon: BarChart3 },
-              ].map(benefit => (
-                <Card key={benefit.title} className="shadow-xl hover:shadow-heavy-lg transition-shadow bg-card p-2">
-                  <CardHeader className="items-center text-center">
-                    <div className="p-4 bg-primary/10 rounded-full mb-4 inline-block">
-                        <benefit.icon className="w-10 h-10 text-primary" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+              {features.map((feature) => (
+                <div key={feature.name} className="group bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 hover:scale-105">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-emerald-500/20 rounded-lg">
+                      <feature.icon className="w-6 h-6 text-emerald-400" />
                     </div>
-                    <CardTitle className="font-headline text-2xl text-foreground">{benefit.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-center">
-                    <p className="text-muted-foreground">{benefit.description}</p>
-                  </CardContent>
-                </Card>
+                    <div>
+                      <h3 className="font-headline text-lg font-semibold mb-2 text-white">{feature.name}</h3>
+                      <p className="text-white/70 text-sm leading-relaxed">{feature.description}</p>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Key Features Overview */}
-        <section id="features" className="py-16 md:py-24 bg-secondary/50">
+        {/* Solutions Section */}
+        <section id="solutions" className="py-16 md:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-semibold text-center mb-12 md:mb-16 text-foreground">
-              Core Platform Features
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-              {features.map((feature) => (
-                <Card key={feature.name} className="shadow-xl hover:shadow-heavy-lg transition-shadow bg-card transform hover:-translate-y-1">
-                  <CardHeader className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4 p-4 sm:p-6">
-                    <div className="p-2 sm:p-3 bg-primary/10 rounded-lg mt-1 mx-auto sm:mx-0">
-                        <feature.icon className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
-                    </div>
-                    <div className="text-center sm:text-left">
-                        <CardTitle className="font-headline text-lg sm:text-xl mb-1">{feature.name}</CardTitle>
-                        <CardDescription className="text-muted-foreground leading-relaxed text-sm sm:text-base">{feature.description}</CardDescription>
-                    </div>
-                  </CardHeader>
-                </Card>
+            <div className="text-center mb-12 md:mb-16">
+              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+                Built For Every Use Case
+              </h2>
+              <p className="text-lg text-white/70 max-w-3xl mx-auto">
+                From AI training to compliance testing, Synthara adapts to your specific needs with intelligent data generation.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {useCases.map((useCase) => (
+                <div key={useCase.title} className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+                  <h3 className="font-headline text-xl font-semibold text-emerald-400 mb-4">{useCase.title}</h3>
+                  <ul className="space-y-3">
+                    {useCase.items.map((item, index) => (
+                      <li key={index} className="flex items-start">
+                        <CheckCircle className="w-5 h-5 text-emerald-400 mr-3 mt-0.5 shrink-0" />
+                        <span className="text-white/80 text-sm">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
         {/* Target Audience Section */}
-        <section className="py-16 md:py-24 bg-background">
+        <section className="py-16 md:py-24 bg-white/5 backdrop-blur-sm">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-semibold text-center mb-12 md:mb-16 text-foreground">
-              Built For Innovators Like You
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-              {targetAudiences.map((audience) => (
-                <Card key={audience.name} className="text-center shadow-xl hover:shadow-heavy-lg transition-shadow bg-card p-3 sm:p-4">
-                  <CardHeader className="items-center pb-3 sm:pb-6">
-                     <div className="p-3 sm:p-4 bg-accent/10 rounded-full mb-3 sm:mb-4 inline-block">
-                        <audience.icon className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-accent" />
-                    </div>
-                    <CardTitle className="font-headline text-lg sm:text-xl">{audience.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <p className="text-xs sm:text-sm text-muted-foreground">{audience.description}</p>
-                  </CardContent>
-                </Card>
-              ))}
+            <div className="text-center mb-12 md:mb-16">
+              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+                Trusted by Innovators
+              </h2>
+              <p className="text-lg text-white/70 max-w-3xl mx-auto">
+                From startups to enterprises, teams worldwide rely on Synthara for their synthetic data needs.
+              </p>
             </div>
-          </div>
-        </section>
-
-        {/* Use Cases Section */}
-        <section className="py-16 md:py-24 bg-secondary/50">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-semibold text-center mb-12 md:mb-16 text-foreground">
-              Versatile Use Cases
-            </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {useCases.map((useCase) => (
-                <Card key={useCase.title} className="shadow-xl hover:shadow-heavy-lg transition-shadow bg-card">
-                  <CardHeader className="p-6">
-                    <CardTitle className="font-headline text-xl text-primary">{useCase.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 pt-0">
-                    <ul className="space-y-3">
-                      {useCase.items.map((item, index) => (
-                        <li key={index} className="flex items-start">
-                          <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-500 mr-2.5 mt-0.5 shrink-0" />
-                          <span className="text-muted-foreground text-sm">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+              {targetAudiences.map((audience) => (
+                <div key={audience.name} className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+                  <div className="p-4 bg-emerald-500/20 rounded-full mb-4 inline-block">
+                    <audience.icon className="w-8 h-8 text-emerald-400" />
+                  </div>
+                  <h3 className="font-headline text-lg font-semibold text-white mb-2">{audience.name}</h3>
+                  <p className="text-white/70 text-sm">{audience.description}</p>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
         {/* Team Section */}
-        <section id="team" className="py-16 md:py-24 bg-background">
+        <section id="team" className="py-16 md:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-4">
-              <h3 className="text-lg sm:text-xl font-semibold text-primary tracking-wider">AIML</h3>
-              <h4 className="text-sm sm:text-base text-muted-foreground">Government Engineering College Challakere</h4>
+            <div className="text-center mb-8">
+              <div className="inline-block bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mb-4">
+                <span className="text-emerald-400 font-semibold text-sm">AIML • Government Engineering College Challakere</span>
+              </div>
+              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-6">
+                Meet the Team
+              </h2>
+              <p className="text-lg text-white/70 max-w-2xl mx-auto">
+                Built by passionate students dedicated to advancing AI and synthetic data technology.
+              </p>
             </div>
-            <h2 className="font-headline text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-semibold text-center mb-8 sm:mb-12 md:mb-16 text-foreground">
-              Meet the Team
-            </h2>
-            {/* Mobile: 2x2 Grid, Tablet: 2x2, Desktop: 4x1 */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
               {teamMembers.map((member) => (
-                <Card key={member.name} className="text-center shadow-xl hover:shadow-heavy-lg transition-shadow bg-card overflow-hidden">
-                  {/* Medium Circle Image Holder */}
-                  <div className="p-4 sm:p-6 flex justify-center">
-                    <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-full bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center border-2 border-primary/20">
-                      <div className="text-center text-muted-foreground">
-                        <div className="text-2xl sm:text-3xl md:text-4xl">👤</div>
-                      </div>
-                    </div>
+                <div key={member.name} className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-emerald-400/20 to-cyan-400/20 flex items-center justify-center border-2 border-emerald-400/30 mx-auto mb-4">
+                    <div className="text-2xl">👤</div>
                   </div>
-                  <CardHeader className="p-3 sm:p-4 lg:p-6 pt-0">
-                    <CardTitle className="font-headline text-sm sm:text-base lg:text-xl">{member.name}</CardTitle>
-                    <CardDescription className="text-primary text-xs sm:text-sm">{member.role}</CardDescription>
-                  </CardHeader>
-                </Card>
+                  <h3 className="font-headline text-lg font-semibold text-white mb-1">{member.name}</h3>
+                  <p className="text-emerald-400 text-sm font-medium">{member.role}</p>
+                </div>
               ))}
             </div>
           </div>
         </section>
 
-         {/* Call to Action Section */}
-        <section className="py-20 md:py-32 text-center bg-gradient-to-r from-primary to-accent">
+        {/* Call to Action Section */}
+        <section className="py-20 md:py-32 text-center bg-gradient-to-r from-emerald-600 to-cyan-600">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-primary-foreground">
-              Ready to Revolutionize Your Data Strategy?
+            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+              Ready to Transform Your Data Strategy?
             </h2>
-            <p className="text-lg md:text-xl text-primary-foreground/90 mb-10 max-w-2xl mx-auto">
-              Join thousands of innovators building the future with Synthara AI. Get started today and experience the next generation of data.
+            <p className="text-lg md:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
+              Join thousands of innovators building the future with Synthara AI. Get started today and experience the next generation of synthetic data.
             </p>
-             {loading ? (
-                 <Button size="lg" disabled className="bg-background text-primary hover:bg-background/90 shadow-heavy-lg !py-7 !text-lg !px-10">Loading...</Button>
-            ) : user ? (
-                 <Button size="lg" variant="secondary" asChild className="bg-background text-primary hover:bg-background/90 shadow-heavy-lg hover:shadow-xl transition-shadow !py-7 !text-lg !px-10">
-                    <Link href="/dashboard">Access Your Dashboard</Link>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              {loading ? (
+                <Button size="lg" disabled className="bg-white text-emerald-600 hover:bg-white/90 shadow-xl px-8 py-4 text-lg font-semibold">
+                  Loading...
                 </Button>
-            ) : (
-                <Button size="lg" variant="secondary" asChild className="bg-background text-primary hover:bg-background/90 shadow-heavy-lg hover:shadow-xl transition-shadow !py-7 !text-lg !px-10">
-                    <Link href="/auth">Get Started for Free</Link>
+              ) : user ? (
+                <Button size="lg" asChild className="bg-white text-emerald-600 hover:bg-white/90 shadow-xl px-8 py-4 text-lg font-semibold">
+                  <Link href="/dashboard">Access Your Dashboard</Link>
                 </Button>
-            )}
+              ) : (
+                <Button size="lg" asChild className="bg-white text-emerald-600 hover:bg-white/90 shadow-xl px-8 py-4 text-lg font-semibold">
+                  <Link href="/auth">Get Started for Free</Link>
+                </Button>
+              )}
+              <Button size="lg" variant="outline" asChild className="border-white/30 text-white hover:bg-white/10 px-8 py-4 text-lg font-semibold">
+                <Link href="/help">Schedule Demo</Link>
+              </Button>
+            </div>
           </div>
         </section>
       </main>
-      <Footer />
+
+      {/* Footer */}
+      <footer className="bg-black/20 backdrop-blur-sm border-t border-white/10">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div className="md:col-span-1">
+              <Link href="/" className="inline-block mb-4">
+                <SyntharaLogo className="h-8 w-auto text-white" />
+              </Link>
+              <p className="text-white/60 text-sm mb-4">
+                Generate Synthetic Data with Intelligence.
+              </p>
+              <p className="text-white/40 text-xs">
+                © 2024 Synthara AI. All rights reserved.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-white mb-4">Platform</h3>
+              <ul className="space-y-2">
+                <li><Link href="#features" className="text-white/60 hover:text-white text-sm transition-colors">Features</Link></li>
+                <li><Link href="/dashboard" className="text-white/60 hover:text-white text-sm transition-colors">Dashboard</Link></li>
+                <li><Link href="/dashboard/generate" className="text-white/60 hover:text-white text-sm transition-colors">Data Generation</Link></li>
+                <li><Link href="/dashboard/analysis" className="text-white/60 hover:text-white text-sm transition-colors">Analytics</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-white mb-4">Resources</h3>
+              <ul className="space-y-2">
+                <li><Link href="/help" className="text-white/60 hover:text-white text-sm transition-colors">Documentation</Link></li>
+                <li><Link href="/help" className="text-white/60 hover:text-white text-sm transition-colors">Help Center</Link></li>
+                <li><Link href="#team" className="text-white/60 hover:text-white text-sm transition-colors">About Team</Link></li>
+                <li><Link href="/help" className="text-white/60 hover:text-white text-sm transition-colors">Contact</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-white mb-4">Legal</h3>
+              <ul className="space-y-2">
+                <li><Link href="#" className="text-white/60 hover:text-white text-sm transition-colors">Privacy Policy</Link></li>
+                <li><Link href="#" className="text-white/60 hover:text-white text-sm transition-colors">Terms of Service</Link></li>
+                <li><Link href="#" className="text-white/60 hover:text-white text-sm transition-colors">Security</Link></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

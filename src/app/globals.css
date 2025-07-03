@@ -4,97 +4,111 @@
 
 @layer base {
   :root {
-    --background: 210 40% 97%; /* Lighter, slightly cool off-white */
-    --foreground: 220 25% 20%; /* Dark cool gray for text */
-    
-    --card: 0 0% 100%; /* White cards */
-    --card-foreground: 220 25% 15%;
-    
+    /* Light Mode - Modern slate/blue theme */
+    --background: 210 20% 98%; /* Light slate background */
+    --foreground: 215 25% 15%; /* Dark slate text */
+
+    --card: 0 0% 100%; /* Pure white cards */
+    --card-foreground: 215 25% 15%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 15%;
-    
-    --primary: 220 70% 50%; /* Stronger, professional blue */
-    --primary-foreground: 210 40% 98%; /* White/very light gray for text on primary */
-    
-    --secondary: 215 50% 92%; /* Muted cool gray/blue */
-    --secondary-foreground: 220 50% 30%;
-    
-    --muted: 210 40% 90%; /* Softer muted tone */
-    --muted-foreground: 210 35% 45%;
-    
-    --accent: 200 85% 55%; /* Brighter, but still professional, cyan/blue accent */
-    --accent-foreground: 220 100% 10%; /* Darker blue text on accent */
-    
-    --destructive: 0 75% 55%; /* Slightly more vibrant red */
+    --popover-foreground: 215 25% 15%;
+
+    --primary: 217 91% 60%; /* Bright blue primary */
+    --primary-foreground: 0 0% 100%; /* White text on primary */
+
+    --secondary: 210 40% 95%; /* Light blue-gray secondary */
+    --secondary-foreground: 215 25% 25%;
+
+    --muted: 210 40% 96%; /* Very light blue-gray muted */
+    --muted-foreground: 215 16% 46%;
+
+    --accent: 212 95% 95%; /* Light blue accent */
+    --accent-foreground: 217 91% 60%;
+
+    --destructive: 0 84.2% 60.2%; /* Red for destructive actions */
     --destructive-foreground: 0 0% 98%;
-    
-    --border: 210 30% 88%; /* Slightly softer border */
-    --input: 210 30% 94%; /* Input background */
-    --ring: 220 70% 55%; /* Ring color based on new primary */
 
-    --chart-1: 220 70% 60%;
-    --chart-2: 200 75% 55%;
-    --chart-3: 210 60% 50%;
-    --chart-4: 190 70% 50%;
-    --chart-5: 230 65% 65%;
-    
-    --radius: 0.75rem; /* Increased base radius */
+    --border: 240 5.9% 90%; /* Light border */
+    --input: 240 5.9% 90%; /* Light input background */
+    --ring: 158 64% 52%; /* Emerald ring color */
 
-    /* Sidebar specific theme variables - new, more integrated look */
-    --sidebar-background: 220 30% 22%; /* Darker, sophisticated blue-gray */
-    --sidebar-foreground: 210 25% 88%; /* Light gray text for sidebar */
-    --sidebar-primary: 200 85% 60%; /* Accent color for active/hover states in sidebar */
-    --sidebar-primary-foreground: 220 100% 15%; /* Darker blue text for active/hover */
-    --sidebar-accent: 220 25% 28%; /* Slightly lighter than sidebar bg for hover */
-    --sidebar-accent-foreground: 210 20% 92%;
-    --sidebar-border: 220 25% 35%;
-    --sidebar-ring: 200 85% 60%;
+    /* Chart colors - emerald/purple theme */
+    --chart-1: 158 64% 52%; /* Emerald */
+    --chart-2: 262 83% 58%; /* Purple */
+    --chart-3: 198 93% 60%; /* Cyan */
+    --chart-4: 280 100% 70%; /* Magenta */
+    --chart-5: 47 96% 53%; /* Yellow */
+
+    --radius: 0.75rem;
+
+    /* Glass-morphism variables */
+    --glass-background: 255 255 255 / 0.1;
+    --glass-border: 255 255 255 / 0.2;
+    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+
+    /* Sidebar for light mode */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 158 64% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 240 5.9% 90%;
+    --sidebar-ring: 158 64% 52%;
   }
 
   .dark {
-    --background: 220 20% 10%; /* Very Dark, deep blue-gray */
-    --foreground: 210 20% 88%; /* Light gray text */
+    /* Dark Mode - Modern dark slate theme */
+    --background: 215 28% 8%; /* Deep dark slate */
+    --foreground: 210 20% 95%; /* Light text */
 
-    --card: 220 20% 16%; /* Darker card background */
-    --card-foreground: 210 20% 88%;
+    --card: 215 25% 12%; /* Dark slate cards */
+    --card-foreground: 210 20% 95%;
 
-    --popover: 220 20% 14%;
-    --popover-foreground: 210 20% 88%;
+    --popover: 215 25% 12%;
+    --popover-foreground: 210 20% 95%;
 
-    --primary: 210 90% 65%; /* Vibrant blue for dark mode primary */
-    --primary-foreground: 220 100% 12%; /* Very dark text on primary */
+    --primary: 217 91% 60%; /* Bright blue primary (consistent) */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 15% 22%; /* Muted dark blue-gray */
-    --secondary-foreground: 210 20% 80%;
+    --secondary: 215 25% 18%; /* Dark slate secondary */
+    --secondary-foreground: 210 20% 90%;
 
-    --muted: 220 15% 28%;
-    --muted-foreground: 210 20% 60%;
+    --muted: 215 25% 15%; /* Muted dark slate */
+    --muted-foreground: 215 16% 65%;
 
-    --accent: 200 75% 60%; /* Cyan/blue accent for dark mode */
-    --accent-foreground: 220 100% 12%; /* Dark text on accent */
-    
-    --destructive: 0 65% 50%; /* Darker, intense red */
+    --accent: 215 25% 18%; /* Dark slate accent */
+    --accent-foreground: 217 91% 60%;
+
+    --destructive: 0 62.8% 30.6%; /* Dark red */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 220 15% 30%;
-    --input: 220 15% 24%;
-    --ring: 210 80% 60%; /* Ring color for dark */
+    --border: 262 30% 18%; /* Dark purple border */
+    --input: 262 30% 15%; /* Dark input background */
+    --ring: 158 64% 52%; /* Emerald ring */
 
-    --chart-1: 210 70% 55%;
-    --chart-2: 200 65% 50%;
-    --chart-3: 220 75% 60%;
-    --chart-4: 190 60% 55%;
-    --chart-5: 230 70% 60%;
+    /* Chart colors for dark mode */
+    --chart-1: 158 64% 52%; /* Emerald */
+    --chart-2: 262 83% 58%; /* Purple */
+    --chart-3: 198 93% 60%; /* Cyan */
+    --chart-4: 280 100% 70%; /* Magenta */
+    --chart-5: 47 96% 53%; /* Yellow */
 
-    /* Dark Sidebar specific theme variables - new, more integrated look */
-    --sidebar-background: 220 25% 12%; /* Even darker, richer blue-gray */
-    --sidebar-foreground: 210 20% 85%;
-    --sidebar-primary: 200 75% 65%; /* Dark theme accent for active/hover */
-    --sidebar-primary-foreground: 220 100% 10%;
-    --sidebar-accent: 220 20% 18%;
-    --sidebar-accent-foreground: 210 15% 90%;
-    --sidebar-border: 220 20% 25%;
-    --sidebar-ring: 200 75% 65%;
+    /* Glass-morphism for dark mode */
+    --glass-background: 255 255 255 / 0.05;
+    --glass-border: 255 255 255 / 0.1;
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+
+    /* Dark sidebar with glass effect */
+    --sidebar-background: 262 50% 8%; /* Very dark purple */
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 158 64% 52%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 262 30% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 262 30% 18%;
+    --sidebar-ring: 158 64% 52%;
   }
 }
 
@@ -108,6 +122,63 @@
 }
 
 @layer utilities {
+  /* Glass-morphism utilities */
+  .glass {
+    @apply bg-white/10 backdrop-blur-md border border-white/20;
+  }
+
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl;
+  }
+
+  .glass-strong {
+    @apply bg-white/20 backdrop-blur-lg border border-white/30;
+  }
+
+  /* Dark mode glass effects */
+  .dark .glass {
+    @apply bg-white/5 border-white/10;
+  }
+
+  .dark .glass-card {
+    @apply bg-white/5 border-white/10;
+  }
+
+  .dark .glass-strong {
+    @apply bg-white/10 border-white/20;
+  }
+
+  /* Modern gradient backgrounds */
+  .bg-gradient-slate {
+    @apply bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900;
+  }
+
+  .bg-gradient-blue {
+    @apply bg-gradient-to-r from-blue-600 to-blue-500;
+  }
+
+  .bg-gradient-light {
+    @apply bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50;
+  }
+
+  /* New modern card styles */
+  .modern-card {
+    @apply bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300;
+  }
+
+  .dark .modern-card {
+    @apply bg-slate-800/80 border-slate-700/50 shadow-slate-900/20;
+  }
+
+  /* Enhanced glass effects */
+  .glass-modern {
+    @apply bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl;
+  }
+
+  .dark .glass-modern {
+    @apply bg-slate-800/30 border-slate-700/30;
+  }
+
   /* Mobile-first responsive utilities */
   .container-responsive {
     @apply w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8;

@@ -3,7 +3,10 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ArrowRight, FileText, PlusCircle, BarChart, Brain, Clock, AlertCircle, DatabaseZap, Wand2, BarChartBig, Save } from "lucide-react";
+import { ArrowRight, FileText, PlusCircle, BarChart, Brain, Clock, AlertCircle, DatabaseZap, Wand2, BarChartBig, Save, Eye, TrendingUp } from "lucide-react";
+import { StatsCard } from "@/components/dashboard/StatsCard";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { QuickActions } from "@/components/dashboard/QuickActions";
 import Link from "next/link";
 import { getUserActivities, getUserDatasets, type ActivityLog, type SavedDataset } from '@/lib/supabase/actions';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -19,11 +22,11 @@ const quickActions = [
 
 function getActivityIcon(activityType: string) {
   switch (activityType) {
-    case "DATA_GENERATION": return <DatabaseZap className="h-5 w-5 text-primary" />;
-    case "PROMPT_ENHANCEMENT": return <Wand2 className="h-5 w-5 text-accent" />;
-    case "DATA_ANALYSIS_SNIPPET": return <BarChartBig className="h-5 w-5 text-secondary-foreground" />;
-    case "DATASET_SAVED": return <Save className="h-5 w-5 text-green-500" />;
-    default: return <AlertCircle className="h-5 w-5 text-muted-foreground" />;
+    case "DATA_GENERATION": return <DatabaseZap className="h-5 w-5 text-emerald-400" />;
+    case "PROMPT_ENHANCEMENT": return <Wand2 className="h-5 w-5 text-purple-400" />;
+    case "DATA_ANALYSIS_SNIPPET": return <BarChartBig className="h-5 w-5 text-cyan-400" />;
+    case "DATASET_SAVED": return <Save className="h-5 w-5 text-emerald-400" />;
+    default: return <AlertCircle className="h-5 w-5 text-white/60" />;
   }
 }
 
@@ -47,133 +50,140 @@ export default async function DashboardPage() {
   // Fetch activities and datasets only if user is available
   // To prevent errors if middleware hasn't fully processed or if user becomes null
   let recentActivities: ActivityLog[] = [];
+  let datasets: SavedDataset[] = [];
   let lastSavedDataset: (SavedDataset & { data_csv?: string }) | null = null; // Ensure type matches
 
   if (user) {
-    recentActivities = await getUserActivities(5); 
-    const savedDatasets = await getUserDatasets(1); 
-    lastSavedDataset = savedDatasets.length > 0 ? savedDatasets[0] : null;
+    recentActivities = await getUserActivities(5);
+    datasets = await getUserDatasets();
+    lastSavedDataset = datasets.length > 0 ? datasets[0] : null;
   }
 
 
   return (
-    <div className="space-y-6 sm:space-y-8 lg:space-y-10 xl:space-y-12">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-headline font-bold text-foreground">Welcome Back, {userName}!</h1>
-          <p className="text-sm sm:text-base lg:text-lg text-muted-foreground mt-1">Here's what's happening with your Synthara projects.</p>
+    <div className="space-y-8">
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl lg:text-4xl font-headline font-bold text-slate-900 dark:text-slate-100">
+            Welcome Back, {userName}!
+          </h1>
+          <p className="text-lg text-slate-600 dark:text-slate-400">
+            Here's your Synthara analytics overview and recent activity.
+          </p>
         </div>
-        <Button size="lg" asChild className="shadow-md hover:shadow-lg transition-shadow w-full sm:w-auto">
-          <Link href="/dashboard/generate">
-            <PlusCircle className="mr-2 h-4 w-4 sm:h-5 sm:w-5" /> New Dataset
-          </Link>
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+          <Button size="lg" asChild className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all">
+            <Link href="/dashboard/generate">
+              <PlusCircle className="mr-2 h-5 w-5" /> Create Dataset
+            </Link>
+          </Button>
+          <Button size="lg" variant="outline" asChild className="border-slate-300 dark:border-slate-600">
+            <Link href="/dashboard/analysis">
+              <BarChart className="mr-2 h-5 w-5" /> View Analytics
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      {/* Quick Action Cards */}
-      <section>
-        <h2 className="text-xl sm:text-2xl lg:text-3xl font-headline font-semibold mb-4 sm:mb-6 text-foreground">Quick Actions</h2>
-        <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          {quickActions.map((action) => (
-            <Card key={action.title} className="shadow-lg hover:shadow-xl transition-shadow duration-300 ease-in-out transform hover:-translate-y-1 bg-card flex flex-col">
-              <CardHeader className="pb-3">
-                <div className="p-2 sm:p-3 bg-primary/10 rounded-lg inline-block mb-2 sm:mb-3 self-start">
-                    <action.Icon className="h-5 w-5 sm:h-6 sm:w-6 lg:h-7 lg:w-7 text-primary" />
-                </div>
-                <CardTitle className="text-lg sm:text-xl font-headline">{action.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-grow">
-                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">{action.description}</p>
-              </CardContent>
-              <CardFooter>
-                <Button variant="default" className="w-full group text-sm" asChild>
-                  <Link href={action.href}>
-                    {action.cta} <ArrowRight className="ml-2 h-3 w-3 sm:h-4 sm:w-4 group-hover:translate-x-1 transition-transform"/>
-                  </Link>
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      </section>
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatsCard
+          title="Total Datasets"
+          value={datasets?.length || 0}
+          icon={DatabaseZap}
+          color="blue"
+        />
+        <StatsCard
+          title="AI Generations"
+          value={recentActivities?.length || 0}
+          icon={Brain}
+          color="emerald"
+        />
+        <StatsCard
+          title="Total Records"
+          value={datasets?.reduce((acc, dataset) => acc + (dataset.row_count || 0), 0) || 0}
+          icon={BarChartBig}
+          color="purple"
+        />
+        <StatsCard
+          title="Today's Activity"
+          value={recentActivities?.filter(a => {
+            const activityDate = new Date(a.created_at);
+            const today = new Date();
+            return activityDate.toDateString() === today.toDateString();
+          }).length || 0}
+          icon={Clock}
+          color="orange"
+        />
+      </div>
 
-      <div className="grid gap-6 sm:gap-8 grid-cols-1 lg:grid-cols-3">
+      {/* Quick Actions */}
+      <QuickActions actions={quickActions.map(action => ({
+        ...action,
+        color: action.title.includes('Generate') ? 'blue' :
+               action.title.includes('View') ? 'emerald' :
+               action.title.includes('Train') ? 'purple' :
+               'orange'
+      }))} />
+
+      <div className="grid gap-8 grid-cols-1 lg:grid-cols-3">
         {/* Recent Activity Feed */}
         <section className="lg:col-span-2">
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-headline font-semibold mb-4 sm:mb-6 text-foreground">Recent Activity</h2>
-          <Card className="shadow-xl">
-            <CardHeader>
-                <CardTitle className="text-xl font-headline">Activity Feed</CardTitle>
-                <CardDescription>Your latest actions and events.</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              {recentActivities && recentActivities.length > 0 ? (
-                <ul className="divide-y divide-border">
-                  {recentActivities.map(activity => (
-                    <li key={activity.id} className="p-4 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <div className="p-2 bg-muted rounded-full mt-0.5">
-                           {getActivityIcon(activity.activity_type)}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{activity.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}
-                          </p>
-                        </div>
-                         {activity.related_resource_id && activity.activity_type === 'DATASET_SAVED' && (
-                            <Button variant="outline" size="sm" className="ml-auto" asChild>
-                                <Link href={`/dashboard/preview?datasetId=${activity.related_resource_id}`}>View Dataset</Link>
-                            </Button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-center text-muted-foreground p-6 min-h-[200px] flex flex-col items-center justify-center">
-                  <Clock className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                  <p className="font-medium">No recent activity to display.</p>
-                  <p className="text-sm">Start using the platform to see your activity log populate.</p>
-                </div>
-              )}
-            </CardContent>
-             <CardFooter className="py-4 border-t">
-                <Button variant="outline" size="sm" className="ml-auto" asChild>
-                   <Link href="/dashboard/history">View All Activity</Link>
-                </Button>
-            </CardFooter>
-          </Card>
+          <ActivityFeed activities={recentActivities || []} />
         </section>
 
         {/* Last Generated Dataset */}
         <section>
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-headline font-semibold mb-4 sm:mb-6 text-foreground">Last Dataset</h2>
-          <Card className="shadow-xl hover:shadow-heavy-lg transition-shadow flex flex-col h-full">
-            <CardHeader>
-              <div className="flex items-center gap-3 mb-1">
-                <div className="p-2.5 bg-primary/10 rounded-lg">
-                    <FileText className="h-7 w-7 text-primary" />
+          <h2 className="text-2xl font-headline font-bold text-slate-900 dark:text-slate-100 mb-6">Latest Dataset</h2>
+          <Card className="modern-card h-full">
+            <CardHeader className="border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl">
+                  <FileText className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <CardTitle className="text-xl font-headline truncate">
-                  {lastSavedDataset ? lastSavedDataset.dataset_name : "No Dataset Saved Yet"}
-                </CardTitle>
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">
+                    {lastSavedDataset ? lastSavedDataset.dataset_name : "No Dataset Yet"}
+                  </CardTitle>
+                  <CardDescription className="text-slate-600 dark:text-slate-400">
+                    {lastSavedDataset ? `Created ${formatDistanceToNow(new Date(lastSavedDataset.created_at), { addSuffix: true })}` : "Your latest dataset will appear here"}
+                  </CardDescription>
+                </div>
               </div>
-              <CardDescription>
-                {lastSavedDataset ? `Saved ${formatDistanceToNow(new Date(lastSavedDataset.created_at), { addSuffix: true })}` : "Details of your last saved dataset will show here."}
-              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 flex-grow">
-              <div className="text-sm text-muted-foreground space-y-1">
-                <p><strong>Rows:</strong> {lastSavedDataset ? lastSavedDataset.num_rows.toLocaleString() : "N/A"}</p>
-                <p><strong>Columns:</strong> {lastSavedDataset && Array.isArray(lastSavedDataset.schema_json) ? lastSavedDataset.schema_json.length : "N/A"}</p>
-                <p><strong>Prompt:</strong> {lastSavedDataset ? `${lastSavedDataset.prompt_used.substring(0, 50)}...` : "N/A"}</p>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="space-y-1">
+                    <span className="text-slate-500 dark:text-slate-400">Rows</span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                      {lastSavedDataset ? lastSavedDataset.num_rows.toLocaleString() : "—"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-slate-500 dark:text-slate-400">Columns</span>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                      {lastSavedDataset && Array.isArray(lastSavedDataset.schema_json) ? lastSavedDataset.schema_json.length : "—"}
+                    </p>
+                  </div>
+                </div>
+                {lastSavedDataset && (
+                  <div className="space-y-2">
+                    <span className="text-sm text-slate-500 dark:text-slate-400">Prompt Preview</span>
+                    <p className="text-xs bg-slate-100 dark:bg-slate-800 p-3 rounded-lg text-slate-700 dark:text-slate-300">
+                      {lastSavedDataset.prompt_used.substring(0, 120)}...
+                    </p>
+                  </div>
+                )}
+                <Progress value={lastSavedDataset ? 100 : 0} className="h-2" />
               </div>
-              <Progress value={lastSavedDataset ? 100 : 0} aria-label="Dataset information available" className="h-2.5" />
             </CardContent>
-            <CardFooter className="border-t pt-4">
-              <Button className="w-full" disabled={!lastSavedDataset} asChild>
-                <Link href={lastSavedDataset ? `/dashboard/preview?datasetId=${lastSavedDataset.id}` : "#"}>View Dataset Details</Link>
+            <CardFooter className="border-t border-slate-200 dark:border-slate-700">
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" disabled={!lastSavedDataset} asChild>
+                <Link href={lastSavedDataset ? `/dashboard/preview?datasetId=${lastSavedDataset.id}` : "#"}>
+                  View Dataset <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
               </Button>
             </CardFooter>
           </Card>

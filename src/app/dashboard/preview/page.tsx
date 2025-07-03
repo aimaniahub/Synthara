@@ -131,28 +131,34 @@ function DataPreviewContent() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-headline font-bold text-foreground">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+        <div className="space-y-2">
+          <h1 className="text-3xl lg:text-4xl font-headline font-bold text-slate-900 dark:text-slate-100">
             {isLoadingDataset && datasetIdToLoad ? "Loading Dataset..." : loadedDataset ? `Preview: ${loadedDataset.dataset_name}` : "Dataset Preview & Management"}
           </h1>
-          <p className="text-muted-foreground truncate max-w-xs sm:max-w-md md:max-w-xl">
-            {loadedDataset ? `Prompt: ${loadedDataset.prompt_used.substring(0,100)}${loadedDataset.prompt_used.length > 100 ? '...' : ''}` : "Select a saved dataset to preview its content and statistics."}
+          <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl">
+            {loadedDataset ? `Generated from: ${loadedDataset.prompt_used.substring(0,120)}${loadedDataset.prompt_used.length > 120 ? '...' : ''}` : "Select a saved dataset to preview its content and statistics."}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-          <Button variant="outline" disabled><UploadCloud className="mr-2 h-4 w-4" /> Upload (Soon)</Button>
-          <Button disabled={!loadedDataset || !loadedDataset.data_csv || isLoadingDataset} onClick={handleDownloadCsv}>
+        <div className="flex gap-3 flex-wrap">
+          <Button variant="outline" disabled className="border-slate-300 dark:border-slate-600">
+            <UploadCloud className="mr-2 h-4 w-4" /> Upload (Soon)
+          </Button>
+          <Button
+            disabled={!loadedDataset || !loadedDataset.data_csv || isLoadingDataset}
+            onClick={handleDownloadCsv}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
             <Download className="mr-2 h-4 w-4" /> Download CSV
           </Button>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-4 gap-8">
-        <Card className="lg:col-span-1 shadow-xl">
-            <CardHeader>
-                <CardTitle className="font-headline text-xl">Saved Datasets</CardTitle>
-                <CardDescription>Select a dataset to view its details.</CardDescription>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
+        <Card className="lg:col-span-1 modern-card order-2 lg:order-1">
+            <CardHeader className="border-b border-slate-200 dark:border-slate-700">
+                <CardTitle className="font-headline text-lg sm:text-xl text-slate-900 dark:text-slate-100">Saved Datasets</CardTitle>
+                <CardDescription className="text-slate-600 dark:text-slate-400">Select a dataset to view its details</CardDescription>
             </CardHeader>
             <CardContent>
                 {isLoadingList ? (
@@ -184,12 +190,12 @@ function DataPreviewContent() {
             </CardContent>
         </Card>
 
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-3 order-1 lg:order-2">
           <Tabs defaultValue="preview" className="w-full">
-            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
-              <TabsTrigger value="preview"><FileText className="mr-2 h-4 w-4" />Preview</TabsTrigger>
-              <TabsTrigger value="statistics"><BarChart2 className="mr-2 h-4 w-4" />Statistics</TabsTrigger>
-              <TabsTrigger value="visualizations"><BarChart2 className="mr-2 h-4 w-4" />Visualizations</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 mb-4 sm:mb-6">
+              <TabsTrigger value="preview" className="py-2 sm:py-2.5 text-sm sm:text-base"><FileText className="mr-1 sm:mr-2 h-4 w-4" />Preview</TabsTrigger>
+              <TabsTrigger value="statistics" className="py-2 sm:py-2.5 text-sm sm:text-base"><BarChart2 className="mr-1 sm:mr-2 h-4 w-4" />Statistics</TabsTrigger>
+              <TabsTrigger value="visualizations" className="py-2 sm:py-2.5 text-sm sm:text-base"><BarChart2 className="mr-1 sm:mr-2 h-4 w-4" />Visualizations</TabsTrigger>
             </TabsList>
 
             <TabsContent value="preview">
@@ -207,30 +213,56 @@ function DataPreviewContent() {
                   {isLoadingDataset ? (
                      <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>
                   ) : loadedDataset && loadedDataRows.length > 0 && loadedSchema.length > 0 ? (
-                    <div className="overflow-x-auto rounded-md border max-h-96">
-                      <Table>
-                        <TableHeader className="sticky top-0 bg-muted/70">
-                          <TableRow>
-                            {loadedSchema.map(col => (
-                              <TableHead key={col.name}>
-                                <Button variant="ghost" size="sm" className="px-1 py-0.5 -ml-1 h-auto text-xs md:text-sm">
-                                  {col.name} ({col.type})
-                                  <ChevronsUpDown className="ml-1 h-3 w-3" />
-                                </Button>
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {loadedDataRows.slice(0, 20).map((row, rowIndex) => (
-                            <TableRow key={rowIndex}>
+                    <div className="w-full">
+                      {/* Mobile Card View */}
+                      <div className="block sm:hidden space-y-4">
+                        {loadedDataRows.slice(0, 10).map((row, rowIndex) => (
+                          <Card key={rowIndex} className="p-4">
+                            <div className="space-y-2">
+                              <div className="text-xs text-muted-foreground mb-2">Row {rowIndex + 1}</div>
                               {loadedSchema.map((col) => (
-                                <TableCell key={col.name} className="whitespace-nowrap text-xs md:text-sm">{String(row[col.name])}</TableCell>
+                                <div key={col.name} className="flex justify-between items-start gap-2">
+                                  <span className="text-xs font-medium text-muted-foreground min-w-0 flex-1">
+                                    {col.name}:
+                                  </span>
+                                  <span className="text-xs text-right break-words max-w-[60%]">
+                                    {String(row[col.name])}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+
+                      {/* Desktop Table View */}
+                      <div className="hidden sm:block overflow-x-auto rounded-md border max-h-96">
+                        <Table>
+                          <TableHeader className="sticky top-0 bg-muted/70">
+                            <TableRow>
+                              {loadedSchema.map(col => (
+                                <TableHead key={col.name} className="min-w-[120px]">
+                                  <Button variant="ghost" size="sm" className="px-1 py-0.5 -ml-1 h-auto text-xs md:text-sm">
+                                    {col.name} ({col.type})
+                                    <ChevronsUpDown className="ml-1 h-3 w-3" />
+                                  </Button>
+                                </TableHead>
                               ))}
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {loadedDataRows.slice(0, 20).map((row, rowIndex) => (
+                              <TableRow key={rowIndex}>
+                                {loadedSchema.map((col) => (
+                                  <TableCell key={col.name} className="whitespace-nowrap text-xs md:text-sm max-w-[200px] truncate">
+                                    {String(row[col.name])}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
                   ) : renderEmptyState("Select a dataset from the list to see a preview, or generate a new one.", !datasetIdToLoad && !isLoadingDataset)}
                 </CardContent>

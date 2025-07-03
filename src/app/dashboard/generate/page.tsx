@@ -1,12 +1,16 @@
 
-import { DataGenerationClient } from './components/DataGenerationClient';
+import { DataGenerationClient } from './components/DataGenerationClient_new';
 
 export default function DataGenerationPage() {
   return (
-    <div className="space-y-4 sm:space-y-6 lg:space-y-8">
-      <div className="space-y-2">
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-headline font-bold text-foreground">Generate Synthetic Data</h1>
-        <p className="text-sm sm:text-base text-muted-foreground">Create custom datasets using natural language prompts and AI-powered suggestions.</p>
+    <div className="space-y-8">
+      <div className="space-y-3">
+        <h1 className="text-3xl lg:text-4xl font-headline font-bold text-slate-900 dark:text-slate-100">
+          Generate Synthetic Data
+        </h1>
+        <p className="text-lg text-slate-600 dark:text-slate-400">
+          Create custom datasets using natural language prompts and AI-powered generation.
+        </p>
       </div>
       <DataGenerationClient />
     </div>

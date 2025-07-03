@@ -90,71 +90,71 @@ export function AuthForm() {
   };
 
   return (
-    <Card className="w-full shadow-xl">
-      <CardHeader className="text-center pb-4 sm:pb-6">
-        <CardTitle className="font-headline text-xl sm:text-2xl lg:text-3xl">
+    <div className="w-full glass-card p-6 sm:p-8">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="font-headline text-xl sm:text-2xl lg:text-3xl text-white mb-2">
           {authMode === 'signIn' ? 'Welcome Back!' : 'Create Account'}
-        </CardTitle>
-        <CardDescription className="text-sm sm:text-base">
+        </h1>
+        <p className="text-sm sm:text-base text-white/70">
           {authMode === 'signIn' ? 'Sign in to access your Synthara dashboard.' : 'Sign up to start generating synthetic data.'}
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <CardContent className="space-y-4 sm:space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {authMessage && (
-            <Alert variant={authMessage.type === 'error' ? "destructive" : "default"} className={`${authMessage.type === 'success' ? 'bg-green-500/10 border-green-500/50 text-green-700 dark:text-green-400 [&>svg]:text-green-600 dark:[&>svg]:text-green-500' : ''}`}>
+            <Alert variant={authMessage.type === 'error' ? "destructive" : "default"} className={`glass-card ${authMessage.type === 'success' ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-400 [&>svg]:text-emerald-400' : 'border-red-400/50 bg-red-500/10 text-red-400 [&>svg]:text-red-400'}`}>
               {authMessage.type === 'error' ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle className="h-5 w-5" />}
-              <AlertTitle>{authMessage.type === 'error' ? "Authentication Error" : (authMode === 'signUp' ? "Registration Pending" : "Success")}</AlertTitle>
-              <AlertDescription>{authMessage.text}</AlertDescription>
+              <AlertTitle className="text-white">{authMessage.type === 'error' ? "Authentication Error" : (authMode === 'signUp' ? "Registration Pending" : "Success")}</AlertTitle>
+              <AlertDescription className="text-white/80">{authMessage.text}</AlertDescription>
             </Alert>
           )}
           {authMode === 'signUp' && (
             <div className="space-y-1.5">
-              <Label htmlFor="fullName" className="text-sm sm:text-base">Full Name</Label>
+              <Label htmlFor="fullName" className="text-sm sm:text-base text-white">Full Name</Label>
               <Input
                 id="fullName"
                 type="text"
                 placeholder="Enter your full name"
                 {...form.register("fullName")}
-                className="py-2.5 sm:py-3 h-auto shadow-sm text-sm sm:text-base"
+                className="py-2.5 sm:py-3 h-auto glass border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:bg-white/15 hover:border-emerald-400/50 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 text-sm sm:text-base"
                 disabled={isSubmitting || isPending}
               />
               {form.formState.errors.fullName && (
-                <p className="text-xs sm:text-sm text-destructive mt-1">{form.formState.errors.fullName.message}</p>
+                <p className="text-xs sm:text-sm text-red-400 mt-1">{form.formState.errors.fullName.message}</p>
               )}
             </div>
           )}
           <div className="space-y-1.5">
-            <Label htmlFor="email" className="text-sm sm:text-base">Email</Label>
+            <Label htmlFor="email" className="text-sm sm:text-base text-white">Email</Label>
             <Input
               id="email"
               type="email"
               placeholder="Enter your email address"
               {...form.register("email")}
-              className="py-2.5 sm:py-3 h-auto shadow-sm text-sm sm:text-base"
+              className="py-2.5 sm:py-3 h-auto glass border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:bg-white/15 hover:border-emerald-400/50 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 text-sm sm:text-base"
               disabled={isSubmitting || isPending}
             />
             {form.formState.errors.email && (
-              <p className="text-xs sm:text-sm text-destructive mt-1">{form.formState.errors.email.message}</p>
+              <p className="text-xs sm:text-sm text-red-400 mt-1">{form.formState.errors.email.message}</p>
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="password" className="text-sm sm:text-base">Password</Label>
+            <Label htmlFor="password" className="text-sm sm:text-base text-white">Password</Label>
             <Input
               id="password"
               type="password"
               placeholder="Create a secure password"
               {...form.register("password")}
-              className="py-2.5 sm:py-3 h-auto shadow-sm text-sm sm:text-base"
+              className="py-2.5 sm:py-3 h-auto glass border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:bg-white/15 hover:border-emerald-400/50 focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 text-sm sm:text-base"
               disabled={isSubmitting || isPending}
             />
             {form.formState.errors.password && (
-              <p className="text-xs sm:text-sm text-destructive mt-1">{form.formState.errors.password.message}</p>
+              <p className="text-xs sm:text-sm text-red-400 mt-1">{form.formState.errors.password.message}</p>
             )}
           </div>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-3 sm:gap-4">
-          <Button type="submit" className="w-full text-sm sm:text-base lg:text-lg py-2.5 sm:py-3" disabled={isSubmitting || isPending}>
+        </div>
+        <div className="flex flex-col gap-3 sm:gap-4 mt-6">
+          <Button type="submit" className="w-full text-sm sm:text-base lg:text-lg py-2.5 sm:py-3 bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl" disabled={isSubmitting || isPending}>
             {isSubmitting || isPending ? (
               <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
             ) : authMode === 'signIn' ? (
@@ -167,7 +167,7 @@ export function AuthForm() {
           <Button
             type="button"
             variant="link"
-            className="text-xs sm:text-sm"
+            className="text-xs sm:text-sm text-white/70 hover:text-white"
             onClick={() => {
               setAuthMode(authMode === 'signIn' ? 'signUp' : 'signIn');
               setAuthMessage(null);
@@ -182,8 +182,8 @@ export function AuthForm() {
               {authMode === 'signIn' ? "Sign Up" : "Sign In"}
             </span>
           </Button>
-        </CardFooter>
+        </div>
       </form>
-    </Card>
+    </div>
   );
 }

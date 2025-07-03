@@ -174,12 +174,22 @@ Focus on creating a high-quality dataset that maximizes the value of the scraped
       }
 
       const parsed = JSON.parse(jsonString);
-      
-      // Validate required fields
+
+      // Check if this is an analysis response (no data generation)
+      if (targetRows === 0) {
+        // This is an analysis request, return the analysis directly
+        return {
+          jsonString: JSON.stringify(parsed, null, 2),
+          detectedSchema: [], // Not needed for analysis
+          feedback: 'Analysis completed successfully'
+        };
+      }
+
+      // Validate required fields for data generation
       if (!parsed.detectedSchema || !Array.isArray(parsed.detectedSchema)) {
         throw new Error('Invalid or missing detectedSchema');
       }
-      
+
       if (!parsed.generatedRows || !Array.isArray(parsed.generatedRows)) {
         throw new Error('Invalid or missing generatedRows');
       }

@@ -267,19 +267,19 @@ export function LiveLogger({ isActive, onComplete, onError, onScrapedContent, re
   return (
     <Card className="w-full">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
+          <CardTitle className="text-base sm:text-lg font-semibold">
             🔄 Live Generation Progress
           </CardTitle>
           <div className="flex items-center gap-2">
             {isConnected && (
               <>
                 <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                <Badge variant="secondary">Processing</Badge>
+                <Badge variant="secondary" className="text-xs">Processing</Badge>
               </>
             )}
             {!isConnected && logs.length > 0 && (
-              <Badge variant="outline">Complete</Badge>
+              <Badge variant="outline" className="text-xs">Complete</Badge>
             )}
           </div>
         </div>
@@ -287,15 +287,15 @@ export function LiveLogger({ isActive, onComplete, onError, onScrapedContent, re
         {/* Progress Bar */}
         {currentProgress && (
           <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="font-medium">{currentProgress.step}</span>
-              <span className="text-muted-foreground">
+            <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-sm">
+              <span className="font-medium truncate">{currentProgress.step}</span>
+              <span className="text-muted-foreground text-xs sm:text-sm">
                 {currentProgress.current}/{currentProgress.total}
               </span>
             </div>
             <Progress value={currentProgress.percentage || 0} className="h-2" />
             {currentProgress.details && (
-              <p className="text-sm text-muted-foreground">{currentProgress.details}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground break-words">{currentProgress.details}</p>
             )}
           </div>
         )}

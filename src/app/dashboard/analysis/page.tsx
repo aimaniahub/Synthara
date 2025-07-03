@@ -179,35 +179,58 @@ export default function DataAnalysisPage() {
   };
   
   return (
-    <div className="space-y-10 md:space-y-12">
-      <Card className="shadow-lg bg-gradient-to-br from-primary/5 via-background to-background border-primary/20">
+    <div className="space-y-8">
+      {/* Header Section */}
+      <div className="space-y-3">
+        <h1 className="text-3xl lg:text-4xl font-headline font-bold text-slate-900 dark:text-slate-100 flex items-center">
+          <LineChart className="mr-3 h-8 w-8 text-blue-600 dark:text-blue-400"/>
+          AI-Powered Data Analysis
+        </h1>
+        <p className="text-lg text-slate-600 dark:text-slate-400 max-w-3xl">
+          Unlock insights from your datasets with advanced AI analysis. Evaluate data quality, ML readiness, and get actionable recommendations.
+        </p>
+      </div>
+
+      <Card className="modern-card border-l-4 border-l-blue-500">
         <CardHeader>
-            <CardTitle className="font-headline text-3xl sm:text-4xl text-foreground flex items-center"><LineChart className="mr-3 h-8 w-8 text-primary"/>AI-Powered ML Data Readiness Analysis</CardTitle>
+            <CardTitle className="font-headline text-2xl text-slate-900 dark:text-slate-100 flex items-center">
+              <BrainCircuit className="mr-3 h-7 w-7 text-blue-600 dark:text-blue-400"/>
+              How It Works
+            </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 text-lg text-muted-foreground">
-            <p>
-                Unlock the full potential of your datasets with our advanced AI analysis. This tool evaluates a snippet of your selected data for its suitability and readiness for Machine Learning tasks.
+        <CardContent className="space-y-4 text-slate-700 dark:text-slate-300">
+            <p className="text-base">
+                Our AI examines your data for structure, quality, patterns, and ML readiness, providing comprehensive insights and recommendations.
             </p>
-            <p>
-                <strong>How it Works:</strong> Our AI examines the data snippet for structure, quality, identifiable patterns, potential features, common issues that can impact ML model training, and suggests appropriate ML models.
-            </p>
-            <p>
-                <strong>Key Benefits:</strong>
-            </p>
-            <ul className="list-disc list-inside space-y-1 pl-4">
-                <li>Identify data quality problems and inconsistencies early.</li>
-                <li>Receive actionable suggestions for data preprocessing and feature engineering.</li>
-                <li>Get recommendations for suitable ML models based on data characteristics.</li>
-                <li>Understand potential biases or limitations in your data snippet.</li>
-                <li>Accelerate your ML development lifecycle by starting with better-prepared data.</li>
-            </ul>
+            <div className="grid md:grid-cols-3 gap-4 mt-6">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-blue-600 dark:text-blue-400 mb-2"/>
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Quality Assessment</h4>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Identify data quality issues and inconsistencies</p>
+              </div>
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+                <Lightbulb className="h-6 w-6 text-emerald-600 dark:text-emerald-400 mb-2"/>
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Smart Recommendations</h4>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Get actionable preprocessing suggestions</p>
+              </div>
+              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400 mb-2"/>
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100">ML Model Guidance</h4>
+                <p className="text-sm text-slate-600 dark:text-slate-400">Discover suitable ML models for your data</p>
+              </div>
+            </div>
         </CardContent>
       </Card>
-      
-      <Card className="shadow-xl">
-        <CardHeader>
-          <CardTitle className="font-headline text-2xl flex items-center"><FileJson className="mr-3 h-7 w-7 text-primary"/>Select Dataset for Analysis</CardTitle>
-          <CardDescription className="text-md">Choose one of your saved datasets. A snippet (first ~10 rows) will be automatically prepared for AI analysis.</CardDescription>
+
+      <Card className="modern-card">
+        <CardHeader className="border-b border-slate-200 dark:border-slate-700">
+          <CardTitle className="font-headline text-2xl flex items-center text-slate-900 dark:text-slate-100">
+            <FileJson className="mr-3 h-7 w-7 text-blue-600 dark:text-blue-400"/>
+            Select Dataset for Analysis
+          </CardTitle>
+          <CardDescription className="text-slate-600 dark:text-slate-400">
+            Choose one of your saved datasets. A snippet (first ~10 rows) will be automatically prepared for AI analysis.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div>

@@ -57,70 +57,104 @@ export default function DashboardLayout({
 
 
   return (
-    <SidebarProvider defaultOpen={true} className="sidebar-provider">
-        {/* Desktop Sidebar */}
+    <div className="min-h-screen bg-gradient-light dark:bg-gradient-slate">
+      {/* Modern background patterns */}
+      <div className="fixed inset-0 opacity-30 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.1),transparent_50%)]" />
+        <div className="absolute top-0 left-0 w-full h-full">
+          <svg className="w-full h-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="modernGradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="rgba(59, 130, 246, 0.2)" />
+                <stop offset="100%" stopColor="rgba(147, 197, 253, 0.1)" />
+              </linearGradient>
+              <linearGradient id="modernGradient2" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="rgba(147, 197, 253, 0.1)" />
+                <stop offset="100%" stopColor="rgba(59, 130, 246, 0.2)" />
+              </linearGradient>
+            </defs>
+            <path d="M0,0 Q300,80 600,0 T1000,0 L1000,200 Q700,120 400,200 T0,200 Z" fill="url(#modernGradient1)" />
+            <path d="M0,800 Q300,720 600,800 T1000,800 L1000,1000 L0,1000 Z" fill="url(#modernGradient2)" />
+          </svg>
+        </div>
+      </div>
+
+      <SidebarProvider defaultOpen={false} className="sidebar-provider relative z-10">
+        {/* Mobile Sidebar */}
+        <Sidebar
+          side="left"
+          collapsible="offcanvas"
+          className="md:hidden flex flex-col modern-card border-r border-slate-200/50 dark:border-slate-700/50 shadow-xl"
+          style={{
+            // @ts-ignore
+            '--sidebar-width': '22rem',
+          }}
+        >
+          <SidebarHeader className="p-6 h-20 flex items-center border-b border-slate-200/50 dark:border-slate-700/50">
+            <Link href="/dashboard" className="flex items-center gap-4 transition-all duration-200">
+              <div className="relative">
+                <SyntharaLogo className="h-10 w-auto text-blue-500 transition-all duration-200" />
+              </div>
+              <div className="transition-all duration-200">
+                <span className="font-headline text-2xl font-bold text-slate-800 dark:text-slate-100 block">
+                  Synthara
+                </span>
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  AI Data Platform
+                </span>
+              </div>
+            </Link>
+          </SidebarHeader>
+          <SidebarContent className="flex-grow p-0 overflow-y-auto">
+            <SidebarNav navItems={mainNavItems} groupLabel="Main Tools" />
+            <SidebarNav navItems={userNavItems} groupLabel="User Account" />
+          </SidebarContent>
+          <SidebarFooter className="p-3 border-t border-slate-200/50 dark:border-slate-700/50">
+            <SidebarNav navItems={helpNavItems} />
+          </SidebarFooter>
+        </Sidebar>
+
+        {/* Desktop Corner Sidebar */}
         <Sidebar
           side="left"
           collapsible="icon"
-          className="hidden md:flex flex-col border-r border-sidebar-border shadow-lg"
+          className="hidden md:flex flex-col modern-card border-r border-slate-200/50 dark:border-slate-700/50 shadow-xl"
           style={{
             // @ts-ignore
-            '--sidebar-width': '17rem',
-            '--sidebar-width-icon': '3.5rem',
+            '--sidebar-width': '16rem',
+            '--sidebar-width-icon': '4rem',
           }}
         >
-        <SidebarHeader className="p-4 h-14 sm:h-16 flex items-center border-b border-sidebar-border">
-           <Link href="/dashboard" className="flex items-center gap-2.5 group-data-[collapsible=icon]:justify-center">
-            <SyntharaLogo className="h-8 sm:h-9 w-auto text-sidebar-primary group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7" />
-            <span className="font-headline text-xl sm:text-2xl font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-              Synthara
-            </span>
-          </Link>
-        </SidebarHeader>
-        <SidebarContent className="flex-grow p-0 overflow-y-auto">
-          <SidebarNav navItems={mainNavItems} groupLabel="Main Tools" />
-          <SidebarNav navItems={userNavItems} groupLabel="User Account" />
-        </SidebarContent>
-        <SidebarFooter className="p-2 border-t border-sidebar-border">
-          <SidebarNav navItems={helpNavItems} />
-        </SidebarFooter>
-      </Sidebar>
+          <SidebarHeader className="p-4 h-16 flex items-center border-b border-slate-200/50 dark:border-slate-700/50">
+            <Link href="/dashboard" className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center transition-all duration-200">
+              <div className="relative">
+                <SyntharaLogo className="h-8 w-auto text-blue-500 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 transition-all duration-200" />
+              </div>
+              <div className="group-data-[collapsible=icon]:hidden transition-all duration-200">
+                <span className="font-headline text-lg font-bold text-slate-800 dark:text-slate-100 block">
+                  Synthara
+                </span>
+              </div>
+            </Link>
+          </SidebarHeader>
+          <SidebarContent className="flex-grow p-0 overflow-y-auto">
+            <SidebarNav navItems={mainNavItems} groupLabel="Main Tools" />
+            <SidebarNav navItems={userNavItems} groupLabel="User Account" />
+          </SidebarContent>
+          <SidebarFooter className="p-2 border-t border-slate-200/50 dark:border-slate-700/50">
+            <SidebarNav navItems={helpNavItems} />
+          </SidebarFooter>
+        </Sidebar>
 
-      {/* Mobile Sidebar */}
-      <Sidebar
-        side="left"
-        collapsible="offcanvas"
-        className="md:hidden flex flex-col border-r border-sidebar-border shadow-lg"
-        style={{
-          // @ts-ignore
-          '--sidebar-width': '18rem',
-        }}
-      >
-        <SidebarHeader className="p-4 h-14 sm:h-16 flex items-center border-b border-sidebar-border">
-           <Link href="/dashboard" className="flex items-center gap-3">
-            <SyntharaLogo className="h-8 w-auto text-sidebar-primary flex-shrink-0" />
-            <span className="font-headline text-xl font-semibold text-sidebar-foreground">
-              Synthara AI
-            </span>
-          </Link>
-        </SidebarHeader>
-        <SidebarContent className="flex-grow p-0 overflow-y-auto">
-          <SidebarNav navItems={mainNavItems} groupLabel="Main Tools" />
-          <SidebarNav navItems={userNavItems} groupLabel="User Account" />
-        </SidebarContent>
-        <SidebarFooter className="p-2 border-t border-sidebar-border">
-          <SidebarNav navItems={helpNavItems} />
-        </SidebarFooter>
-      </Sidebar>
-
-      <div className="flex flex-col flex-1 min-h-screen bg-secondary/30 dark:bg-background" data-sidebar="inset">
-        <DashboardHeader />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10 xl:p-12">
-          <div className="mx-auto max-w-7xl w-full">
-            {children}
-          </div>
-        </main>
-      </div>
-    </SidebarProvider>
+        <div className="flex flex-col flex-1 min-h-screen w-full">
+          <DashboardHeader />
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10">
+            <div className="mx-auto max-w-7xl w-full space-y-6 sm:space-y-8">
+              {children}
+            </div>
+          </main>
+        </div>
+      </SidebarProvider>
+    </div>
   );
 }
