@@ -1,16 +1,19 @@
 /**
  * Simple AI service replacement for Genkit
- * Provides direct API calls without OpenTelemetry dependencies
+ * Now uses OpenRouter DeepSeek instead of Google AI
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { OpenAI } from 'openai';
 
-// Initialize Google AI
-const googleApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GOOGLE_API_KEY;
-let genAI: GoogleGenerativeAI | null = null;
+// Initialize OpenRouter client
+const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+let openRouterClient: OpenAI | null = null;
 
-if (googleApiKey) {
-  genAI = new GoogleGenerativeAI(googleApiKey);
+if (openRouterApiKey) {
+  openRouterClient = new OpenAI({
+    baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+    apiKey: openRouterApiKey,
+  });
 }
 
 export interface SimpleAIInput {
@@ -27,24 +30,31 @@ export interface SimpleAIOutput {
 
 export class SimpleAI {
   static async generate(input: SimpleAIInput): Promise<SimpleAIOutput> {
-    const { prompt, model = 'gemini-1.5-flash', maxTokens = 4000, temperature = 0.7 } = input;
+    const { prompt, model = 'deepseek/deepseek-chat-v3-0324:free', maxTokens = 4000, temperature = 0.7 } = input;
 
-    if (!genAI) {
-      throw new Error('Google AI not initialized. Please set GOOGLE_GENERATIVE_AI_API_KEY environment variable.');
+    if (!openRouterClient) {
+      throw new Error('OpenRouter not initialized. Please set OPENROUTER_API_KEY environment variable.');
     }
 
     try {
-      const geminiModel = genAI.getGenerativeModel({ 
-        model: model.replace('googleai/', ''),
-        generationConfig: {
-          maxOutputTokens: maxTokens,
-          temperature: temperature,
-        },
+      const extraHeaders: Record<string, string> = {};
+      if (process.env.OPENROUTER_SITE_URL) {
+        extraHeaders["HTTP-Referer"] = process.env.OPENROUTER_SITE_URL;
+      }
+      if (process.env.OPENROUTER_SITE_NAME) {
+        extraHeaders["X-Title"] = process.env.OPENROUTER_SITE_NAME;
+      }
+
+      const completion = await openRouterClient.chat.completions.create({
+        model: model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: temperature,
+        max_tokens: maxTokens,
+        extra_headers: extraHeaders,
+        extra_body: {}
       });
 
-      const result = await geminiModel.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const text = completion.choices[0]?.message?.content || '';
 
       return {
         text,
@@ -81,75 +91,4 @@ ${JSON.stringify(schema, null, 2)}`;
   }
 }
 
-// Export a simple ai object that mimics Genkit's interface
-export const ai = {
-  generate: SimpleAI.generate,
-  generateWithSchema: SimpleAI.generateWithSchema,
-  
-  // Mock defineFlow for compatibility
-  defineFlow: (config: any, handler: any) => {
-    return handler;
-  },
-  
-  // Mock definePrompt for compatibility
-  definePrompt: (config: any) => {
-    return async (input: any) => {
-      const result = await SimpleAI.generate({
-        prompt: typeof config.prompt === 'function' ? config.prompt(input) : config.prompt,
-        model: config.model,
-      });
-      
-      if (config.output?.schema) {
-        try {
-          const parsed = JSON.parse(result.text);
-          return { output: parsed };
-        } catch {
-          return { output: result.text };
-        }
-      }
-      
-      return { output: result.text };
-    };
-  },
-};
-
-// Create a chainable schema builder
-class SchemaBuilder {
-  private schema: any;
-
-  constructor(schema: any) {
-    this.schema = schema;
-  }
-
-  describe(description: string) {
-    return new SchemaBuilder({ ...this.schema, description });
-  }
-
-  optional() {
-    return new SchemaBuilder({ ...this.schema, optional: true });
-  }
-
-  default(value: any) {
-    return new SchemaBuilder({ ...this.schema, default: value });
-  }
-
-  min(value: number) {
-    return new SchemaBuilder({ ...this.schema, min: value });
-  }
-
-  max(value: number) {
-    return new SchemaBuilder({ ...this.schema, max: value });
-  }
-}
-
-// Export z for schema compatibility
-export const z = {
-  object: (schema: any) => new SchemaBuilder({ type: 'object', properties: schema }),
-  string: () => new SchemaBuilder({ type: 'string' }),
-  number: () => new SchemaBuilder({ type: 'number' }),
-  boolean: () => new SchemaBuilder({ type: 'boolean' }),
-  array: (items: any) => new SchemaBuilder({ type: 'array', items }),
-  record: (key: any, value: any) => new SchemaBuilder({ type: 'object', additionalProperties: value }),
-  any: () => new SchemaBuilder({ type: 'any' }),
-  infer: (schema: any) => schema as any,
-};
+// Note: ai object, compatibility functions, and schema builder removed since we're using zod directly

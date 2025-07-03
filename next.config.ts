@@ -29,7 +29,7 @@ const nextConfig: NextConfig = {
   },
 
   // Server external packages for Vercel
-  serverExternalPackages: ['@anthropic-ai/sdk', '@google/generative-ai'],
+  serverExternalPackages: ['openai', 'puppeteer'],
 
   // Ensure App Router is used exclusively
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],

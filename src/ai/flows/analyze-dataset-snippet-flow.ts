@@ -7,8 +7,8 @@
  * - AnalyzeDatasetSnippetOutput - The return type for the analyzeDatasetSnippet function.
  */
 
-import {ai, z} from '@/ai/genkit';
-import { AnthropicService } from '@/services/anthropic-service';
+import { z } from 'zod';
+import { OpenRouterService } from '@/services/openrouter-service';
 
 const AnalyzeDatasetSnippetInputSchema = z.object({
   dataSnippetJson: z.string().describe('A JSON string representing a small sample of the dataset (e.g., an array of the first 5-10 rows).'),
@@ -50,18 +50,20 @@ export async function analyzeDatasetSnippet(input: AnalyzeDatasetSnippetInput): 
   return analyzeDatasetSnippetFlow(input);
 }
 
-// Fallback function using Anthropic Claude
-async function analyzeWithAnthropic(input: AnalyzeDatasetSnippetInput): Promise<AnalyzeDatasetSnippetOutput> {
-  const anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+// Fallback function using OpenRouter DeepSeek
+async function analyzeWithOpenRouter(input: AnalyzeDatasetSnippetInput): Promise<AnalyzeDatasetSnippetOutput> {
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
 
-  if (!anthropicApiKey) {
-    throw new Error('Anthropic API key not configured');
+  if (!openRouterApiKey) {
+    throw new Error('OpenRouter API key not configured');
   }
 
-  const anthropicService = new AnthropicService({
-    apiKey: anthropicApiKey,
-    model: 'claude-3-5-sonnet-20241022',
-    temperature: 0.1,
+  const openRouterService = new OpenRouterService({
+    apiKey: openRouterApiKey,
+    baseUrl: process.env.OPENROUTER_BASE_URL,
+    model: process.env.OPENROUTER_MODEL,
+    siteUrl: process.env.OPENROUTER_SITE_URL,
+    siteName: process.env.OPENROUTER_SITE_NAME,
   });
 
   const analysisPrompt = `You are an expert Data Scientist specializing in evaluating datasets for Machine Learning readiness.
@@ -120,10 +122,10 @@ Please respond with a valid JSON object in this exact format:
 }`;
 
   try {
-    const response = await anthropicService.processScrapedContent({
+    const response = await openRouterService.processScrapedContent({
       userPrompt: analysisPrompt,
       numRows: 0, // Not used for analysis
-      scrapedContent: '', // Not used for analysis
+      scrapedContent: input.dataSnippetJson, // Use the actual data snippet
     });
 
     // Parse the JSON response
@@ -141,118 +143,32 @@ Please respond with a valid JSON object in this exact format:
       suggestedMlModels: analysisResult.suggestedMlModels || []
     };
   } catch (error: any) {
-    console.error('[Anthropic Analysis] Error:', error);
-    throw new Error(`Anthropic analysis failed: ${error.message}`);
+    console.error('[OpenRouter Analysis] Error:', error);
+    throw new Error(`OpenRouter analysis failed: ${error.message}`);
   }
 }
 
-const analysisPrompt = ai.definePrompt({
-  name: 'analyzeDatasetSnippetMLPrompt',
-  input: {schema: AnalyzeDatasetSnippetInputSchema},
-  output: {schema: AnalyzeDatasetSnippetOutputSchema},
-  prompt: `You are an expert Data Scientist specializing in evaluating datasets for Machine Learning readiness.
-Analyze the provided JSON data snippet with the goal of preparing it for ML model training.
-
-Based on the snippet:
-1.  **Overall ML Readiness**: Provide a score (0-100) and a summary of why the data is (or isn't) ready for ML. Consider data quality, feature suitability, and potential challenges.
-2.  **ML-Focused Quality Summary**: Based on the snippet, provide scores (0-100) for:
-    *   **overallScore**: An overall data quality score considering ML usability.
-    *   **featureSuitability**: How suitable the observed features seem for ML (e.g., types, variance, not just IDs).
-    *   **structuralIntegrity**: How well-structured the snippet is for tabular ML input.
-    *   **valueConsistency**: How consistent and valid values within columns appear for ML.
-    Briefly note if any of these critically impact ML potential in the 'Overall ML Readiness' summary.
-3.  **Key Observations for ML**: List significant observations (e.g., potential target variables if obvious, useful features, data types, initial patterns, data scale/range, presence of identifiers). For each, explain its implication for modeling.
-4.  **Potential ML Issues & Recommendations**: Identify problems like high cardinality in categoricals, severe skewness in numerical features, potential data leakage risks (e.g. IDs that might correlate with target), inconsistent formats, insufficient variance in a column, or need for scaling/normalization. For each issue, recommend a mitigation strategy or investigation step.
-5.  **Feature Engineering Suggestions**: Suggest ways to create new, valuable features from existing columns (e.g., extracting date components like year/month/day, binning numerical data, creating interaction terms if plausible, basic text feature extraction ideas like word count if applicable).
-6.  **Preprocessing Recommendations**: Suggest necessary preprocessing steps (e.g., "Handle missing values in 'Age' using median imputation due to potential skew." or "One-hot encode categorical column 'City'." or "Scale numerical features like 'Income' using StandardScaler if using distance-based algorithms."). Be specific to columns where possible.
-7.  **Visualization Suggestions**: Recommend specific plots or charts that would help understand the data better from an ML perspective (e.g., "Plot histograms for numerical features such as 'Age' to check distributions and identify skewness." or "Create a correlation matrix for numerical features to identify multicollinearity." or "Use box plots to identify outliers in 'Salary' grouped by 'Department'.").
-8.  **Suggested ML Models**: Based on the apparent characteristics of the data snippet (e.g., type of likely target variable - classification/regression, feature types, data size hinted by snippet), suggest 2-3 suitable ML models or algorithms (e.g., Logistic Regression, Random Forest, Gradient Boosting, SVM, K-Means if unsupervised clustering seems applicable). For each, provide a brief (1-2 sentence) justification for its suitability. If the data seems insufficient to make a strong recommendation, state that.
-
-Data Snippet (JSON format):
-{{{dataSnippetJson}}}
-
-Output your analysis strictly in the specified JSON format. Be professional, insightful, and actionable for an ML practitioner.
-If the snippet is too small (e.g., less than 3 diverse rows or only 1-2 columns with no clear ML context) or completely inappropriate for meaningful ML analysis (e.g. unstructured text not meant for tabular ML), state this clearly in the 'Overall ML Readiness' summary and score, and keep other sections brief or indicate "Not applicable due to insufficient/inappropriate data snippet." If suggesting ML models seems premature due to data quality or quantity, indicate this in the 'Suggested ML Models' section.
-`,
-});
-
-const analyzeDatasetSnippetFlow = ai.defineFlow(
-  {
-    name: 'analyzeDatasetSnippetFlow',
-    inputSchema: AnalyzeDatasetSnippetInputSchema,
-    outputSchema: AnalyzeDatasetSnippetOutputSchema,
-  },
-  async (input) => {
+async function analyzeDatasetSnippetFlow(input: AnalyzeDatasetSnippetInput): Promise<AnalyzeDatasetSnippetOutput> {
     try {
-      console.log('[AnalyzeDatasetSnippet] Attempting analysis with Gemini...');
-      const {output} = await analysisPrompt(input);
-      if (!output) {
-        console.log('[AnalyzeDatasetSnippet] Gemini returned no output, trying Anthropic fallback...');
-        return await analyzeWithAnthropic(input);
-      }
-      console.log('[AnalyzeDatasetSnippet] Gemini analysis successful');
-      return output;
+      console.log('[AnalyzeDatasetSnippet] Attempting analysis with OpenRouter DeepSeek...');
+      return await analyzeWithOpenRouter(input);
     } catch (error: any) {
-      console.error('[AnalyzeDatasetSnippet] Gemini error:', error.message);
-
-      // Check if it's a quota/rate limit error
-      const isQuotaError = error.message?.includes('429') ||
-                          error.message?.includes('quota') ||
-                          error.message?.includes('Too Many Requests') ||
-                          error.message?.includes('exceeded your current quota');
-
-      if (isQuotaError) {
-        console.log('[AnalyzeDatasetSnippet] Quota exceeded, trying Anthropic fallback...');
-        try {
-          const result = await analyzeWithAnthropic(input);
-          console.log('[AnalyzeDatasetSnippet] Anthropic fallback successful');
-          return result;
-        } catch (fallbackError: any) {
-          console.error('[AnalyzeDatasetSnippet] Anthropic fallback also failed:', fallbackError.message);
-          return {
-            overallMlReadiness: {
-              score: 0,
-              summary: "Analysis temporarily unavailable due to API limitations. Both primary and fallback AI services are currently unavailable."
-            },
-            dataQualitySummary: { overallScore: 0, featureSuitability: 0, structuralIntegrity: 0, valueConsistency: 0 },
-            keyObservationsForML: [],
-            potentialMlIssues: [{
-              issue: "AI services temporarily unavailable",
-              recommendation: "Please try again later. Both Gemini and Together AI services are currently experiencing issues."
-            }],
-            featureEngineeringSuggestions: [],
-            preprocessingRecommendations: [],
-            visualizationSuggestions: [],
-            suggestedMlModels: []
-          };
-        }
-      }
-
-      // For other errors, also try the fallback
-      console.log('[AnalyzeDatasetSnippet] Non-quota error, trying Anthropic fallback...');
-      try {
-        const result = await analyzeWithAnthropic(input);
-        console.log('[AnalyzeDatasetSnippet] Anthropic fallback successful');
-        return result;
-      } catch (fallbackError: any) {
-        console.error('[AnalyzeDatasetSnippet] Anthropic fallback also failed:', fallbackError.message);
-        return {
-          overallMlReadiness: {
-            score: 0,
-            summary: "Analysis failed due to technical errors. Please try again or contact support if the issue persists."
-          },
-          dataQualitySummary: { overallScore: 0, featureSuitability: 0, structuralIntegrity: 0, valueConsistency: 0 },
-          keyObservationsForML: [],
-          potentialMlIssues: [{
-            issue: "Technical error during analysis",
-            recommendation: "Please try again with a different dataset or contact support if the problem continues."
-          }],
-          featureEngineeringSuggestions: [],
-          preprocessingRecommendations: [],
-          visualizationSuggestions: [],
-          suggestedMlModels: []
-        };
-      }
+      console.error('[AnalyzeDatasetSnippet] OpenRouter error:', error.message);
+      return {
+        overallMlReadiness: {
+          score: 0,
+          summary: "Analysis failed due to OpenRouter API error. Please check your API key and try again."
+        },
+        dataQualitySummary: { overallScore: 0, featureSuitability: 0, structuralIntegrity: 0, valueConsistency: 0 },
+        keyObservationsForML: [],
+        potentialMlIssues: [{
+          issue: "OpenRouter API error",
+          recommendation: "Please check your OPENROUTER_API_KEY environment variable and try again."
+        }],
+        featureEngineeringSuggestions: [],
+        preprocessingRecommendations: [],
+        visualizationSuggestions: [],
+        suggestedMlModels: []
+      };
     }
-  }
-);
+}

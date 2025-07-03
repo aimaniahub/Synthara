@@ -22,14 +22,16 @@ interface LiveLoggerProps {
   isActive: boolean;
   onComplete?: (result: any) => void;
   onError?: (error: string) => void;
+  onScrapedContent?: (content: string) => void;
   requestData?: {
     prompt: string;
     numRows: number;
     useWebData: boolean;
+    refinedSearchQuery?: string;
   };
 }
 
-export function LiveLogger({ isActive, onComplete, onError, requestData }: LiveLoggerProps) {
+export function LiveLogger({ isActive, onComplete, onError, onScrapedContent, requestData }: LiveLoggerProps) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [currentProgress, setCurrentProgress] = useState<LogEntry | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -41,7 +43,8 @@ export function LiveLogger({ isActive, onComplete, onError, requestData }: LiveL
   const memoizedRequestData = useMemo(() => requestData, [
     requestData?.prompt,
     requestData?.numRows,
-    requestData?.useWebData
+    requestData?.useWebData,
+    requestData?.refinedSearchQuery
   ]);
 
   useEffect(() => {
@@ -161,6 +164,12 @@ export function LiveLogger({ isActive, onComplete, onError, requestData }: LiveL
       // If it's a progress message with result data, don't treat it as completion yet
       if (data.result && data.result.generatedRows && data.result.generatedRows.length > 0) {
         addLog(`📊 Partial results: ${data.result.generatedRows.length} rows generated`, 'info');
+      }
+    } else if (data.type === 'scraped_content') {
+      // Handle scraped content for transparency
+      if (data.content && onScrapedContent) {
+        onScrapedContent(data.content);
+        addLog(`📄 Scraped content received (${Math.round(data.content.length / 1000)}k chars)`, 'info');
       }
     } else if (data.type === 'complete') {
       // Log detailed completion information

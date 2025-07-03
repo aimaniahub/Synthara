@@ -15,12 +15,39 @@
  * - GenerateFromWebOutput - The return type for the generateFromWeb function.
  */
 
-import { ai, z } from '@/ai/genkit';
+import { z } from 'zod';
 import { getGoogleSearchResults, type SearchResult } from '@/services/serpapi-service';
 import { scrapeContent } from '@/services/firecrawl-service';
 import { type GenerateDataOutput, type Column } from './generate-data-flow';
 import { FileManagerService, type ScrapedSource } from '@/services/file-manager-service';
-import { createAnthropicService, type AnthropicService } from '@/services/anthropic-service';
+import { OpenRouterService } from '@/services/openrouter-service';
+
+// Helper function to create OpenRouter service
+function createOpenRouterService(): OpenRouterService | null {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const baseUrl = process.env.OPENROUTER_BASE_URL;
+    const model = process.env.OPENROUTER_MODEL;
+    const siteUrl = process.env.OPENROUTER_SITE_URL;
+    const siteName = process.env.OPENROUTER_SITE_NAME;
+
+    if (!apiKey) {
+      console.warn('[OpenRouter] API key not found in environment variables');
+      return null;
+    }
+
+    return new OpenRouterService({
+      apiKey,
+      baseUrl,
+      model,
+      siteUrl,
+      siteName
+    });
+  } catch (error: any) {
+    console.error('[OpenRouter] Failed to create service:', error);
+    return null;
+  }
+}
 
 // Enhanced fallback data extraction for when AI processing fails
 function extractSimpleDataFromContent(content: string, userPrompt: string, numRows: number): any {
@@ -276,6 +303,7 @@ const GenerateFromWebInputSchema = z.object({
   prompt: z.string().describe('The natural language prompt describing the data to generate, which will be used as a search query.'),
   numRows: z.number().optional().default(50).describe('The number of data rows to generate. No maximum limit.'),
   logger: z.any().optional().describe('Optional logger for real-time progress updates.'),
+  refinedSearchQuery: z.string().optional().describe('Pre-refined search query to use instead of refining the prompt.'),
 });
 export type GenerateFromWebInput = z.infer<typeof GenerateFromWebInputSchema>;
 export type GenerateFromWebOutput = GenerateDataOutput;
@@ -284,197 +312,114 @@ export async function generateFromWeb(input: GenerateFromWebInput): Promise<Gene
   return generateFromWebFlow(input);
 }
 
-// AI Prompt to refine user query for better web search
-const refineSearchQueryPrompt = ai.definePrompt({
-    name: 'refineSearchQueryPrompt',
-    model: 'googleai/gemini-1.5-flash-latest',
-    input: { schema: z.object({ userPrompt: z.string() }) },
-    output: { schema: z.object({
-        searchQuery: z.string().describe("Optimized search query for Google search"),
-        reasoning: z.string().describe("Brief explanation of how the query was refined")
-    }) },
-    prompt: `Extract the core search terms from this user request and create a simple Google search query.
+// Function to refine user query using OpenRouter DeepSeek
+async function refineSearchQuery(userPrompt: string): Promise<{ searchQuery: string; reasoning: string }> {
+    try {
+        const openRouterService = createOpenRouterService();
+        if (!openRouterService) {
+            throw new Error('OpenRouter service not available');
+        }
+
+        const refinementPrompt = `Extract the core search terms from this user request and create an effective Google search query.
 
 RULES:
-1. Remove ALL instruction words: "generate", "create", "provide", "I need", "give me", "find", "get", "make", "build"
-2. Remove ALL data words: "data", "dataset", "table", "list", "information", "details"
-3. Keep ONLY the main topic and essential keywords
-4. Use 2-4 words maximum
-5. Use terms people actually search for on Google
+1. Remove instruction words: "generate", "create", "provide", "I need", "give me", "find", "get", "make", "build", "retrieve"
+2. Remove data collection words: "data", "dataset", "table", "list", "information", "details"
+3. KEEP important specifics: locations, company names, time periods, specific domains
+4. KEEP essential qualifiers: "latest", "recent", "current", specific industries
+5. Use 3-8 words that capture the main topic with key specifics
+6. Prioritize terms that will find relevant, current content
 
 EXAMPLES:
 "I need a table listing common diseases affecting mango and apple trees" → "mango apple tree diseases"
-"Generate NSE FII and DII net inflow data for June" → "NSE FII DII"
-"Create customer data with demographics" → "customer demographics"
-"Provide job postings in Bangalore for AI/ML roles" → "AI ML jobs Bangalore"
-"Get latest iPhone models with prices" → "iPhone models prices"
-"Find startup funding information" → "startup funding"
-"Generate stock market data" → "stock market"
-"Create sales data for retail companies" → "retail sales"
+"Generate NSE FII and DII net inflow data for June" → "NSE FII DII June 2024"
+"Create customer data with demographics" → "customer demographics analysis"
+"Provide job postings in Bangalore for AI/ML roles" → "jobs Bangalore AI ML latest"
+"Retrieve latest job postings in Bangalore, India with salary details" → "latest jobs Bangalore India salary"
+"Get latest iPhone models with prices in India" → "latest iPhone models prices India"
+"Find startup funding information for 2024" → "startup funding 2024"
+"Generate stock market data for Indian companies" → "Indian stock market data"
+"Create sales data for retail companies in Mumbai" → "retail sales Mumbai companies"
 
-User request: "{{userPrompt}}"
+User request: "${userPrompt}"
 
-Extract only the core topic keywords (2-4 words max):`,
-});
+Respond with a JSON object containing:
+{
+  "searchQuery": "optimized search query that preserves key specifics",
+  "reasoning": "brief explanation of what was kept and removed"
+}`;
 
+        const result = await openRouterService.processScrapedContent({
+            userPrompt: refinementPrompt,
+            numRows: 1,
+            scrapedContent: ''
+        });
 
-// AI Prompt to filter search results and pick the best URLs
-const linkFilterPrompt = ai.definePrompt({
-    name: 'webLinkFilterPrompt',
-    input: { schema: z.object({ query: z.string(), searchResults: z.array(z.any()) }) },
-    output: { schema: z.object({ bestUrls: z.array(z.string()).describe("An array of the top 3-5 most relevant and reliable URLs.") }) },
-    prompt: `You are a search result analyst. Based on the original user query, select the top 3-5 most relevant, high-quality, and promising URLs from the provided search results.
+        // Parse the JSON response
+        const parsed = JSON.parse(result.jsonString);
+        if (parsed && parsed[0] && parsed[0].searchQuery) {
+            return {
+                searchQuery: parsed[0].searchQuery,
+                reasoning: parsed[0].reasoning || 'Query refined using OpenRouter DeepSeek'
+            };
+        }
 
-Selection criteria:
-1. Prioritize official sources, government sites, and established organizations
-2. For financial/stock data: Prefer financial news sites, stock exchanges, market data providers, live price feeds
-3. For NSE data: Prioritize NSE official site, Indian financial news (Economic Times, Moneycontrol, etc.)
-4. For news data: Choose reputable news outlets and press release sites with recent articles
-5. For live/current data: Prefer sources with real-time data, current prices, latest news
-6. For statistics: Government databases, research institutions, industry reports
-7. Avoid forum links, social media, and user-generated content unless specifically relevant
-8. Prefer sites with structured data, tables, live feeds, or comprehensive current information
-9. Choose recent sources when time-specific data is requested
-10. For stock prices: Prioritize sites with actual price data, market feeds, financial portals
+        // Fallback if parsing fails
+        throw new Error('Invalid response format');
 
-User Query: "{{query}}"
-
-Search Results (JSON):
-{{{json searchResults}}}
-
-Select URLs that are most likely to contain the specific type of data requested. For example:
-- Stock data: financial news sites, market data providers, exchange websites
-- NSE/Indian stocks: NSE official site, Economic Times, Moneycontrol, Business Standard, Financial Express
-- News data: established news outlets, press release sites
-- Statistics: government sites, research institutions, industry associations
-- Live data: Real-time data feeds, current market portals, live price trackers
-
-Return a JSON object with a single key "bestUrls" containing an array of the URLs you selected.
-`,
-});
-
-// AI Prompt to structure the scraped content
-// Use the preferred AI model from environment variables with fallback models
-const LARGE_CONTENT_MODEL = process.env.PREFERRED_AI_MODEL || 'googleai/gemini-1.5-flash-latest';
-const FALLBACK_MODELS = [
-    'googleai/gemini-1.5-flash-latest',
-    'googleai/gemini-1.5-pro-latest',
-    'googleai/gemini-1.5-flash'
-];
-
-// Cache for prompts to avoid registry conflicts
-const promptCache = new Map<string, any>();
-
-// Create a single prompt factory function to avoid registry conflicts
-function createStructurePrompt(model: string) {
-    // Force new prompt creation by adding timestamp to cache key
-    const cacheKey = `${model.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}`;
-
-    // Always create new prompt for now to test fixes
-    // if (promptCache.has(cacheKey)) {
-    //     return promptCache.get(cacheKey);
-    // }
-
-    const prompt = ai.definePrompt({
-        name: `structureScrapedDataPrompt_${cacheKey}_${Date.now()}`,
-        model: model,
-        input: { schema: z.object({
-            userPrompt: z.string(),
-            numRows: z.number(),
-            scrapedContent: z.string(),
-        }) },
-        output: { schema: LLMGenerateDataOutputSchema },
-        prompt: `EXTRACT STRUCTURED DATA FROM WEB CONTENT
-
-You are a data extraction expert. Analyze the web content and extract structured data that matches the user's specific request.
-
-STEP-BY-STEP PROCESS:
-1. UNDERSTAND THE REQUEST: Analyze what specific data the user is asking for
-2. SCAN THE CONTENT: Look for relevant sections that contain the requested information
-3. EXTRACT DATA: Pull out specific values, names, numbers, dates from the content
-4. DESIGN SCHEMA: Create column names and types based on extracted data and user needs
-5. GENERATE ROWS: Create {{numRows}} rows using extracted data and logical variations
-
-DOMAIN-SPECIFIC EXTRACTION EXAMPLES:
-- For "NSE FII DII data": Extract investment flows, dates, amounts, investor types, market indices, percentage changes
-- For "job postings": Extract company names, job titles, salary ranges, experience requirements, locations, skills
-- For "product prices": Extract product names, prices, specifications, availability, ratings, categories
-- For "stock market data": Extract stock symbols, prices, volumes, changes, market cap, trading data
-- For "financial data": Extract metrics, ratios, trends, comparisons, performance indicators, dates
-- For "research data": Extract variables, results, correlations, statistical measures, study details
-
-EXTRACTION REQUIREMENTS:
-1. Extract ACTUAL VALUES from the content - not placeholder text
-2. Find real numbers, names, dates, and specific data points mentioned in the content
-3. Use ranges and patterns mentioned in content to create realistic variations
-4. Generate {{numRows}} rows with REAL DATA VALUES that match the user's request
-5. Each row must contain meaningful data relevant to the user's specific query
-6. Focus on the user's domain - if they ask for financial data, extract financial information
-
-USER REQUEST: {{userPrompt}}
-TARGET ROWS: {{numRows}} (create comprehensive dataset by discovering and utilizing all available content)
-
-SCRAPED WEB CONTENT:
-{{scrapedContent}}
-
-DYNAMIC SCHEMA CREATION EXAMPLES:
-Instead of forcing data into predetermined columns, discover what's available:
-- If content has rich medical data: Create columns for symptoms, measurements, conditions, treatments, outcomes
-- If content has financial data: Create columns for metrics, ratios, trends, comparisons, forecasts
-- If content has research data: Create columns for variables, results, correlations, statistical measures
-- If content has case studies: Create columns for scenarios, parameters, outcomes, insights
-- If content has time-series data: Create columns for dates, values, changes, trends, patterns
-
-COMPREHENSIVE EXTRACTION STRATEGIES:
-- Analyze content structure first, then design optimal schema
-- Extract from ALL data formats: tables, lists, paragraphs, research sections, statistical data
-- Create meaningful relationships between different data points
-- Use contextual information to enrich the dataset
-- Extract both explicit data and derived insights
-- Utilize reference ranges, normal values, and comparative data
-- Include metadata and contextual information that adds value
-
-CONTENT-DRIVEN DATA GENERATION:
-Your goal is to create the most comprehensive and valuable dataset possible from the available content:
-
-FOR SYNTHETIC DATA REQUESTS:
-- Analyze all patterns, ranges, correlations, and relationships in the content
-- Use medical/scientific knowledge from the content to generate realistic variations
-- Create data points that represent different scenarios, conditions, and cases mentioned
-- Utilize statistical distributions, normal ranges, and pathological ranges found in content
-- Generate realistic combinations of parameters based on content relationships
-
-FOR REAL DATA EXTRACTION:
-- Extract every piece of valuable data from the content
-- Don't limit extraction to obvious data - look for derived insights and contextual information
-- Include comparative data, reference values, and statistical measures
-- Extract data from research findings, case studies, and examples
-- Capture relationships and correlations mentioned in the content
-
-SCHEMA OPTIMIZATION:
-- Let the content dictate the optimal column structure
-- Create columns that maximize the value and comprehensiveness of the dataset
-- Include both quantitative and qualitative data that adds insight
-- Design schema that captures the full richness of the available content
-
-MANDATORY OUTPUT FORMAT - EXTRACT REAL DATA:
-- generatedJsonString: '[{"column1":value1,"column2":value2,"column3":value3},{"column1":value4,"column2":value5,"column3":value6}]'
-- detectedSchema: [{"name":"column1","type":"number"},{"name":"column2","type":"string"},{"name":"column3","type":"number"}]
-- feedback: "Extracted real data from web content including relevant measurements, statistics, and domain-specific findings."
-
-CRITICAL REQUIREMENTS:
-- JSON keys MUST EXACTLY MATCH schema "name" fields
-- Extract REAL NUMBERS and VALUES from content based on the user's domain
-- Create {{numRows}} rows with ACTUAL DATA VALUES
-- Use domain-appropriate ranges and research data from the content
-- Adapt column names and data types to match the content and user request
-
-Now analyze the content comprehensively and create the most valuable dataset possible using dynamic schema discovery.`,
-    });
-
-    promptCache.set(cacheKey, prompt);
-    return prompt;
+    } catch (error: any) {
+        console.error('[Query Refinement] OpenRouter failed:', error.message);
+        // Fallback to simple keyword extraction
+        return {
+            searchQuery: extractSimpleKeywords(userPrompt),
+            reasoning: 'Used fallback keyword extraction due to AI service error'
+        };
+    }
 }
+
+
+// Simple URL filtering function (replaces AI prompt)
+function filterBestUrls(query: string, searchResults: any[]): string[] {
+    // Simple filtering logic based on URL patterns and titles
+    const priorityDomains = [
+        'gov', 'edu', 'org', // Official sources
+        'bloomberg.com', 'reuters.com', 'yahoo.com', 'google.com', // Financial/News
+        'indeed.com', 'linkedin.com', 'glassdoor.com', 'naukri.com', // Jobs
+        'amazon.com', 'flipkart.com', 'myntra.com', // E-commerce
+        'wikipedia.org', 'investopedia.com' // Reference
+    ];
+
+    const filteredResults = searchResults
+        .filter(result => {
+            const url = result.link || result.url || '';
+            const title = result.title || '';
+
+            // Skip social media and forums
+            if (url.includes('reddit.com') || url.includes('facebook.com') ||
+                url.includes('twitter.com') || url.includes('instagram.com')) {
+                return false;
+            }
+
+            // Prefer priority domains
+            const hasPriorityDomain = priorityDomains.some(domain => url.includes(domain));
+
+            // Check if title/URL seems relevant to query
+            const queryWords = query.toLowerCase().split(' ');
+            const relevantWords = queryWords.filter(word =>
+                title.toLowerCase().includes(word) || url.toLowerCase().includes(word)
+            );
+
+            return hasPriorityDomain || relevantWords.length >= 2;
+        })
+        .slice(0, 5) // Take top 5
+        .map(result => result.link || result.url);
+
+    return filteredResults;
+}
+
+// Note: Old AI model constants removed - now using OpenRouter DeepSeek
+
+// Note: Old prompt cache and createStructurePrompt function removed - now using OpenRouter DeepSeek
 
 // Helper function to clean AI response from markdown code blocks
 function cleanAIResponse(response: string): string {
@@ -496,11 +441,18 @@ function cleanAIResponse(response: string): string {
 
 // Simple keyword extraction fallback (no AI needed)
 function extractSimpleKeywords(userPrompt: string): string {
-    // Remove common instruction words
+    // Remove common instruction words but keep important specifics
     const instructionWords = [
-        'generate', 'create', 'provide', 'give me', 'i need', 'find', 'get', 'make', 'build',
+        'generate', 'create', 'provide', 'give me', 'i need', 'find', 'get', 'make', 'build', 'retrieve',
         'data', 'dataset', 'table', 'list', 'information', 'details', 'for', 'with', 'of', 'the',
         'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'from', 'by', 'as', 'is', 'are'
+    ];
+
+    // Important words to prioritize (locations, qualifiers, domains)
+    const importantWords = [
+        'bangalore', 'mumbai', 'delhi', 'chennai', 'hyderabad', 'pune', 'kolkata', 'india',
+        'latest', 'recent', 'current', 'new', 'jobs', 'job', 'posting', 'postings',
+        'salary', 'price', 'cost', 'stock', 'market', 'nse', 'bse', 'company', 'companies'
     ];
 
     // Split into words and filter
@@ -509,8 +461,14 @@ function extractSimpleKeywords(userPrompt: string): string {
         .split(/\s+/)
         .filter(word => word.length > 2 && !instructionWords.includes(word));
 
-    // Take first 3-4 most important words
-    return words.slice(0, 4).join(' ');
+    // Prioritize important words first, then take others
+    const priorityWords = words.filter(word => importantWords.includes(word));
+    const otherWords = words.filter(word => !importantWords.includes(word));
+
+    // Combine priority words with other words, limit to 6 words max
+    const finalWords = [...priorityWords, ...otherWords].slice(0, 6);
+
+    return finalWords.join(' ');
 }
 
 // Helper function to generate simple fallback search queries
@@ -563,148 +521,82 @@ function generateFallbackQueries(optimizedQuery: string, originalPrompt: string)
     return [...new Set(fallbackQueries)].filter(q => q && q.trim().length > 5);
 }
 
-// Helper function to try AI models with fallback - Now uses Anthropic Claude for large content
+// Helper function to process content with OpenRouter DeepSeek
 async function tryAIModelsWithFallback(
     userPrompt: string,
     numRows: number,
     scrapedContent: string,
     logger: any
 ): Promise<any> {
-    // Step 1: Try Gemini models first (as requested)
-    const modelsToTry = [LARGE_CONTENT_MODEL, ...FALLBACK_MODELS.filter(m => m !== LARGE_CONTENT_MODEL)];
-
-    for (let i = 0; i < modelsToTry.length; i++) {
-        const model = modelsToTry[i];
-        try {
-            logger.log(`🤖 Trying Gemini model: ${model} (attempt ${i + 1}/${modelsToTry.length})`);
-
-            const prompt = createStructurePrompt(model);
-            const result = await prompt({
-                userPrompt,
-                numRows,
-                scrapedContent,
-            });
-
-            logger.success(`✅ Gemini model ${model} succeeded`);
-            return result;
-        } catch (error: any) {
-            logger.error(`⚠️ Gemini model ${model} failed: ${error.message}`);
-            console.error(`[WebFlow] Gemini ${model} error:`, error);
-        }
-    }
-
-    // Step 2: Fallback to Anthropic Claude if all Gemini models fail
+    // Use OpenRouter DeepSeek as the primary and only AI model
     try {
-        logger.log(`🚀 Trying Anthropic Claude as fallback for large content processing (${scrapedContent.length} chars)...`);
+        logger.log(`🤖 Processing with OpenRouter DeepSeek Chat V3 (${scrapedContent.length} chars)...`);
 
-        const anthropicService = createAnthropicService();
-        if (anthropicService) {
-            const result = await anthropicService.processScrapedContent({
-                userPrompt,
-                numRows,
-                scrapedContent
-            });
-
-            // Convert Anthropic response to expected format
-            console.log(`[WebFlow] Anthropic result:`, JSON.stringify(result, null, 2));
-
-            let parsedData;
-            try {
-                parsedData = JSON.parse(result.jsonString);
-                console.log(`[WebFlow] Parsed data from Anthropic:`, parsedData);
-            } catch (parseError) {
-                console.error(`[WebFlow] Failed to parse Anthropic jsonString:`, parseError);
-                console.error(`[WebFlow] Raw jsonString:`, result.jsonString);
-                throw new Error(`Anthropic returned invalid JSON: ${parseError.message}`);
-            }
-
-            if (!Array.isArray(parsedData) || parsedData.length === 0) {
-                console.error(`[WebFlow] Anthropic returned invalid data structure:`, parsedData);
-                throw new Error('Anthropic did not return a valid array of data');
-            }
-
-            const convertedResult = {
-                output: {
-                    jsonString: result.jsonString,
-                    detectedSchema: result.detectedSchema,
-                    feedback: result.feedback
-                }
-            };
-
-            console.log(`[WebFlow] Converted result for return:`, JSON.stringify(convertedResult, null, 2));
-            logger.success(`✅ Anthropic Claude succeeded! Generated ${parsedData.length} rows with ${result.detectedSchema.length} columns`);
-            return convertedResult;
-        } else {
-            logger.log(`⚠️ Anthropic not available, no more fallback options`);
+        const openRouterService = createOpenRouterService();
+        if (!openRouterService) {
+            throw new Error('OpenRouter service not available. Please check your OPENROUTER_API_KEY environment variable.');
         }
+
+        const result = await openRouterService.processScrapedContent({
+            userPrompt,
+            numRows,
+            scrapedContent
+        });
+
+        // Convert OpenRouter response to expected format
+        console.log(`[WebFlow] OpenRouter result:`, JSON.stringify(result, null, 2));
+
+        let parsedData;
+        try {
+            parsedData = JSON.parse(result.jsonString);
+            console.log(`[WebFlow] Parsed data from OpenRouter:`, parsedData);
+        } catch (parseError) {
+            console.error(`[WebFlow] Failed to parse OpenRouter jsonString:`, parseError);
+            console.error(`[WebFlow] Raw jsonString:`, result.jsonString);
+            throw new Error(`OpenRouter returned invalid JSON: ${parseError.message}`);
+        }
+
+        if (!Array.isArray(parsedData) || parsedData.length === 0) {
+            console.error(`[WebFlow] OpenRouter returned invalid data structure:`, parsedData);
+            throw new Error('OpenRouter did not return a valid array of data');
+        }
+
+        const convertedResult = {
+            output: {
+                jsonString: result.jsonString,
+                detectedSchema: result.detectedSchema,
+                feedback: result.feedback
+            }
+        };
+
+        console.log(`[WebFlow] Converted result for return:`, JSON.stringify(convertedResult, null, 2));
+        logger.success(`✅ OpenRouter DeepSeek succeeded! Generated ${parsedData.length} rows with ${result.detectedSchema.length} columns`);
+        return convertedResult;
+
     } catch (error: any) {
-        logger.error(`⚠️ Anthropic fallback also failed: ${error.message}`);
+        logger.error(`❌ OpenRouter processing failed: ${error.message}`);
+        console.error(`[WebFlow] OpenRouter error:`, error);
 
-        // Check if it's a credit/quota issue
-        if (error.message?.includes('credit balance') || error.message?.includes('quota')) {
-            logger.error(`💳 Anthropic API credits exhausted. Please add credits to your Anthropic account.`);
+        // Check for common OpenRouter issues
+        if (error.message?.includes('API key') || error.message?.includes('authentication')) {
+            logger.error(`🔑 OpenRouter API key issue. Please check your OPENROUTER_API_KEY environment variable.`);
+        } else if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
+            logger.error(`🚦 OpenRouter rate limit reached. Please wait or upgrade your plan.`);
+        } else if (error.message?.includes('model') || error.message?.includes('deepseek')) {
+            logger.error(`🤖 DeepSeek model issue. The model might be temporarily unavailable.`);
         }
-    }
 
-    // If we reach here, all AI models have failed
-    throw new Error('All AI models failed to process the content. Please try again or check your API configurations.');
+        // Throw the error to trigger fallback data extraction
+        throw new Error(`OpenRouter DeepSeek processing failed: ${error.message}`);
+    }
 }
 
-const structureScrapedDataPrompt = ai.definePrompt({
-    name: 'structureScrapedDataPrompt',
-    model: LARGE_CONTENT_MODEL,
-    input: { schema: z.object({
-        userPrompt: z.string(),
-        numRows: z.number(),
-        scrapedContent: z.string(),
-    }) },
-    output: { schema: LLMGenerateDataOutputSchema },
-    prompt: `You are a data extraction expert. You have access to a structured markdown file containing web-scraped content.
-
-User Request: "{{userPrompt}}"
-Generate exactly {{numRows}} rows of data.
-
-The content has been organized into a structured markdown file with:
-- Table of contents showing all sources
-- Each source clearly labeled with URL and content type
-- Detected content structures (tables, lists, etc.)
-- Full content from each source
-
-INSTRUCTIONS:
-1. Analyze the structured content to identify relevant data sections
-2. Look for tables, lists, or structured data that matches the user's request
-3. Extract exactly {{numRows}} rows from the most relevant sections
-4. Create consistent column names and data types
-5. Prioritize tabular data if available
-6. If multiple sources have similar data, combine them intelligently
-
-STRUCTURED CONTENT:
-{{scrapedContent}}
-
-REQUIRED OUTPUT FORMAT:
-- generatedJsonString: Valid JSON array like '[{"col1":"value1","col2":"value2"}]'
-- detectedSchema: Column definitions like [{"name":"col1","type":"String"}]
-- feedback: Description of which sources and sections were used
-
-Extract {{numRows}} rows now.
-`,
-});
+// Old AI prompt removed - now using OpenRouter DeepSeek
 
 // Request deduplication cache to prevent multiple concurrent identical requests
 const activeRequests = new Map<string, Promise<any>>();
 
-const generateFromWebFlow = ai.defineFlow(
-  {
-    name: 'generateFromWebFlow',
-    inputSchema: GenerateFromWebInputSchema,
-    outputSchema: z.object({
-        generatedRows: z.array(z.record(z.string(), z.any())),
-        generatedCsv: z.string().optional(),
-        detectedSchema: z.array(ColumnSchema),
-        feedback: z.string().optional(),
-    }),
-  },
-  async (input) => {
+async function generateFromWebFlow(input: GenerateFromWebInput): Promise<GenerateFromWebOutput> {
     // Request deduplication to prevent multiple concurrent identical requests
     // Add timestamp to force new request for testing fixes
     const requestKey = `${input.prompt.trim()}-${input.numRows || 10}-${Date.now()}`;
@@ -728,7 +620,7 @@ const generateFromWebFlow = ai.defineFlow(
 
     console.log(`[WebFlow] Starting web generation with prompt: "${input.prompt.substring(0, 100)}..."`);
     console.log(`[WebFlow] Target rows: ${input.numRows}`);
-    console.log(`[WebFlow] Available AI models: ${[LARGE_CONTENT_MODEL, ...FALLBACK_MODELS].join(', ')}`);
+    console.log(`[WebFlow] AI Model: OpenRouter DeepSeek Chat V3 (Free)`);
     console.log(`[WebFlow] Process started at: ${new Date().toISOString()}`);
 
     // Store this request in cache to prevent duplicates
@@ -766,36 +658,46 @@ const generateFromWebFlow = ai.defineFlow(
     log("🚀 Starting web-based data generation...");
     logProgress('Initialization', 1, 7, 'Setting up web scraping pipeline');
 
-    // 1. Refine the search query for better web search results
+    // 1. Use pre-refined search query or refine the search query for better web search results
     let optimizedQuery: string = input.prompt; // Default fallback
-    try {
-        logProgress('Query Optimization', 2, 7, 'AI is refining your search query for better results');
-        log(`🔍 Refining search query from: "${input.prompt}"...`);
 
-        const { output: queryRefinement } = await refineSearchQueryPrompt({ userPrompt: input.prompt });
+    if (input.refinedSearchQuery && input.refinedSearchQuery.trim()) {
+        // Use the pre-refined search query from the UI
+        optimizedQuery = input.refinedSearchQuery.trim();
+        logSuccess(`✅ Using pre-refined search query: "${optimizedQuery}"`);
+        feedbackLog += `Pre-refined search query used: "${optimizedQuery}"\n`;
+        logProgress('Query Ready', 2, 7, 'Using refined search query from UI');
+    } else {
+        // Refine the query using AI
+        try {
+            logProgress('Query Optimization', 2, 7, 'AI is refining your search query for better results');
+            log(`🔍 Refining search query from: "${input.prompt}"...`);
 
-        // Validate the response
-        if (queryRefinement && queryRefinement.searchQuery && queryRefinement.searchQuery.trim()) {
-            optimizedQuery = queryRefinement.searchQuery.trim();
-            logSuccess(`✅ Query optimized by AI: "${optimizedQuery}"`);
-            feedbackLog += `AI optimized search query: "${optimizedQuery}"\n`;
-            feedbackLog += `Reasoning: ${queryRefinement.reasoning || 'No reasoning provided'}\n`;
-        } else {
-            throw new Error("Query refinement returned empty or invalid result");
-        }
-    } catch (error: any) {
-        logError(`❌ AI query refinement failed: ${error.message}. Using simple keyword extraction.`);
+            const queryRefinement = await refineSearchQuery(input.prompt);
 
-        // Fallback to simple keyword extraction
-        optimizedQuery = extractSimpleKeywords(input.prompt);
+            // Validate the response
+            if (queryRefinement && queryRefinement.searchQuery && queryRefinement.searchQuery.trim()) {
+                optimizedQuery = queryRefinement.searchQuery.trim();
+                logSuccess(`✅ Query optimized by OpenRouter DeepSeek: "${optimizedQuery}"`);
+                feedbackLog += `OpenRouter optimized search query: "${optimizedQuery}"\n`;
+                feedbackLog += `Reasoning: ${queryRefinement.reasoning || 'No reasoning provided'}\n`;
+            } else {
+                throw new Error("Query refinement returned empty or invalid result");
+            }
+        } catch (error: any) {
+            logError(`❌ OpenRouter query refinement failed: ${error.message}. Using simple keyword extraction.`);
 
-        if (optimizedQuery && optimizedQuery.trim()) {
-            logSuccess(`✅ Query optimized by keyword extraction: "${optimizedQuery}"`);
-            feedbackLog += `Simple keyword extraction used: "${optimizedQuery}"\n`;
-        } else {
-            logError(`❌ Keyword extraction also failed. Using original prompt.`);
-            optimizedQuery = input.prompt;
-            feedbackLog += `Both AI and keyword extraction failed, using original prompt: ${error.message}\n`;
+            // Fallback to simple keyword extraction
+            optimizedQuery = extractSimpleKeywords(input.prompt);
+
+            if (optimizedQuery && optimizedQuery.trim()) {
+                logSuccess(`✅ Query optimized by keyword extraction: "${optimizedQuery}"`);
+                feedbackLog += `Simple keyword extraction used: "${optimizedQuery}"\n`;
+            } else {
+                logError(`❌ Keyword extraction also failed. Using original prompt.`);
+                optimizedQuery = input.prompt;
+                feedbackLog += `Both AI and keyword extraction failed, using original prompt: ${error.message}\n`;
+            }
         }
     }
 
@@ -851,10 +753,9 @@ const generateFromWebFlow = ai.defineFlow(
         logProgress('Link Filtering', 4, 7, 'AI is selecting the best sources for your query');
         log("🤖 AI is filtering the best sources...");
 
-        const filterResponse = await linkFilterPrompt({ query: input.prompt, searchResults });
-        filteredUrls = filterResponse.output?.bestUrls || [];
+        filteredUrls = filterBestUrls(input.prompt, searchResults);
         if (filteredUrls.length === 0) {
-            throw new Error("AI could not select any suitable URLs from search results.");
+            throw new Error("Could not select any suitable URLs from search results.");
         }
 
         logSuccess(`✅ AI selected ${filteredUrls.length} high-quality URLs to scrape`);
@@ -1016,35 +917,56 @@ const generateFromWebFlow = ai.defineFlow(
         // Read the structured file content
         const structuredContent = await FileManagerService.readStructuredFile(structuredFilePath);
         log(`📖 Processing structured file: ${structuredContent.length.toLocaleString()} characters`);
+
+        // Send scraped content to frontend for transparency
+        if (logger && typeof logger.info === 'function') {
+            try {
+                // Send a special message type for scraped content
+                logger.info(`SCRAPED_CONTENT:${structuredContent}`);
+            } catch (error) {
+                console.warn('Failed to send scraped content to frontend:', error);
+            }
+        }
         feedbackLog += `Structured file content: ${structuredContent.length} characters\n`;
 
         const effectiveNumRows = input.numRows || 50;
         log(`🎯 Requesting ${effectiveNumRows} rows of structured data`);
         feedbackLog += `Requesting ${effectiveNumRows} rows of data from structured sources\n`;
 
-        console.log(`[WebFlow] 🧠 ANTHROPIC-FIRST CONTENT ANALYSIS ACTIVATED`);
+        console.log(`[WebFlow] 🧠 OPENROUTER DEEPSEEK CONTENT ANALYSIS ACTIVATED`);
         console.log(`[WebFlow] Calling AI with structured file: "${structuredFilePath}"`);
         console.log(`[WebFlow] File size: ${structuredContent.length} characters, requesting ${effectiveNumRows} rows`);
-        console.log(`[WebFlow] Primary: Anthropic Claude, Fallback: ${LARGE_CONTENT_MODEL}`);
+        console.log(`[WebFlow] Primary: OpenRouter DeepSeek Chat V3 (Free)`);
 
-        // Let AI models handle full content - no truncation limits
+        // Handle large content by chunking if necessary
+        const MAX_CONTENT_SIZE = 80000; // Reduced from unlimited to prevent model overload
         let processedContent = structuredContent;
-        log(`📄 Processing full content: ${structuredContent.length} characters`);
-        feedbackLog += `Processing full content: ${structuredContent.length} characters for comprehensive data extraction\n`;
+
+        if (structuredContent.length > MAX_CONTENT_SIZE) {
+            log(`⚠️ Large content detected (${structuredContent.length} chars), chunking for better processing...`);
+            // Take the first portion and last portion to maintain context
+            const firstPart = structuredContent.substring(0, MAX_CONTENT_SIZE * 0.6);
+            const lastPart = structuredContent.substring(structuredContent.length - MAX_CONTENT_SIZE * 0.4);
+            processedContent = firstPart + "\n\n[... content truncated for processing ...]\n\n" + lastPart;
+            feedbackLog += `Large content chunked: ${structuredContent.length} → ${processedContent.length} characters\n`;
+        }
+
+        log(`📄 Processing content: ${processedContent.length} characters`);
+        feedbackLog += `Processing content: ${processedContent.length} characters for comprehensive data extraction\n`;
 
         let llmOutput;
         let aiProcessingSucceeded = false;
 
         try {
-            // Try Anthropic Claude first, then fallback to Gemini models
-            log("🔄 Processing large content with Anthropic Claude (optimized for large context)...");
+            // Use OpenRouter DeepSeek for all AI processing
+            log("🔄 Processing large content with OpenRouter DeepSeek Chat V3 (optimized for large context)...");
             const result = await tryAIModelsWithFallback(
                 input.prompt,
                 effectiveNumRows,
                 processedContent,
                 { log, success: logSuccess, error: logError }
             );
-            // Handle different response formats: Anthropic has result.output, Gemini has result directly
+            // Handle OpenRouter response format
             llmOutput = result.output || result;
             aiProcessingSucceeded = true;
             logSuccess(`✅ AI processing completed successfully`);
@@ -1055,8 +977,8 @@ const generateFromWebFlow = ai.defineFlow(
             console.log(`[WebFlow] CRITICAL DEBUG - result.output structure:`, JSON.stringify(result.output, null, 2));
             console.log(`[WebFlow] CRITICAL DEBUG - llmOutput structure:`, JSON.stringify(llmOutput, null, 2));
         } catch (aiError: any) {
-            console.error(`[WebFlow] All AI models failed:`, aiError);
-            logError(`❌ AI processing failed: ${aiError.message}`);
+            console.error(`[WebFlow] OpenRouter DeepSeek failed:`, aiError);
+            logError(`❌ OpenRouter processing failed: ${aiError.message}`);
             log("🔄 Falling back to pattern matching extraction...");
             // Don't throw here - let it fall through to fallback extraction
         }
@@ -1084,7 +1006,7 @@ const generateFromWebFlow = ai.defineFlow(
                 }
             }
 
-            // Handle both Anthropic format (direct properties) and Gemini format (generatedJsonString)
+            // Extract response data from OpenRouter format
             jsonString = llmOutput?.jsonString || llmOutput?.output?.jsonString || llmOutput?.generatedJsonString;
             detectedSchema = llmOutput?.detectedSchema || llmOutput?.output?.detectedSchema;
             feedback = llmOutput?.feedback || llmOutput?.output?.feedback;
@@ -1237,7 +1159,7 @@ const generateFromWebFlow = ai.defineFlow(
                     logSuccess(`✅ Fallback extraction successful: ${parsedRows.length} rows generated`);
                     feedbackLog += `Fallback extraction successful: ${parsedRows.length} rows\n`;
                     feedbackLog += fallbackResult.feedback + '\n';
-                    feedbackLog += `Note: For better results, configure OpenAI or Anthropic API keys.\n`;
+                    feedbackLog += `Note: For better results, ensure OpenRouter API key is properly configured.\n`;
 
                     return {
                         generatedRows: parsedRows,
@@ -1252,8 +1174,8 @@ const generateFromWebFlow = ai.defineFlow(
             }
 
             feedbackLog += `AI quota exceeded during data structuring. Please try again later or configure alternative AI models.\n`;
-            feedbackLog += `Available models: OpenAI GPT-4, Anthropic Claude, Google Gemini\n`;
-            feedbackLog += `Current model: ${LARGE_CONTENT_MODEL}\n`;
+            feedbackLog += `Available models: OpenRouter DeepSeek Chat V3\n`;
+            feedbackLog += `Current model: deepseek/deepseek-chat-v3-0324:free\n`;
             feedbackLog += `Scraped content is available in: ${structuredFilePath}\n`;
         } else {
             feedbackLog += `Error during final data structuring: ${error.message}\n`;
@@ -1294,8 +1216,7 @@ const generateFromWebFlow = ai.defineFlow(
         return { generatedRows: [], detectedSchema: [], feedback: feedbackLog };
     }
     } // End of processRequest function
-  }
-);
+}
 
 // Clean up old cache entries periodically (every 5 minutes)
 setInterval(() => {

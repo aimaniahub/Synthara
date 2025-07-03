@@ -3,7 +3,7 @@ import { generateFromWeb } from '@/ai/flows/generate-from-web-flow';
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { prompt, numRows, useWebData } = body;
+  const { prompt, numRows, useWebData, refinedSearchQuery } = body;
 
   // Create a readable stream for Server-Sent Events
   const stream = new ReadableStream({
@@ -12,26 +12,38 @@ export async function POST(request: NextRequest) {
       
       // Function to send log messages to the frontend
       const sendLog = (message: string, type: 'info' | 'success' | 'error' | 'progress' = 'info') => {
-        const data = JSON.stringify({ 
-          message, 
-          type, 
-          timestamp: new Date().toISOString() 
-        });
-        controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+        try {
+          if (controller.desiredSize !== null) {
+            const data = JSON.stringify({
+              message,
+              type,
+              timestamp: new Date().toISOString()
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          }
+        } catch (error) {
+          console.error('[StreamAPI] Controller error:', error);
+        }
       };
 
       // Function to send progress updates
       const sendProgress = (step: string, current: number, total: number, details?: string) => {
-        const data = JSON.stringify({
-          type: 'progress',
-          step,
-          current,
-          total,
-          percentage: Math.round((current / total) * 100),
-          details,
-          timestamp: new Date().toISOString()
-        });
-        controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+        try {
+          if (controller.desiredSize !== null) {
+            const data = JSON.stringify({
+              type: 'progress',
+              step,
+              current,
+              total,
+              percentage: Math.round((current / total) * 100),
+              details,
+              timestamp: new Date().toISOString()
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+          }
+        } catch (error) {
+          console.error('[StreamAPI] Progress controller error:', error);
+        }
       };
 
       // Start the generation process
@@ -48,6 +60,21 @@ export async function POST(request: NextRequest) {
               log: (message: string) => sendLog(`📝 ${message}`, 'info'),
               success: (message: string) => sendLog(`✅ ${message}`, 'success'),
               error: (message: string) => sendLog(`❌ ${message}`, 'error'),
+              info: (message: string) => {
+                // Handle special scraped content message
+                if (message.startsWith('SCRAPED_CONTENT:')) {
+                  const content = message.substring('SCRAPED_CONTENT:'.length);
+                  // Send scraped content as a special message type
+                  const scrapedContentData = JSON.stringify({
+                    type: 'scraped_content',
+                    content: content,
+                    timestamp: new Date().toISOString()
+                  });
+                  writer.write(`data: ${scrapedContentData}\n\n`);
+                } else {
+                  sendLog(`ℹ️ ${message}`, 'info');
+                }
+              },
               progress: sendProgress
             };
 
@@ -55,7 +82,8 @@ export async function POST(request: NextRequest) {
             const result = await generateFromWeb({
               prompt,
               numRows: numRows || 50,
-              logger
+              logger,
+              refinedSearchQuery: refinedSearchQuery || prompt // Use refined query if available
             });
 
             // Add a small delay to ensure all processing is complete
@@ -99,7 +127,9 @@ export async function POST(request: NextRequest) {
                 result: result,
                 timestamp: new Date().toISOString()
               });
-              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              if (controller.desiredSize !== null) {
+                controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              }
             } else {
               // Only show "no data" error if we're sure the process is complete
               sendLog('ℹ️ Processing in progress, please wait for results...', 'info');
@@ -112,7 +142,9 @@ export async function POST(request: NextRequest) {
                 result: result || {},
                 timestamp: new Date().toISOString()
               });
-              controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
+              if (controller.desiredSize !== null) {
+                controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
+              }
             }
           } else {
             sendLog('🤖 AI generation mode (no web scraping)', 'info');
@@ -121,15 +153,21 @@ export async function POST(request: NextRequest) {
 
         } catch (error: any) {
           sendLog(`💥 Error: ${error.message}`, 'error');
-          const errorData = JSON.stringify({
-            type: 'error',
-            error: error.message,
-            timestamp: new Date().toISOString()
-          });
-          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          try {
+            if (controller.desiredSize !== null) {
+              const errorData = JSON.stringify({
+                type: 'error',
+                error: error.message,
+                timestamp: new Date().toISOString()
+              });
+              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+            }
+          } catch (controllerError) {
+            console.error('[StreamAPI] Error sending error message:', controllerError);
+          }
         } finally {
           try {
-            if (!controller.desiredSize === null) {
+            if (controller.desiredSize !== null) {
               controller.close();
             }
           } catch (closeError) {
