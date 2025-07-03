@@ -8,7 +8,7 @@
  * - RecommendModelOutput - The return type for the recommendModel function.
  */
 
-import {ai, z} from '@/ai/genkit';
+import { z } from 'zod';
 
 const RecommendModelInputSchema = z.object({
   prompt: z.string().describe('The natural language prompt for data generation.'),
@@ -25,29 +25,37 @@ export async function recommendModel(input: RecommendModelInput): Promise<Recomm
   return recommendModelFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'recommendModelPrompt',
-  input: {schema: RecommendModelInputSchema},
-  output: {schema: RecommendModelOutputSchema},
-  prompt: `You are an expert in recommending pre-trained models for data generation.
+import { SimpleAI } from '@/ai/simple-ai';
 
-  Given the following natural language prompt for data generation, recommend the best pre-trained model to use.
-  Explain your reasoning for the recommendation.
+async function recommendModelFlow(input: RecommendModelInput): Promise<RecommendModelOutput> {
+  const promptText = `You are an expert in recommending pre-trained models for data generation.
 
-  Prompt: {{{prompt}}}
+Given the following natural language prompt for data generation, recommend the best pre-trained model to use.
+Explain your reasoning for the recommendation.
 
-  Your recommendation should be in JSON format.
-`,
-});
+Prompt: ${input.prompt}
 
-const recommendModelFlow = ai.defineFlow(
-  {
-    name: 'recommendModelFlow',
-    inputSchema: RecommendModelInputSchema,
-    outputSchema: RecommendModelOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+Your recommendation should be in JSON format with the following structure:
+{
+  "model": "recommended model name",
+  "reason": "explanation for the recommendation"
+}`;
+
+  try {
+    const result = await SimpleAI.generateWithSchema<RecommendModelOutput>({
+      prompt: promptText,
+      schema: RecommendModelOutputSchema,
+      model: 'deepseek/deepseek-chat-v3-0324:free',
+      temperature: 0.7
+    });
+
+    return result;
+  } catch (error) {
+    console.error('[RecommendModel] Error:', error);
+    // Return a fallback recommendation
+    return {
+      model: 'OpenRouter DeepSeek Chat V3',
+      reason: 'Default recommendation due to processing error. DeepSeek Chat V3 is a reliable general-purpose model for data generation tasks.'
+    };
   }
-);
+}

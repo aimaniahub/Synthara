@@ -10,7 +10,8 @@
  * - Column - The type definition for a column schema.
  */
 
-import {ai, z} from '@/ai/genkit';
+import { z } from 'zod';
+import { SimpleAI } from '@/ai/simple-ai';
 
 // Define and export types separately to avoid exporting non-function objects from a 'use server' file.
 export interface Column {
@@ -77,25 +78,24 @@ export async function generateData(input: GenerateDataInput): Promise<GenerateDa
   return generateDataFlow(input);
 }
 
-const generationPrompt = ai.definePrompt({
-  name: 'generateSyntheticDataPrompt',
-  model: 'googleai/gemini-1.5-flash-latest', 
-  input: {schema: GenerateDataInputSchema }, 
-  output: {schema: LLMGenerateDataOutputSchema},
-  prompt: `You are an expert data generation assistant. Based on the user's prompt, generate synthetic data using your internal knowledge.
-The output MUST be a JSON object adhering to the output schema.
-The 'generatedJsonString' field MUST be a valid JSON string representing an array of JSON objects, where each object is a row of data.
-The 'detectedSchema' field should be an array describing each column: its name and inferred data type (e.g., String, Integer, Date, Boolean, Float). Infer this from the data you generate for 'generatedJsonString'.
+async function generateSyntheticData(input: GenerateDataInput): Promise<any> {
+  const promptText = `You are an expert data generation assistant. Based on the user's prompt, generate synthetic data using your internal knowledge.
+The output MUST be a JSON object with the following structure:
+{
+  "generatedJsonString": "a valid JSON string representing an array of JSON objects, where each object is a row of data",
+  "detectedSchema": "an array describing each column: its name and inferred data type (e.g., String, Integer, Date, Boolean, Float)",
+  "feedback": "optional feedback about the generation process"
+}
 
-User Prompt: {{{prompt}}}
-Number of rows to generate: {{numRows}}
+User Prompt: ${input.prompt}
+Number of rows to generate: ${input.numRows}
 
 Think step-by-step:
-1.  Analyze the user prompt: "{{prompt}}".
-2.  Define the columns and their types based on the user's prompt. This will become your 'detectedSchema'.
-3.  Generate the data for {{numRows}} rows according to these columns.
-4.  Format this generated data as a single, valid JSON string for the 'generatedJsonString' field.
-5.  Provide 'feedback' if there are any issues, like capping the number of rows.
+1. Analyze the user prompt: "${input.prompt}".
+2. Define the columns and their types based on the user's prompt. This will become your 'detectedSchema'.
+3. Generate the data for ${input.numRows} rows according to these columns.
+4. Format this generated data as a single, valid JSON string for the 'generatedJsonString' field.
+5. Provide 'feedback' if there are any issues, like capping the number of rows.
 
 For example, if the prompt is "customer data with name, email, and age", the 'detectedSchema' might be:
 [ { "name": "Name", "type": "String" }, { "name": "Email", "type": "String" }, { "name": "Age", "type": "Integer" } ]
@@ -104,21 +104,28 @@ And 'generatedJsonString' would be a string like:
 
 Ensure dates are in YYYY-MM-DD format if generated.
 Limit generated rows to a maximum of 100, even if numRows is higher, and mention this in feedback if applicable.
-If the prompt implies a very large number of columns or very complex data, try to simplify and note this in feedback.
-`,
-});
+If the prompt implies a very large number of columns or very complex data, try to simplify and note this in feedback.`;
 
-const generateDataFlow = ai.defineFlow(
-  {
-    name: 'generateDataFlow', 
-    inputSchema: GenerateDataInputSchema,
-    outputSchema: GenerateDataOutputSchema, 
-  },
-  async (input) => {
+  try {
+    const result = await SimpleAI.generateWithSchema({
+      prompt: promptText,
+      schema: LLMGenerateDataOutputSchema,
+      model: 'deepseek/deepseek-chat-v3-0324:free',
+      temperature: 0.7
+    });
+
+    return { output: result };
+  } catch (error) {
+    console.error('[GenerateData] Error:', error);
+    return { output: null };
+  }
+}
+
+async function generateDataFlow(input: GenerateDataInput): Promise<GenerateDataOutput> {
     const effectiveNumRows = Math.min(input.numRows || 50, 100);
     let baseFeedback = input.numRows > 100 ? "Note: Number of rows capped at 100 for this direct generation. " : "";
 
-    const {output: llmOutput} = await generationPrompt({ 
+    const {output: llmOutput} = await generateSyntheticData({
       ...input,
       numRows: effectiveNumRows,
     });
@@ -178,5 +185,4 @@ const generateDataFlow = ai.defineFlow(
       detectedSchema: [],
       feedback: combinedFeedback.trim() || "Failed to generate data. The model did not return a valid output. Please try rephrasing your prompt.",
     };
-  }
-);
+}

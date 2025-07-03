@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Lightbulb, Loader2, Sparkles, TableIcon, CheckCircle, Wand2, FileSpreadsheet, Download, Save, Globe, Brain } from 'lucide-react';
+import { Lightbulb, Loader2, Sparkles, TableIcon, CheckCircle, Wand2, FileSpreadsheet, Download, Save, Globe, Brain, Search, Edit3, Eye, Shield, AlertTriangle, ThumbsUp, Info } from 'lucide-react';
 import { recommendModel, type RecommendModelInput, type RecommendModelOutput } from '@/ai/flows/recommend-model';
 import { generateData, type GenerateDataInput, type GenerateDataOutput } from '@/ai/flows/generate-data-flow';
 import { generateFromWeb, type GenerateFromWebInput, type GenerateFromWebOutput } from '@/ai/flows/generate-from-web-flow';
@@ -43,10 +43,27 @@ export function DataGenerationClient() {
   const [datasetName, setDatasetName] = useState<string>("");
   const [showLiveLogger, setShowLiveLogger] = useState(false);
   const [currentRequestData, setCurrentRequestData] = useState<any>(null);
-  const [isProcessingFinalData, setIsProcessingFinalData] = useState(false);
   const [isGenerationInProgress, setIsGenerationInProgress] = useState(false);
   const [dynamicPlaceholder, setDynamicPlaceholder] = useState<string>("Describe the type of data you want to generate...");
   const [smartDefaults, setSmartDefaults] = useState<Record<string, any>>({});
+
+  // Search query refinement states
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchQueryReasoning, setSearchQueryReasoning] = useState<string>("");
+  const [showSearchPreview, setShowSearchPreview] = useState(false);
+  const [isRefiningQuery, setIsRefiningQuery] = useState(false);
+  const [isEditingSearchQuery, setIsEditingSearchQuery] = useState(false);
+  const [editableSearchQuery, setEditableSearchQuery] = useState<string>("");
+  const [searchTargetType, setSearchTargetType] = useState<string>("general");
+  const [searchQualityScore, setSearchQualityScore] = useState<number>(7);
+
+  // Content quality and transparency states
+  const [scrapedContent, setScrapedContent] = useState<string>("");
+  const [contentQuality, setContentQuality] = useState<any>(null);
+  const [showContentPreview, setShowContentPreview] = useState(false);
+  const [dataSourceType, setDataSourceType] = useState<'real' | 'synthetic' | 'hybrid'>('synthetic');
+  const [showDataSourceWarning, setShowDataSourceWarning] = useState(false);
+  const [userChoice, setUserChoice] = useState<'auto' | 'extract' | 'generate'>('auto');
 
   // Additional ref-based guard to prevent any possibility of duplicate requests
   const isRequestActiveRef = useRef(false);
@@ -78,6 +95,84 @@ export function DataGenerationClient() {
   // Watch for prompt changes to update dynamic content
   const currentPrompt = form.watch("prompt");
 
+  // Function to validate content quality
+  const validateContentQuality = async (content: string, prompt: string, query?: string) => {
+    try {
+      const response = await fetch('/api/validate-content-quality', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scrapedContent: content,
+          userPrompt: prompt,
+          searchQuery: query
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to validate content quality');
+      }
+
+      const validation = await response.json();
+      setContentQuality(validation);
+
+      // Update data source type based on validation
+      if (validation.extractionRecommendation === 'extract') {
+        setDataSourceType('real');
+      } else if (validation.extractionRecommendation === 'hybrid') {
+        setDataSourceType('hybrid');
+      } else {
+        setDataSourceType('synthetic');
+      }
+
+      return validation;
+    } catch (error) {
+      console.error('Content quality validation failed:', error);
+      return null;
+    }
+  };
+
+  // Function to refine search query
+  const refineSearchQuery = async (prompt: string) => {
+    if (!prompt || prompt.trim().length < 13) {
+      setShowSearchPreview(false);
+      return;
+    }
+
+    setIsRefiningQuery(true);
+    try {
+      const response = await fetch('/api/refine-search-query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userPrompt: prompt }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to refine search query');
+      }
+
+      const result = await response.json();
+      setSearchQuery(result.searchQuery);
+      setSearchQueryReasoning(result.reasoning);
+      setSearchTargetType(result.targetType || 'general');
+      setSearchQualityScore(result.qualityScore || 7);
+      setEditableSearchQuery(result.searchQuery);
+      setShowSearchPreview(true);
+
+      // Show warning if quality score is low
+      if (result.qualityScore < 6) {
+        setShowDataSourceWarning(true);
+      }
+    } catch (error: any) {
+      console.error('Search query refinement failed:', error);
+      // Don't show error to user, just don't show preview
+      setShowSearchPreview(false);
+    } finally {
+      setIsRefiningQuery(false);
+    }
+  };
+
   // Update dynamic content based on user input
   useEffect(() => {
     const context: ContentContext = {
@@ -91,6 +186,17 @@ export function DataGenerationClient() {
     // Update smart defaults
     const defaults = dynamicContent.generateSmartDefaults(context);
     setSmartDefaults(defaults);
+
+    // Trigger search query refinement if prompt is long enough and web data is enabled
+    if (currentPrompt && currentPrompt.trim().length >= 13 && form.watch("useWebData")) {
+      const timeoutId = setTimeout(() => {
+        refineSearchQuery(currentPrompt);
+      }, 1000); // Debounce for 1 second
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      setShowSearchPreview(false);
+    }
 
     // Auto-update form defaults if user hasn't manually changed them
     if (currentPrompt && currentPrompt.length > 20) {
@@ -175,6 +281,17 @@ export function DataGenerationClient() {
     });
   };
 
+  // Handle scraped content from live logger
+  const handleScrapedContent = async (content: string) => {
+    setScrapedContent(content);
+
+    // Validate content quality
+    const validation = await validateContentQuality(content, currentRequestData?.prompt || '', searchQuery);
+    if (validation) {
+      console.log('Content quality validation:', validation);
+    }
+  };
+
   // Handle live logger error
   const handleLiveLoggerError = (error: string) => {
     // Only handle critical errors that actually stop the process
@@ -244,13 +361,20 @@ export function DataGenerationClient() {
     const generationMode = data.useWebData ? "Live Web Data" : "AI Knowledge";
 
     if (data.useWebData) {
-      // Use live web data generation
+      // Use live web data generation with refined search query
+      const requestDataWithSearch = {
+        ...data,
+        refinedSearchQuery: searchQuery || data.prompt // Use refined query if available, fallback to original prompt
+      };
+
       setShowLiveLogger(true);
-      setCurrentRequestData(data);
+      setCurrentRequestData(requestDataWithSearch);
 
       toast({
         title: "Starting Web Data Generation...",
-        description: "Searching the web and extracting real-time data for your request."
+        description: searchQuery
+          ? `Searching the web for: "${searchQuery}"`
+          : "Searching the web and extracting real-time data for your request."
       });
 
       return; // The live logger will handle the rest
@@ -464,6 +588,202 @@ export function DataGenerationClient() {
               )}
             </div>
 
+            {/* Search Query Preview */}
+            {form.watch("useWebData") && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Search className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-semibold text-blue-800">
+                      {showSearchPreview ? 'AI-Optimized Search Query' : 'Search Query Optimization'}
+                    </span>
+                    {/* Quality Score Badge */}
+                    {searchQualityScore && showSearchPreview && (
+                      <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        searchQualityScore >= 8 ? 'bg-green-100 text-green-800' :
+                        searchQualityScore >= 6 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        Quality: {searchQualityScore}/10
+                      </div>
+                    )}
+                  </div>
+                  {isRefiningQuery && (
+                    <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                  )}
+                </div>
+
+                {/* Show instructions when no preview is available */}
+                {!showSearchPreview && !isRefiningQuery && (
+                  <div className="text-sm text-blue-700 bg-blue-100 rounded p-3">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Brain className="h-4 w-4" />
+                      <span className="font-medium">AI Search Optimization</span>
+                    </div>
+                    <p>Enter a detailed prompt (13+ words) and our AI will optimize it for better web search results. This helps find more relevant and accurate data sources.</p>
+                  </div>
+                )}
+
+                {showSearchPreview && !isRefiningQuery && (
+                  <>
+                    <div className="space-y-2">
+                      {!isEditingSearchQuery ? (
+                        <div className="flex items-center justify-between bg-white rounded border p-3">
+                          <div className="flex items-center space-x-2 flex-1">
+                            <Globe className="h-4 w-4 text-gray-500" />
+                            <span className="text-sm font-mono text-gray-800">{searchQuery}</span>
+                            {/* Target Type Badge */}
+                            <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                              {searchTargetType.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setIsEditingSearchQuery(true);
+                              setEditableSearchQuery(searchQuery);
+                            }}
+                            className="ml-2"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Input
+                            value={editableSearchQuery}
+                            onChange={(e) => setEditableSearchQuery(e.target.value)}
+                            className="text-sm font-mono"
+                            placeholder="Edit search query..."
+                          />
+                          <div className="flex space-x-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSearchQuery(editableSearchQuery);
+                                setIsEditingSearchQuery(false);
+                              }}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Save
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditableSearchQuery(searchQuery);
+                                setIsEditingSearchQuery(false);
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {searchQueryReasoning && (
+                      <p className="text-xs text-blue-600 bg-blue-100 rounded p-2">
+                        <Brain className="h-3 w-3 inline mr-1" />
+                        {searchQueryReasoning}
+                      </p>
+                    )}
+
+                    {/* Data Source Warning */}
+                    {showDataSourceWarning && searchQualityScore < 6 && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                        <div className="flex items-start space-x-2">
+                          <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
+                          <div className="text-sm">
+                            <p className="font-medium text-yellow-800">Low Search Quality Detected</p>
+                            <p className="text-yellow-700 mt-1">
+                              This search query may not find pages with actual data. The system might generate synthetic data instead of extracting real information.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Pre-Generation Content Quality Preview */}
+            {scrapedContent && contentQuality && !generationResult && (
+              <Card className="border-l-4 border-l-orange-500 bg-orange-50/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center">
+                    <Info className="mr-2 h-5 w-5 text-orange-600" />
+                    Content Quality Assessment
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-sm font-medium">Quality Score:</span>
+                      <div className={`mt-1 px-3 py-1 rounded-full text-sm font-medium inline-block ${
+                        contentQuality.qualityScore >= 8 ? 'bg-green-100 text-green-800' :
+                        contentQuality.qualityScore >= 6 ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {contentQuality.qualityScore}/10
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium">Data Type:</span>
+                      <div className="mt-1 text-sm text-gray-600 capitalize">
+                        {contentQuality.dataType.replace('_', ' ')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-sm font-medium">Recommendation:</span>
+                    <div className={`mt-1 px-3 py-1 rounded text-sm ${
+                      contentQuality.extractionRecommendation === 'extract' ? 'bg-green-100 text-green-800' :
+                      contentQuality.extractionRecommendation === 'hybrid' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-orange-100 text-orange-800'
+                    }`}>
+                      {contentQuality.extractionRecommendation === 'extract' && '✅ Extract real data from scraped content'}
+                      {contentQuality.extractionRecommendation === 'hybrid' && '⚡ Mix real data extraction with AI generation'}
+                      {contentQuality.extractionRecommendation === 'generate' && '🤖 Generate synthetic data (limited real data found)'}
+                    </div>
+                  </div>
+
+                  {contentQuality.issues.length > 0 && (
+                    <div>
+                      <span className="text-sm font-medium text-red-700">Issues Found:</span>
+                      <ul className="mt-1 text-sm text-red-600 list-disc list-inside">
+                        {contentQuality.issues.map((issue, index) => (
+                          <li key={index}>{issue}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {contentQuality.strengths.length > 0 && (
+                    <div>
+                      <span className="text-sm font-medium text-green-700">Strengths:</span>
+                      <ul className="mt-1 text-sm text-green-600 list-disc list-inside">
+                        {contentQuality.strengths.map((strength, index) => (
+                          <li key={index}>{strength}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t">
+                    <p className="text-sm text-gray-600">{contentQuality.contentSummary}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div>
                 <Label htmlFor="numRows" className="text-base sm:text-lg font-semibold">Number of Rows</Label>
@@ -483,16 +803,30 @@ export function DataGenerationClient() {
 
               <div className="flex items-end">
                 <div className="w-full">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Switch
-                      id="useWebData"
-                      checked={form.watch("useWebData")}
-                      onCheckedChange={(checked) => form.setValue("useWebData", checked)}
-                      disabled={isGenerating}
-                    />
-                    <Label htmlFor="useWebData" className="text-sm sm:text-base font-semibold">
-                      Use Live Web Data
-                    </Label>
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="useWebData"
+                        checked={form.watch("useWebData")}
+                        onCheckedChange={(checked) => form.setValue("useWebData", checked)}
+                        disabled={isGenerating}
+                      />
+                      <Label htmlFor="useWebData" className="text-sm sm:text-base font-semibold">
+                        Use Live Web Data
+                      </Label>
+                      {form.watch("useWebData") && (
+                        <div className="flex items-center space-x-1">
+                          <Brain className="h-4 w-4 text-blue-600" />
+                          <span className="text-xs text-blue-600 font-medium">AI Search Optimization</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {form.watch("useWebData")
+                        ? "AI will optimize your search query and scrape real-time data from the web"
+                        : "Generate synthetic data using AI knowledge (faster, no web scraping)"
+                      }
+                    </p>
                   </div>
                 </div>
               </div>
@@ -563,6 +897,7 @@ export function DataGenerationClient() {
                 requestData={memoizedRequestData || undefined}
                 onComplete={handleLiveLoggerComplete}
                 onError={handleLiveLoggerError}
+                onScrapedContent={handleScrapedContent}
               />
             </CardContent>
           </Card>
@@ -573,7 +908,18 @@ export function DataGenerationClient() {
           <Card className="shadow-xl border-green-200 bg-green-50/30">
             <CardHeader>
               <CardTitle className="font-headline text-2xl flex items-center">
-                <CheckCircle className="mr-2.5 h-6 w-6 text-green-600" /> Generated Dataset
+                <CheckCircle className="mr-2.5 h-6 w-6 text-green-600" />
+                Generated Dataset
+                {/* Data Source Badge */}
+                <span className={`ml-3 px-3 py-1 rounded-full text-sm font-medium ${
+                  dataSourceType === 'real' ? 'bg-green-100 text-green-800' :
+                  dataSourceType === 'hybrid' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-orange-100 text-orange-800'
+                }`}>
+                  {dataSourceType === 'real' ? '🌐 Real Data' :
+                   dataSourceType === 'hybrid' ? '⚡ Mixed Data' :
+                   '🤖 AI Generated'}
+                </span>
               </CardTitle>
               <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-4">
@@ -637,10 +983,18 @@ export function DataGenerationClient() {
               <Tabs defaultValue="table" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="table" className="py-2.5 text-base">
-                    <TableIcon className="mr-2 h-5 w-5" />Table Preview
+                    <TableIcon className="mr-2 h-5 w-5" />
+                    Table Preview
+                    {dataSourceType === 'real' && <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Real Data</span>}
+                    {dataSourceType === 'hybrid' && <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">Mixed</span>}
+                    {dataSourceType === 'synthetic' && <span className="ml-2 px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">AI Generated</span>}
                   </TabsTrigger>
                   <TabsTrigger value="csv" className="py-2.5 text-base">
-                    <FileSpreadsheet className="mr-2 h-5 w-5" />CSV
+                    <FileSpreadsheet className="mr-2 h-5 w-5" />
+                    CSV
+                    {dataSourceType === 'real' && <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">Real Data</span>}
+                    {dataSourceType === 'hybrid' && <span className="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">Mixed</span>}
+                    {dataSourceType === 'synthetic' && <span className="ml-2 px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">AI Generated</span>}
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="table" className="mt-4">
@@ -680,18 +1034,180 @@ export function DataGenerationClient() {
                 </TabsContent>
                 <TabsContent value="csv" className="mt-4">
                   {generationResult.generatedCsv ? (
-                    <Textarea
-                      readOnly
-                      value={generationResult.generatedCsv}
-                      rows={15}
-                      className="font-mono text-sm w-full max-h-[400px] shadow-inner bg-background/70"
-                      placeholder="CSV data will appear here..."
-                    />
+                    <div className="space-y-2">
+                      <Textarea
+                        readOnly
+                        value={generationResult.generatedCsv}
+                        rows={15}
+                        className="font-mono text-sm w-full max-h-[400px] shadow-inner bg-background/70"
+                        placeholder="CSV data will appear here..."
+                      />
+                      {/* CSV Data Source Footer */}
+                      <div className="text-xs text-gray-500 bg-gray-50 rounded p-2 border">
+                        <div className="flex items-center justify-between">
+                          <span>
+                            Data Source: {dataSourceType === 'real' ? 'Real web data extracted' :
+                                        dataSourceType === 'hybrid' ? 'Mixed real and AI-generated data' :
+                                        'AI-generated synthetic data'}
+                          </span>
+                          {searchQuery && (
+                            <span>Search: "{searchQuery}"</span>
+                          )}
+                        </div>
+                        {contentQuality && (
+                          <div className="mt-1">
+                            Quality Score: {contentQuality.qualityScore}/10 •
+                            Sources: {contentQuality.sourceCount} •
+                            Content: {Math.round(contentQuality.totalLength / 1000)}k chars
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-muted-foreground p-6 text-center text-lg">No CSV data generated.</p>
                   )}
                 </TabsContent>
               </Tabs>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Data Source Transparency */}
+        {generationResult && (
+          <Card className="border-l-4 border-l-blue-500 bg-blue-50/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center">
+                <Shield className="mr-2 h-5 w-5 text-blue-600" />
+                Data Source Transparency
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Data Source Type */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Data Source:</span>
+                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  dataSourceType === 'real' ? 'bg-green-100 text-green-800' :
+                  dataSourceType === 'hybrid' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-orange-100 text-orange-800'
+                }`}>
+                  {dataSourceType === 'real' ? (
+                    <>
+                      <ThumbsUp className="inline h-3 w-3 mr-1" />
+                      Real Data Extracted
+                    </>
+                  ) : dataSourceType === 'hybrid' ? (
+                    <>
+                      <Info className="inline h-3 w-3 mr-1" />
+                      Mixed (Real + AI)
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="inline h-3 w-3 mr-1" />
+                      AI Generated
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Content Quality Score */}
+              {contentQuality && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Content Quality:</span>
+                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    contentQuality.qualityScore >= 8 ? 'bg-green-100 text-green-800' :
+                    contentQuality.qualityScore >= 6 ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {contentQuality.qualityScore}/10
+                  </div>
+                </div>
+              )}
+
+              {/* Search Query Used */}
+              {searchQuery && (
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Search Query Used:</span>
+                  <div className="bg-white border rounded p-2">
+                    <code className="text-sm text-gray-700">{searchQuery}</code>
+                  </div>
+                </div>
+              )}
+
+              {/* Content Summary */}
+              {contentQuality && (
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Content Analysis:</span>
+                  <p className="text-sm text-gray-600">{contentQuality.contentSummary}</p>
+                </div>
+              )}
+
+              {/* User Choice System */}
+              {contentQuality && contentQuality.extractionRecommendation === 'hybrid' && (
+                <div className="space-y-3">
+                  <span className="text-sm font-medium">Data Generation Method:</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      type="button"
+                      variant={userChoice === 'auto' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setUserChoice('auto')}
+                      className="text-xs"
+                    >
+                      <Brain className="mr-1 h-3 w-3" />
+                      Auto
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={userChoice === 'extract' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setUserChoice('extract')}
+                      className="text-xs"
+                    >
+                      <ThumbsUp className="mr-1 h-3 w-3" />
+                      Extract
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={userChoice === 'generate' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setUserChoice('generate')}
+                      className="text-xs"
+                    >
+                      <Sparkles className="mr-1 h-3 w-3" />
+                      Generate
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    {userChoice === 'auto' && 'Let AI decide the best approach based on content quality'}
+                    {userChoice === 'extract' && 'Force extraction from scraped content (may have gaps)'}
+                    {userChoice === 'generate' && 'Generate synthetic data based on your prompt'}
+                  </p>
+                </div>
+              )}
+
+              {/* Show Content Preview Button */}
+              {scrapedContent && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowContentPreview(!showContentPreview)}
+                  className="w-full"
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  {showContentPreview ? 'Hide' : 'Show'} Scraped Content
+                </Button>
+              )}
+
+              {/* Content Preview */}
+              {showContentPreview && scrapedContent && (
+                <div className="bg-white border rounded p-3 max-h-60 overflow-y-auto">
+                  <pre className="text-xs text-gray-600 whitespace-pre-wrap">
+                    {scrapedContent.substring(0, 2000)}
+                    {scrapedContent.length > 2000 && '...\n\n[Content truncated for display]'}
+                  </pre>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
