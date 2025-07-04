@@ -1,5 +1,5 @@
 
-import { DataGenerationClient } from './components/DataGenerationClient_new';
+import { DataGenerationClient } from './components/DataGenerationClient';
 
 export default function DataGenerationPage() {
   return (
