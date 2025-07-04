@@ -43,8 +43,13 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
       const sendLog = (message: string, type: 'info' | 'success' | 'error' | 'progress' = 'info') => {
         try {
           if (controller.desiredSize !== null) {
+            // Safely escape the message to prevent JSON parsing errors
+            const safeMessage = typeof message === 'string'
+              ? message.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/"/g, '\\"')
+              : String(message);
+
             const data = JSON.stringify({
-              message,
+              message: safeMessage,
               type,
               timestamp: new Date().toISOString()
             });
@@ -52,6 +57,17 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
           }
         } catch (error) {
           console.error('[StreamAPI] Controller error:', error);
+          // Send a safe error message if JSON.stringify fails
+          try {
+            const fallbackData = JSON.stringify({
+              message: 'Log message contained invalid characters',
+              type: 'warning',
+              timestamp: new Date().toISOString()
+            });
+            controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
+          } catch (fallbackError) {
+            console.error('[StreamAPI] Fallback error:', fallbackError);
+          }
         }
       };
 
@@ -59,19 +75,39 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
       const sendProgress = (step: string, current: number, total: number, details?: string) => {
         try {
           if (controller.desiredSize !== null) {
+            // Safely escape details to prevent JSON parsing errors
+            const safeDetails = details
+              ? details.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/"/g, '\\"')
+              : undefined;
+
             const data = JSON.stringify({
               type: 'progress',
               step,
               current,
               total,
               percentage: Math.round((current / total) * 100),
-              details,
+              details: safeDetails,
               timestamp: new Date().toISOString()
             });
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           }
         } catch (error) {
           console.error('[StreamAPI] Progress controller error:', error);
+          // Send a safe fallback progress update
+          try {
+            const fallbackData = JSON.stringify({
+              type: 'progress',
+              step: 'Processing',
+              current,
+              total,
+              percentage: Math.round((current / total) * 100),
+              details: 'Progress update',
+              timestamp: new Date().toISOString()
+            });
+            controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
+          } catch (fallbackError) {
+            console.error('[StreamAPI] Progress fallback error:', fallbackError);
+          }
         }
       };
 

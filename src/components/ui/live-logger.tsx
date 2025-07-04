@@ -151,10 +151,16 @@ export function LiveLogger({ isActive, onComplete, onError, onScrapedContent, re
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
-              const data = JSON.parse(line.slice(6));
-              handleLogMessage(data);
+              const jsonData = line.slice(6);
+              if (jsonData.trim()) {
+                const data = JSON.parse(jsonData);
+                handleLogMessage(data);
+              }
             } catch (e) {
               console.error('Failed to parse SSE data:', e);
+              console.error('Raw data:', line.slice(6));
+              // Add a fallback log entry for parsing errors
+              addLog(`⚠️ Received malformed data (parsing error)`, 'warning');
             }
           }
         }

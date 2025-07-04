@@ -150,7 +150,10 @@ export function DataGenerationClient() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ userPrompt: prompt }),
+        body: JSON.stringify({
+          userPrompt: prompt,
+          useNewRefiner: true // Use the new SearchQueryRefiner
+        }),
       });
 
       if (!response.ok) {
@@ -158,11 +161,25 @@ export function DataGenerationClient() {
       }
 
       const result = await response.json();
-      setSearchQuery(result.searchQuery);
-      setSearchQueryReasoning(result.reasoning);
+
+      // Handle new refiner response format
+      if (result.isNewRefiner && result.refinedQueries) {
+        // Display the primary query in UI, but store all queries for backend
+        const displayQuery = result.refinedQueries[0];
+        const allQueries = result.refinedQueries.join(' | ');
+
+        setSearchQuery(allQueries); // Backend will use all queries
+        setSearchQueryReasoning(`${result.reasoning}\n📝 Generated queries: ${result.refinedQueries.join(', ')}`);
+        setEditableSearchQuery(displayQuery); // User sees/edits the primary query
+      } else {
+        // Handle old format
+        setSearchQuery(result.searchQuery);
+        setSearchQueryReasoning(result.reasoning);
+        setEditableSearchQuery(result.searchQuery);
+      }
+
       setSearchTargetType(result.targetType || 'general');
       setSearchQualityScore(result.qualityScore || 7);
-      setEditableSearchQuery(result.searchQuery);
       setShowSearchPreview(true);
 
       // Show warning if quality score is low

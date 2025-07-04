@@ -21,6 +21,7 @@ import { scrapeContent, scrapeContentFallback } from '@/services/firecrawl-servi
 import { type GenerateDataOutput, type Column } from './generate-data-flow';
 import { FileManagerService, type ScrapedSource } from '@/services/file-manager-service';
 import { OpenRouterService } from '@/services/openrouter-service';
+import { refinePromptToSearchQueries } from '@/services/search-query-refiner';
 
 // Helper function to create OpenRouter service
 function createOpenRouterService(): OpenRouterService | null {
@@ -662,11 +663,25 @@ async function generateFromWebFlow(input: GenerateFromWebInput): Promise<Generat
     let optimizedQuery: string = input.prompt; // Default fallback
 
     if (input.refinedSearchQuery && input.refinedSearchQuery.trim()) {
-        // Use the pre-refined search query from the UI
-        optimizedQuery = input.refinedSearchQuery.trim();
-        logSuccess(`✅ Using pre-refined search query: "${optimizedQuery}"`);
-        feedbackLog += `Pre-refined search query used: "${optimizedQuery}"\n`;
-        logProgress('Query Ready', 2, 7, 'Using refined search query from UI');
+        // Check if it's multiple queries separated by " | "
+        const refinedQueries = input.refinedSearchQuery.split(' | ').map(q => q.trim()).filter(q => q.length > 0);
+
+        if (refinedQueries.length > 1) {
+            // Multiple refined queries - store them for the search step
+            optimizedQuery = refinedQueries[0]; // Use first query as primary
+            logSuccess(`✅ Using ${refinedQueries.length} pre-refined search queries from UI`);
+            feedbackLog += `Pre-refined queries: ${refinedQueries.join(', ')}\n`;
+            logProgress('Query Ready', 2, 7, 'Using multiple refined search queries from UI');
+
+            // Store all queries in a special variable for the search step
+            (input as any).multipleRefinedQueries = refinedQueries;
+        } else {
+            // Single refined query
+            optimizedQuery = input.refinedSearchQuery.trim();
+            logSuccess(`✅ Using single pre-refined search query: "${optimizedQuery}"`);
+            feedbackLog += `Pre-refined search query used: "${optimizedQuery}"\n`;
+            logProgress('Query Ready', 2, 7, 'Using refined search query from UI');
+        }
     } else {
         // Refine the query using AI
         try {
@@ -706,33 +721,75 @@ async function generateFromWebFlow(input: GenerateFromWebInput): Promise<Generat
         return { generatedRows: [], detectedSchema: [], feedback: `Error: No valid search query available. Original prompt: "${input.prompt}"` };
     }
 
-    // 2. Search the web with optimized query (with fallback strategies)
-    let searchResults: SearchResult[];
+    // 2. Search the web with refined queries
+    let searchResults: SearchResult[] = [];
     try {
-        logProgress('Web Search', 3, 7, 'Searching the web for relevant sources');
-        log(`🌐 Searching Google for: "${optimizedQuery}"...`);
+        logProgress('Web Search', 3, 7, 'Searching the web with optimized queries');
 
-        searchResults = await getGoogleSearchResults(optimizedQuery);
+        let queriesToUse: string[] = [];
 
-        // If no results, try fallback search strategies
-        if (searchResults.length === 0) {
-            log(`⚠️ No results for optimized query, trying fallback searches...`);
+        // Check if we have pre-refined queries from UI
+        if ((input as any).multipleRefinedQueries) {
+            queriesToUse = (input as any).multipleRefinedQueries;
+            log(`✨ Using pre-refined queries from UI: ${queriesToUse.join(', ')}`);
+            feedbackLog += `Using pre-refined queries: ${queriesToUse.join(', ')}\n`;
+        } else {
+            // Refine the user prompt into optimized search queries
+            log(`🧠 Refining search query from user prompt...`);
+            const refinement = await refinePromptToSearchQueries(input.prompt, 3);
 
-            // Fallback 1: Try broader search terms
-            const fallbackQueries = generateFallbackQueries(optimizedQuery, input.prompt);
+            queriesToUse = refinement.refinedQueries;
+            log(`✨ AI-refined queries: ${refinement.refinedQueries.join(', ')}`);
+            log(`💡 Reasoning: ${refinement.reasoning}`);
+            feedbackLog += `Original prompt: "${input.prompt}"\n`;
+            feedbackLog += `AI-refined to queries: ${refinement.refinedQueries.join(', ')}\n`;
+            feedbackLog += `Refinement reasoning: ${refinement.reasoning}\n`;
+        }
 
-            for (const fallbackQuery of fallbackQueries) {
-                try {
-                    log(`🔄 Trying fallback query: "${fallbackQuery}"`);
-                    searchResults = await getGoogleSearchResults(fallbackQuery);
-                    if (searchResults.length > 0) {
-                        logSuccess(`✅ Found ${searchResults.length} results with fallback query`);
-                        feedbackLog += `Used fallback search query: "${fallbackQuery}"\n`;
+        // Try each refined query until we get good results
+        for (const [index, refinedQuery] of queriesToUse.entries()) {
+            try {
+                log(`🌐 Searching Google with refined query ${index + 1}: "${refinedQuery}"`);
+                const queryResults = await getGoogleSearchResults(refinedQuery);
+
+                if (queryResults.length > 0) {
+                    searchResults.push(...queryResults);
+                    logSuccess(`✅ Found ${queryResults.length} results with query: "${refinedQuery}"`);
+
+                    // If we have enough results, stop searching
+                    if (searchResults.length >= 15) {
+                        log(`🎯 Collected sufficient results (${searchResults.length}), stopping search`);
                         break;
                     }
-                } catch (fallbackError) {
-                    log(`⚠️ Fallback query failed: ${fallbackError}`);
+                } else {
+                    log(`⚠️ No results for refined query: "${refinedQuery}"`);
                 }
+            } catch (queryError: any) {
+                log(`❌ Search failed for query "${refinedQuery}": ${queryError.message}`);
+                feedbackLog += `Search error for "${refinedQuery}": ${queryError.message}\n`;
+            }
+        }
+
+        // Remove duplicates based on URL
+        const uniqueResults = searchResults.filter((result, index, self) =>
+            index === self.findIndex(r => r.link === result.link)
+        );
+        searchResults = uniqueResults;
+
+        // If still no results, try traditional fallback with the original optimized query
+        if (searchResults.length === 0) {
+            log(`⚠️ No results from refined queries, trying original optimized query as fallback...`);
+
+            try {
+                const fallbackResults = await getGoogleSearchResults(optimizedQuery);
+                if (fallbackResults.length > 0) {
+                    searchResults = fallbackResults;
+                    logSuccess(`✅ Found ${fallbackResults.length} results with original query`);
+                    feedbackLog += `Used original optimized query as fallback: "${optimizedQuery}"\n`;
+                }
+            } catch (fallbackError: any) {
+                log(`❌ Original query fallback failed: ${fallbackError.message}`);
+                feedbackLog += `Original query fallback error: ${fallbackError.message}\n`;
             }
         }
 

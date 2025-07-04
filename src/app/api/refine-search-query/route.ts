@@ -1,15 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { OpenRouterService } from '@/services/openrouter-service';
+import { refinePromptToSearchQueries } from '@/services/search-query-refiner';
 
 export async function POST(request: NextRequest) {
   try {
-    const { userPrompt } = await request.json();
+    const body = await request.json();
+    const { userPrompt, useNewRefiner } = body;
+
+    console.log(`[RefineAPI] 🔍 Request body:`, { userPrompt: userPrompt?.substring(0, 50), useNewRefiner });
 
     if (!userPrompt || typeof userPrompt !== 'string') {
       return NextResponse.json(
         { error: 'User prompt is required' },
         { status: 400 }
       );
+    }
+
+    // Use new SearchQueryRefiner if requested
+    if (useNewRefiner) {
+      try {
+        console.log(`[RefineAPI] ✅ Using NEW SearchQueryRefiner for: "${userPrompt.substring(0, 100)}..."`);
+        console.log(`[RefineAPI] useNewRefiner flag:`, useNewRefiner);
+
+        const refinement = await refinePromptToSearchQueries(userPrompt, 3);
+        console.log(`[RefineAPI] ✅ New refiner succeeded:`, refinement);
+
+        return NextResponse.json({
+          success: true,
+          originalPrompt: refinement.originalPrompt,
+          refinedQueries: refinement.refinedQueries,
+          reasoning: refinement.reasoning,
+          searchQuery: refinement.refinedQueries[0], // Primary query for backward compatibility
+          targetType: 'general',
+          qualityScore: 8,
+          isFallback: false,
+          isNewRefiner: true
+        });
+
+      } catch (refinerError: any) {
+        console.error('[RefineAPI] New refiner failed, falling back to original:', refinerError);
+        // Fall through to original logic
+      }
     }
 
     // Create OpenRouter service
@@ -61,6 +92,9 @@ Respond with ONLY a JSON object containing:
 }`;
 
       // Use direct OpenRouter API call for search query refinement
+      const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+      const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat-v3-0324:free';
+
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {

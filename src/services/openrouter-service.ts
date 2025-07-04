@@ -70,7 +70,7 @@ export class OpenRouterService {
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.3,
-        max_tokens: 4000
+        max_tokens: 8000
       }, {
         headers: extraHeaders
       });
@@ -218,7 +218,34 @@ Focus on creating a high-quality dataset that maximizes the value of the scraped
       // Try to fix common JSON issues
       jsonString = this.fixJsonIssues(jsonString);
 
-      const parsed = JSON.parse(jsonString);
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonString);
+      } catch (parseError: any) {
+        console.error('[OpenRouter] JSON parse failed, attempting recovery:', parseError);
+
+        // Try to extract partial data from the malformed JSON
+        const partialMatch = jsonString.match(/"generatedRows"\s*:\s*\[([\s\S]*?)\]/);
+        if (partialMatch) {
+          try {
+            const rowsData = `[${partialMatch[1]}]`;
+            const partialRows = JSON.parse(rowsData);
+            console.log('[OpenRouter] ✅ Recovered partial data:', partialRows.length, 'rows');
+
+            // Create a minimal valid response
+            parsed = {
+              detectedSchema: [],
+              generatedRows: partialRows,
+              feedback: `Recovered ${partialRows.length} rows from corrupted response`
+            };
+          } catch (recoveryError) {
+            console.error('[OpenRouter] Recovery failed:', recoveryError);
+            throw new Error(`JSON parsing failed: ${parseError?.message || parseError}`);
+          }
+        } else {
+          throw new Error(`JSON parsing failed and no recoverable data found: ${parseError?.message || parseError}`);
+        }
+      }
 
       // Check if this is an analysis response (no data generation)
       if (targetRows === 0) {
@@ -232,8 +259,20 @@ Focus on creating a high-quality dataset that maximizes the value of the scraped
 
       // Validate required fields for data generation
       if (!parsed.detectedSchema || !Array.isArray(parsed.detectedSchema)) {
-        throw new Error('Invalid or missing detectedSchema');
+        console.warn('[OpenRouter] Missing or invalid detectedSchema, attempting to infer...');
+        // Try to infer schema from the first row if available
+        if (parsed.generatedRows && Array.isArray(parsed.generatedRows) && parsed.generatedRows.length > 0) {
+          const firstRow = parsed.generatedRows[0];
+          parsed.detectedSchema = Object.keys(firstRow).map(key => ({
+            name: key,
+            type: typeof firstRow[key] === 'number' ? 'number' : 'string'
+          }));
+          console.log('[OpenRouter] ✅ Inferred schema from data:', parsed.detectedSchema.length, 'columns');
+        } else {
+          throw new Error('Invalid or missing detectedSchema and cannot infer from data');
+        }
       }
+
       if (!parsed.generatedRows || !Array.isArray(parsed.generatedRows)) {
         throw new Error('Invalid or missing generatedRows');
       }
