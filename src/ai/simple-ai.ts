@@ -83,9 +83,23 @@ ${JSON.stringify(schema, null, 2)}`;
     });
 
     try {
-      return JSON.parse(result.text) as T;
+      // Clean the response text to handle markdown code blocks
+      let cleanedText = result.text.trim();
+
+      // Remove markdown code blocks if present
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+
+      // Remove any leading/trailing whitespace
+      cleanedText = cleanedText.trim();
+
+      return JSON.parse(cleanedText) as T;
     } catch (parseError) {
       console.error('[SimpleAI] Failed to parse JSON response:', result.text);
+      console.error('[SimpleAI] Parse error:', parseError);
       throw new Error('AI returned invalid JSON format');
     }
   }
