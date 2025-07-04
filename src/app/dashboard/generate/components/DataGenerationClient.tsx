@@ -11,13 +11,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Lightbulb, Loader2, Sparkles, TableIcon, CheckCircle, Wand2, FileSpreadsheet, Download, Save, Globe, Brain, Search, Edit3, Eye, Shield, AlertTriangle, ThumbsUp, Info } from 'lucide-react';
+import { Lightbulb, Loader2, Sparkles, TableIcon, CheckCircle, Wand2, FileSpreadsheet, Download, Save, Globe, Brain, Search, Edit3, Eye, Shield, AlertTriangle, ThumbsUp, Info, BarChart3, TrendingUp, Database, Clock, Users, Star, ArrowRight, XCircle, HelpCircle } from 'lucide-react';
 import { recommendModel, type RecommendModelInput, type RecommendModelOutput } from '@/ai/flows/recommend-model';
 import { generateData, type GenerateDataInput, type GenerateDataOutput } from '@/ai/flows/generate-data-flow';
 import { generateFromWeb, type GenerateFromWebInput, type GenerateFromWebOutput } from '@/ai/flows/generate-from-web-flow';
 import { enhancePrompt, type EnhancePromptInput, type EnhancePromptOutput } from '@/ai/flows/enhance-prompt-flow';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { logActivity, saveDataset } from '@/lib/supabase/actions';
 import { LiveLogger } from '@/components/ui/live-logger';
 import { dynamicContent, type ContentContext, type DynamicExample } from '@/services/dynamic-content-service';
@@ -512,6 +517,41 @@ export function DataGenerationClient() {
   // Main component render
   return (
     <div className="grid gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-3 items-start">
+      {/* Live Logger Overlay for Mobile */}
+      {showLiveLogger && (
+        <div className="fixed inset-0 bg-black/50 z-50 lg:hidden">
+          <div className="absolute inset-4 bg-background rounded-lg overflow-hidden">
+            <div className="h-full flex flex-col">
+              <div className="p-4 border-b flex items-center justify-between">
+                <h3 className="font-semibold">Live Generation Progress</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    // Don't allow closing during active generation
+                    if (!isGenerating) {
+                      setShowLiveLogger(false);
+                    }
+                  }}
+                  disabled={isGenerating}
+                >
+                  ×
+                </Button>
+              </div>
+              <div className="flex-1 overflow-auto p-4">
+                {memoizedRequestData && (
+                  <LiveLogger
+                    requestData={memoizedRequestData}
+                    onComplete={handleLiveLoggerComplete}
+                    onError={handleLiveLoggerError}
+                    onScrapedContent={handleScrapedContent}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <form
         onSubmit={(e) => {
           if (isGenerationInProgress || isRequestActiveRef.current) {
@@ -522,7 +562,7 @@ export function DataGenerationClient() {
           }
           return form.handleSubmit(onSubmit)(e);
         }}
-        className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8"
+        className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8 order-1"
         style={{ pointerEvents: isGenerationInProgress ? 'none' : 'auto' }}
       >
         <div className="glass-card p-6">
@@ -749,8 +789,331 @@ export function DataGenerationClient() {
         </div>
       </form>
 
+      {/* Results Preview Section - Full Width on Mobile */}
+      {(generationResult || generationError || isGenerating) && (
+        <div className="lg:col-span-3 order-3">
+          <Card className="shadow-xl">
+            <CardHeader>
+              <CardTitle className="font-headline flex items-center">
+                <TableIcon className="mr-2 h-5 w-5 text-green-500" />
+                Generated Dataset
+                {generationResult && (
+                  <Badge variant="secondary" className="ml-2">
+                    {generationResult.generatedRows.length} rows
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                {isGenerating
+                  ? "Your dataset is being generated..."
+                  : generationResult
+                    ? "Your dataset has been generated successfully"
+                    : "Generation failed"
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Loading State */}
+              {isGenerating && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center space-y-4">
+                      <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+                      <div className="space-y-2">
+                        <p className="text-lg font-semibold">Generating Your Dataset</p>
+                        <p className="text-sm text-muted-foreground">
+                          {form.watch("useWebData")
+                            ? "Searching the web and extracting real-time data..."
+                            : "Using AI to generate structured data..."
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress indicators for mobile */}
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Clock className="h-4 w-4 text-blue-500" />
+                      <span className="text-sm font-medium">Generation in Progress</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Processing your request...</span>
+                        <span>Please wait</span>
+                      </div>
+                      <div className="w-full bg-muted rounded-full h-2">
+                        <div className="bg-primary h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Error State */}
+              {generationError && (
+                <Alert className="border-destructive">
+                  <XCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Generation Failed:</strong> {generationError}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Success State with Data Preview */}
+              {generationResult && generationResult.generatedRows && generationResult.generatedRows.length > 0 && (
+                <div className="space-y-6">
+                  {/* Dataset Stats */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                        {generationResult.generatedRows.length}
+                      </div>
+                      <div className="text-xs text-blue-600 dark:text-blue-400">Rows</div>
+                    </div>
+                    <div className="bg-green-50 dark:bg-green-950/30 p-3 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                        {generationResult.detectedSchema.length}
+                      </div>
+                      <div className="text-xs text-green-600 dark:text-green-400">Columns</div>
+                    </div>
+                    <div className="bg-purple-50 dark:bg-purple-950/30 p-3 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                        {form.watch("useWebData") ? "Web" : "AI"}
+                      </div>
+                      <div className="text-xs text-purple-600 dark:text-purple-400">Source</div>
+                    </div>
+                    <div className="bg-orange-50 dark:bg-orange-950/30 p-3 rounded-lg text-center">
+                      <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                        CSV
+                      </div>
+                      <div className="text-xs text-orange-600 dark:text-orange-400">Format</div>
+                    </div>
+                  </div>
+
+                  {/* Data Preview Tabs */}
+                  <Tabs defaultValue="preview" className="w-full">
+                    <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
+                      <TabsTrigger value="preview" className="text-xs sm:text-sm">
+                        <Eye className="mr-1 sm:mr-2 h-3 sm:h-4 w-3 sm:w-4" />
+                        Preview
+                      </TabsTrigger>
+                      <TabsTrigger value="schema" className="text-xs sm:text-sm">
+                        <Database className="mr-1 sm:mr-2 h-3 sm:h-4 w-3 sm:w-4" />
+                        Schema
+                      </TabsTrigger>
+                      <TabsTrigger value="actions" className="text-xs sm:text-sm">
+                        <Download className="mr-1 sm:mr-2 h-3 sm:h-4 w-3 sm:w-4" />
+                        Actions
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="preview" className="space-y-4">
+                      {/* Mobile Card View */}
+                      <div className="block sm:hidden space-y-3">
+                        {generationResult.generatedRows.slice(0, 5).map((row, rowIndex) => (
+                          <Card key={rowIndex} className="p-3">
+                            <div className="space-y-2">
+                              <div className="text-xs text-muted-foreground mb-2">Row {rowIndex + 1}</div>
+                              {generationResult.detectedSchema.map((col) => (
+                                <div key={col.name} className="flex justify-between items-start gap-2">
+                                  <span className="text-xs font-medium text-muted-foreground min-w-0 flex-1">
+                                    {col.name}:
+                                  </span>
+                                  <span className="text-xs text-right break-words max-w-[60%]">
+                                    {String(row[col.name])}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </Card>
+                        ))}
+                        {generationResult.generatedRows.length > 5 && (
+                          <div className="text-center text-sm text-muted-foreground">
+                            ... and {generationResult.generatedRows.length - 5} more rows
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Desktop Table View */}
+                      <div className="hidden sm:block overflow-x-auto rounded-md border max-h-96">
+                        <Table>
+                          <TableHeader className="sticky top-0 bg-muted/70">
+                            <TableRow>
+                              {generationResult.detectedSchema.map((col) => (
+                                <TableHead key={col.name} className="min-w-[120px]">
+                                  <div className="flex items-center space-x-1">
+                                    <span className="font-semibold">{col.name}</span>
+                                    <Badge variant="outline" className="text-xs">
+                                      {col.type}
+                                    </Badge>
+                                  </div>
+                                </TableHead>
+                              ))}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {generationResult.generatedRows.slice(0, 10).map((row, rowIndex) => (
+                              <TableRow key={rowIndex}>
+                                {generationResult.detectedSchema.map((col) => (
+                                  <TableCell key={col.name} className="max-w-[200px] truncate">
+                                    {String(row[col.name])}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {generationResult.generatedRows.length > 10 && (
+                          <div className="p-3 text-center text-sm text-muted-foreground bg-muted/30">
+                            Showing 10 of {generationResult.generatedRows.length} rows
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="schema" className="space-y-4">
+                      <div className="grid gap-3">
+                        {generationResult.detectedSchema.map((col, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                                <span className="text-xs font-bold text-primary">{index + 1}</span>
+                              </div>
+                              <div>
+                                <div className="font-semibold">{col.name}</div>
+                                <div className="text-xs text-muted-foreground">Column {index + 1}</div>
+                              </div>
+                            </div>
+                            <Badge variant="secondary">{col.type}</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="actions" className="space-y-4">
+                      <div className="space-y-4">
+                        {/* Save Dataset */}
+                        <div className="space-y-3">
+                          <Label htmlFor="saveDatasetName" className="text-base font-semibold">
+                            Save to Database
+                          </Label>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <Input
+                              id="saveDatasetName"
+                              value={datasetName}
+                              onChange={(e) => setDatasetName(e.target.value)}
+                              placeholder="Enter dataset name..."
+                              className="flex-1"
+                            />
+                            <Button
+                              onClick={handleSaveDataset}
+                              disabled={isSaving || !datasetName.trim()}
+                              className="w-full sm:w-auto"
+                            >
+                              {isSaving ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="mr-2 h-4 w-4" />
+                                  Save Dataset
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* Download Options */}
+                        <div className="space-y-3">
+                          <Label className="text-base font-semibold">Download Options</Label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                const csvContent = [
+                                  generationResult.detectedSchema.map(col => col.name).join(','),
+                                  ...generationResult.generatedRows.map(row =>
+                                    generationResult.detectedSchema.map(col =>
+                                      JSON.stringify(row[col.name] || '')
+                                    ).join(',')
+                                  )
+                                ].join('\n');
+                                downloadFile(csvContent, `${datasetName || 'dataset'}.csv`, 'text/csv');
+                              }}
+                              className="w-full"
+                            >
+                              <FileSpreadsheet className="mr-2 h-4 w-4" />
+                              Download CSV
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                const jsonContent = JSON.stringify({
+                                  schema: generationResult.detectedSchema,
+                                  data: generationResult.generatedRows,
+                                  metadata: {
+                                    generatedAt: new Date().toISOString(),
+                                    prompt: form.getValues("prompt"),
+                                    rowCount: generationResult.generatedRows.length
+                                  }
+                                }, null, 2);
+                                downloadFile(jsonContent, `${datasetName || 'dataset'}.json`, 'application/json');
+                              }}
+                              className="w-full"
+                            >
+                              <Database className="mr-2 h-4 w-4" />
+                              Download JSON
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+
+                  {/* Feedback */}
+                  {generationResult.feedback && (
+                    <Alert>
+                      <Info className="h-4 w-4" />
+                      <AlertDescription>
+                        <strong>AI Feedback:</strong> {generationResult.feedback}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Sidebar */}
-      <div className="lg:col-span-1 space-y-6 lg:space-y-8">
+      <div className="lg:col-span-1 space-y-6 lg:space-y-8 order-2 lg:order-2">
+        {/* Live Logger for Desktop */}
+        {showLiveLogger && memoizedRequestData && (
+          <Card className="shadow-xl hidden lg:block">
+            <CardHeader>
+              <CardTitle className="font-headline flex items-center">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin text-blue-500" />
+                Live Generation
+              </CardTitle>
+              <CardDescription>Real-time progress tracking</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <LiveLogger
+                requestData={memoizedRequestData}
+                onComplete={handleLiveLoggerComplete}
+                onError={handleLiveLoggerError}
+                onScrapedContent={handleScrapedContent}
+              />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Dynamic Examples */}
         <Card className="shadow-xl">
           <CardHeader>
@@ -843,16 +1206,6 @@ export function DataGenerationClient() {
           </Card>
         )}
       </div>
-
-      {/* Live Logger Modal */}
-      {showLiveLogger && memoizedRequestData && (
-        <LiveLogger
-          requestData={memoizedRequestData}
-          onComplete={handleLiveLoggerComplete}
-          onError={handleLiveLoggerError}
-          onScrapedContent={handleScrapedContent}
-        />
-      )}
     </div>
   );
 }
