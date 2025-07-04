@@ -49,9 +49,9 @@ export class SimpleAI {
         model: model,
         messages: [{ role: 'user', content: prompt }],
         temperature: temperature,
-        max_tokens: maxTokens,
-        extra_headers: extraHeaders,
-        extra_body: {}
+        max_tokens: maxTokens
+      }, {
+        headers: extraHeaders
       });
 
       const text = completion.choices[0]?.message?.content || '';
