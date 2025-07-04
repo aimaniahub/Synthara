@@ -70,9 +70,9 @@ export class OpenRouterService {
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.3,
-        max_tokens: 4000,
-        extra_headers: extraHeaders,
-        extra_body: {}
+        max_tokens: 4000
+      }, {
+        headers: extraHeaders
       });
 
       const response = completion.choices[0]?.message?.content;
@@ -189,7 +189,6 @@ Focus on creating a high-quality dataset that maximizes the value of the scraped
       if (!parsed.detectedSchema || !Array.isArray(parsed.detectedSchema)) {
         throw new Error('Invalid or missing detectedSchema');
       }
-
       if (!parsed.generatedRows || !Array.isArray(parsed.generatedRows)) {
         throw new Error('Invalid or missing generatedRows');
       }
@@ -269,9 +268,9 @@ Focus on creating a high-quality dataset that maximizes the value of the scraped
         messages: [
           { role: 'user', content: 'Hello! Please respond with "Connection successful" to test the API.' }
         ],
-        max_tokens: 50,
-        extra_headers: extraHeaders,
-        extra_body: {}
+        max_tokens: 50
+      }, {
+        headers: extraHeaders
       });
 
       const response = completion.choices[0]?.message?.content;
