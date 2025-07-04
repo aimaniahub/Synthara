@@ -1,6 +1,3 @@
-import fs from 'fs/promises';
-import path from 'path';
-
 export interface ScrapedSource {
   url: string;
   markdown: string;
@@ -17,23 +14,19 @@ export interface StructuredScrapingResult {
 }
 
 export class FileManagerService {
-  private static readonly TEMP_DIR = path.join(process.cwd(), 'temp');
-  private static readonly SCRAPED_DATA_DIR = path.join(this.TEMP_DIR, 'scraped-data');
+  // In-memory storage for serverless environments
+  private static readonly contentCache = new Map<string, string>();
 
   /**
-   * Ensure temp directories exist
+   * Serverless-compatible: No file system operations
    */
   private static async ensureDirectories(): Promise<void> {
-    try {
-      await fs.mkdir(this.TEMP_DIR, { recursive: true });
-      await fs.mkdir(this.SCRAPED_DATA_DIR, { recursive: true });
-    } catch (error) {
-      console.error('[FileManager] Error creating directories:', error);
-    }
+    // No-op for serverless environments
+    console.log('[FileManager] Running in serverless mode - using in-memory storage');
   }
 
   /**
-   * Create structured markdown file from scraped sources
+   * Create structured markdown content from scraped sources (serverless-compatible)
    */
   static async createStructuredMarkdownFile(
     userQuery: string,
@@ -42,8 +35,7 @@ export class FileManagerService {
     await this.ensureDirectories();
 
     const timestamp = new Date();
-    const filename = `scraped-${timestamp.getTime()}.md`;
-    const filepath = path.join(this.SCRAPED_DATA_DIR, filename);
+    const contentId = `scraped-${timestamp.getTime()}`;
 
     // Calculate total content length
     const totalContentLength = sources.reduce((total, source) => total + source.markdown.length, 0);
@@ -61,13 +53,13 @@ export class FileManagerService {
       generatedAt: timestamp
     });
 
-    // Write to file
-    await fs.writeFile(filepath, markdownContent, 'utf-8');
+    // Store in memory cache instead of file system
+    this.contentCache.set(contentId, markdownContent);
 
-    console.log(`[FileManager] Created structured file: ${filepath}`);
-    console.log(`[FileManager] File size: ${markdownContent.length} characters`);
+    console.log(`[FileManager] Created structured content in memory: ${contentId}`);
+    console.log(`[FileManager] Content size: ${markdownContent.length} characters`);
 
-    return filepath;
+    return contentId; // Return content ID instead of file path
   }
 
   /**
@@ -138,40 +130,62 @@ export class FileManagerService {
   }
 
   /**
-   * Read structured markdown file
+   * Read structured content from memory cache (serverless-compatible)
    */
-  static async readStructuredFile(filepath: string): Promise<string> {
+  static async readStructuredFile(contentId: string): Promise<string> {
     try {
-      const content = await fs.readFile(filepath, 'utf-8');
-      console.log(`[FileManager] Read file: ${filepath} (${content.length} characters)`);
+      const content = this.contentCache.get(contentId);
+      if (!content) {
+        throw new Error(`Content not found in cache: ${contentId}`);
+      }
+      console.log(`[FileManager] Read content from cache: ${contentId} (${content.length} characters)`);
       return content;
     } catch (error) {
-      console.error(`[FileManager] Error reading file ${filepath}:`, error);
-      throw new Error(`Failed to read file: ${filepath}`);
+      console.error(`[FileManager] Error reading content ${contentId}:`, error);
+      throw new Error(`Failed to read content: ${contentId}`);
     }
   }
 
   /**
-   * Clean up old files (optional)
+   * Clean up old content from memory cache (serverless-compatible)
    */
   static async cleanupOldFiles(maxAgeHours: number = 24): Promise<void> {
     try {
-      await this.ensureDirectories();
-      const files = await fs.readdir(this.SCRAPED_DATA_DIR);
       const now = Date.now();
       const maxAge = maxAgeHours * 60 * 60 * 1000; // Convert to milliseconds
+      let cleanedCount = 0;
 
-      for (const file of files) {
-        const filepath = path.join(this.SCRAPED_DATA_DIR, file);
-        const stats = await fs.stat(filepath);
-        
-        if (now - stats.mtime.getTime() > maxAge) {
-          await fs.unlink(filepath);
-          console.log(`[FileManager] Cleaned up old file: ${file}`);
+      // Clean up old entries from memory cache
+      for (const [contentId, content] of this.contentCache.entries()) {
+        // Extract timestamp from content ID (format: scraped-{timestamp})
+        const timestampMatch = contentId.match(/scraped-(\d+)/);
+        if (timestampMatch) {
+          const timestamp = parseInt(timestampMatch[1]);
+          if (now - timestamp > maxAge) {
+            this.contentCache.delete(contentId);
+            cleanedCount++;
+            console.log(`[FileManager] Cleaned up old content: ${contentId}`);
+          }
         }
       }
+
+      console.log(`[FileManager] Cleanup completed: removed ${cleanedCount} old entries from cache`);
     } catch (error) {
       console.error('[FileManager] Error during cleanup:', error);
     }
+  }
+
+  /**
+   * Get cache statistics for monitoring
+   */
+  static getCacheStats(): { totalEntries: number; totalSize: number } {
+    let totalSize = 0;
+    for (const content of this.contentCache.values()) {
+      totalSize += content.length;
+    }
+    return {
+      totalEntries: this.contentCache.size,
+      totalSize
+    };
   }
 }
