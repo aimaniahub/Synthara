@@ -5,6 +5,11 @@ import { getJson } from 'serpapi';
 
 const serpApiKey = process.env.SERPAPI_API_KEY;
 
+// Request deduplication and rate limiting
+const requestCache = new Map<string, Promise<SearchResult[]>>();
+const lastRequestTime = new Map<string, number>();
+const MIN_REQUEST_INTERVAL = 2000; // 2 seconds between identical requests
+
 export interface SearchResult {
     position: number;
     title: string;
@@ -22,25 +27,69 @@ export async function getGoogleSearchResults(query: string): Promise<SearchResul
         console.error('[SerpApiService] SERPAPI_API_KEY is not set.');
         throw new Error('SerpApi API key is not configured on the server.');
     }
-     if (!query || !query.trim()) {
-      throw new Error("Search query is missing or empty.");
+
+    if (!query || !query.trim()) {
+        throw new Error("Search query is missing or empty.");
     }
-    
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const now = Date.now();
+
+    // Check if we have a recent request for the same query
+    const lastTime = lastRequestTime.get(normalizedQuery);
+    if (lastTime && (now - lastTime) < MIN_REQUEST_INTERVAL) {
+        console.log(`[SerpApiService] Rate limiting: Request for "${query}" too soon after previous request`);
+        throw new Error(`Please wait ${Math.ceil((MIN_REQUEST_INTERVAL - (now - lastTime)) / 1000)} seconds before searching again.`);
+    }
+
+    // Check if there's already a pending request for this query
+    const existingRequest = requestCache.get(normalizedQuery);
+    if (existingRequest) {
+        console.log(`[SerpApiService] Returning cached/pending request for: "${query}"`);
+        return existingRequest;
+    }
+
+    // Create new request
+    const requestPromise = performSearch(query, normalizedQuery, now);
+    requestCache.set(normalizedQuery, requestPromise);
+
+    // Clean up cache after request completes
+    requestPromise.finally(() => {
+        requestCache.delete(normalizedQuery);
+    });
+
+    return requestPromise;
+}
+
+async function performSearch(originalQuery: string, normalizedQuery: string, requestTime: number): Promise<SearchResult[]> {
+    // Record the request time
+    lastRequestTime.set(normalizedQuery, requestTime);
+
+    console.log(`[SerpApiService] 🔍 Making SerpAPI request for: "${originalQuery}"`);
+
     try {
         const json = await getJson({
             engine: "google",
-            q: query,
+            q: originalQuery,
             api_key: serpApiKey,
             num: 20, // Request more results for better filtering
             safe: "active", // Enable safe search
         });
 
+        console.log(`[SerpApiService] ✅ SerpAPI response received for: "${originalQuery}"`);
+
         if (json.error) {
-            console.error('[SerpApiService] Error from SerpApi:', json.error);
-            // Provide more helpful error messages
-            if (json.error.includes("Google hasn't returned any results")) {
-                throw new Error(`No search results found for "${query}". Try using broader or different search terms.`);
+            console.error('[SerpApiService] ❌ Error from SerpApi:', json.error);
+
+            // Handle specific error cases
+            if (json.error.includes("run out of searches") || json.error.includes("account has run out")) {
+                throw new Error(`SerpAPI quota exceeded. Please check your account at https://serpapi.com/dashboard - you may have hit rate limits or used all searches.`);
             }
+
+            if (json.error.includes("Google hasn't returned any results")) {
+                throw new Error(`No search results found for "${originalQuery}". Try using broader or different search terms.`);
+            }
+
             throw new Error(`Search API error: ${json.error}`);
         }
 
@@ -106,6 +155,43 @@ export async function getGoogleSearchResults(query: string): Promise<SearchResul
             }
         }
 
+        // If SerpAPI fails, try to provide a fallback
+        if (errorMessage.includes('run out of searches') || errorMessage.includes('quota exceeded')) {
+            console.log(`[SerpApiService] 🔄 SerpAPI quota exceeded, providing fallback search suggestions`);
+            return getFallbackSearchResults(originalQuery);
+        }
+
         throw new Error(`Failed to search: ${errorMessage}`);
     }
+}
+
+/**
+ * Fallback search results when SerpAPI is unavailable
+ */
+function getFallbackSearchResults(query: string): SearchResult[] {
+    console.log(`[SerpApiService] 📋 Generating fallback results for: "${query}"`);
+
+    // Generate some basic search suggestions based on the query
+    const fallbackResults: SearchResult[] = [
+        {
+            position: 1,
+            title: `${query} - Official Information`,
+            link: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+            snippet: `Search results for "${query}". This is a fallback result due to search API limitations. Please try a more specific search query.`
+        },
+        {
+            position: 2,
+            title: `${query} - Latest Updates`,
+            link: `https://www.bing.com/search?q=${encodeURIComponent(query)}`,
+            snippet: `Find the latest information about "${query}". Consider using more specific keywords for better results.`
+        },
+        {
+            position: 3,
+            title: `${query} - Research and Data`,
+            link: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+            snippet: `Research and data related to "${query}". This fallback suggests using alternative search engines or refining your query.`
+        }
+    ];
+
+    return fallbackResults;
 }

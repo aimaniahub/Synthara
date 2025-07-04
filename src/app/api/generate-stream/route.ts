@@ -1,8 +1,37 @@
 import { NextRequest } from 'next/server';
 import { generateFromWeb } from '@/ai/flows/generate-from-web-flow';
 
+// Request deduplication for stream API
+const activeRequests = new Map<string, Promise<Response>>();
+
 export async function POST(request: NextRequest) {
   const body = await request.json();
+  const { prompt, numRows, useWebData, refinedSearchQuery } = body;
+
+  // Create a unique key for this request
+  const requestKey = `${prompt}-${numRows}-${refinedSearchQuery || ''}`.toLowerCase().trim();
+
+  // Check if there's already an active request for this exact query
+  if (activeRequests.has(requestKey)) {
+    console.log(`[StreamAPI] ⚠️ Duplicate request detected for: "${prompt.substring(0, 50)}..."`);
+    return new Response('Request already in progress for this query', { status: 429 });
+  }
+
+  console.log(`[StreamAPI] 🚀 Starting new stream request for: "${prompt.substring(0, 50)}..."`);
+
+  const responsePromise = createStreamResponse(body, requestKey);
+  activeRequests.set(requestKey, responsePromise);
+
+  // Clean up after request completes
+  responsePromise.finally(() => {
+    activeRequests.delete(requestKey);
+    console.log(`[StreamAPI] ✅ Cleaned up request for: "${prompt.substring(0, 50)}..."`);
+  });
+
+  return responsePromise;
+}
+
+async function createStreamResponse(body: any, requestKey: string): Promise<Response> {
   const { prompt, numRows, useWebData, refinedSearchQuery } = body;
 
   // Create a readable stream for Server-Sent Events
