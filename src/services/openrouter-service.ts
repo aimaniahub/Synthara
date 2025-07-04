@@ -139,7 +139,7 @@ ${request.scrapedContent}
 INSTRUCTIONS:
 1. Analyze the scraped content thoroughly
 2. Design an optimal schema based on available data
-3. Generate ${request.numRows} rows of realistic data
+3. Generate ${request.numRows} rows of data
 4. Ensure all data is contextually appropriate and valuable
 5. Respond with the exact JSON format specified in the system prompt
 

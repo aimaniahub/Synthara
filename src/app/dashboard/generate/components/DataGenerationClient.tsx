@@ -243,14 +243,24 @@ export function DataGenerationClient() {
 
   // Handle live logger completion
   const handleLiveLoggerComplete = async (result: GenerateDataOutput) => {
-    console.log('[DataGeneration] Generation completed, clearing guards');
+    console.log('[DataGeneration] ✅ Web scraping completed, processing final result');
+
+    // CRITICAL: Only process if we have valid data and this is the active request
+    if (!isRequestActiveRef.current) {
+      console.log('[DataGeneration] ⚠️ Ignoring completion - request no longer active');
+      return;
+    }
+
+    // Clear all generation states first
     setIsGenerating(false);
     setIsGenerationInProgress(false);
     isRequestActiveRef.current = false;
     setShowLiveLogger(false);
     setCurrentRequestData(null);
 
+    // Validate result
     if (!result || !result.generatedRows || result.generatedRows.length === 0) {
+      console.log('[DataGeneration] ❌ No valid data generated');
       toast({
         title: "Generation Failed",
         description: "No data was generated. Please try a different prompt.",
@@ -259,6 +269,9 @@ export function DataGenerationClient() {
       return;
     }
 
+    console.log('[DataGeneration] 🎯 Setting final result with', result.generatedRows.length, 'rows');
+
+    // Set the final result - this will trigger the UI to show the data
     setGenerationResult(result);
 
     // Auto-generate dataset name
@@ -267,14 +280,14 @@ export function DataGenerationClient() {
     form.setValue("datasetName", autoName);
 
     toast({
-      title: "Data Generated Successfully!",
-      description: `Your dataset with ${result.generatedRows.length} rows is ready.`,
+      title: "Web Data Generated Successfully!",
+      description: `Your dataset with ${result.generatedRows.length} rows from live web scraping is ready.`,
       variant: "default",
     });
 
     await logActivity({
       activityType: 'DATA_GENERATION',
-      description: `Generated ${result.generatedRows.length} rows for: "${currentRequestData?.prompt?.substring(0, 50)}${currentRequestData?.prompt?.length > 50 ? '...' : ''}"`,
+      description: `Generated ${result.generatedRows.length} rows using live web scraping for: "${currentRequestData?.prompt?.substring(0, 50)}${currentRequestData?.prompt?.length > 50 ? '...' : ''}"`,
       details: {
         prompt: currentRequestData?.prompt,
         numRows: result.generatedRows.length,
@@ -331,9 +344,10 @@ export function DataGenerationClient() {
 
   const onSubmit: SubmitHandler<DataGenerationFormValues> = async (data) => {
     const now = Date.now();
-    console.log('[DataGeneration] onSubmit called', {
+    console.log('[DataGeneration] 🚀 onSubmit called', {
       prompt: data.prompt.substring(0, 30),
       numRows: data.numRows,
+      useWebData: data.useWebData,
       isGenerationInProgress,
       isRequestActiveRef: isRequestActiveRef.current,
       timeSinceLastSubmission: now - lastSubmissionTimeRef.current,
@@ -341,21 +355,24 @@ export function DataGenerationClient() {
     });
 
     // CRITICAL: Prevent multiple concurrent requests to save API quotas
-    // Add debounce: ignore requests within 1 second of each other
-    if (isGenerationInProgress || isRequestActiveRef.current || (now - lastSubmissionTimeRef.current < 1000)) {
-      console.log('[DataGeneration] Request already in progress, ignoring duplicate submission', {
+    // Add stronger debounce: ignore requests within 3 seconds of each other
+    if (isGenerationInProgress || isRequestActiveRef.current || (now - lastSubmissionTimeRef.current < 3000)) {
+      console.log('[DataGeneration] ❌ Request blocked - already in progress or too soon', {
         isGenerationInProgress,
-        isRequestActiveRef: isRequestActiveRef.current
+        isRequestActiveRef: isRequestActiveRef.current,
+        timeSinceLastSubmission: now - lastSubmissionTimeRef.current,
+        reason: isGenerationInProgress ? 'generation in progress' :
+                isRequestActiveRef.current ? 'request active' : 'too soon after last request'
       });
       toast({
         title: "Generation in Progress",
-        description: "Please wait for the current generation to complete.",
+        description: "Please wait for the current generation to complete before starting a new one.",
         variant: "default"
       });
       return;
     }
 
-    console.log('[DataGeneration] Starting new generation request');
+    console.log('[DataGeneration] ✅ Starting new generation request');
     lastSubmissionTimeRef.current = now;
     setIsGenerationInProgress(true);
     isRequestActiveRef.current = true;
@@ -366,12 +383,28 @@ export function DataGenerationClient() {
 
     const generationMode = data.useWebData ? "Live Web Data" : "AI Knowledge";
 
+    console.log('[DataGeneration] 🔍 Checking useWebData flag:', {
+      useWebData: data.useWebData,
+      dataType: typeof data.useWebData,
+      formValues: form.getValues()
+    });
+
     if (data.useWebData) {
+      console.log('[DataGeneration] ✅ Web data mode detected - starting live scraping');
+
       // Use live web data generation with refined search query
       const requestDataWithSearch = {
         ...data,
         refinedSearchQuery: searchQuery || data.prompt // Use refined query if available, fallback to original prompt
       };
+
+      console.log('[DataGeneration] 🌐 Starting web data generation:', {
+        prompt: data.prompt.substring(0, 50),
+        useWebData: data.useWebData,
+        refinedSearchQuery: requestDataWithSearch.refinedSearchQuery?.substring(0, 50),
+        numRows: data.numRows,
+        fullRequestData: requestDataWithSearch
+      });
 
       setShowLiveLogger(true);
       setCurrentRequestData(requestDataWithSearch);
@@ -383,7 +416,15 @@ export function DataGenerationClient() {
           : "Searching the web and extracting real-time data for your request."
       });
 
+      console.log('[DataGeneration] 📡 Live logger should now be active:', {
+        showLiveLogger: true,
+        isGenerating,
+        requestData: requestDataWithSearch
+      });
+
       return; // The live logger will handle the rest
+    } else {
+      console.log('[DataGeneration] 🤖 AI knowledge mode - using traditional generation');
     }
 
     // Use traditional flow for AI generation
@@ -541,6 +582,7 @@ export function DataGenerationClient() {
               <div className="flex-1 overflow-auto p-4">
                 {memoizedRequestData && (
                   <LiveLogger
+                    isActive={showLiveLogger && isGenerating}
                     requestData={memoizedRequestData}
                     onComplete={handleLiveLoggerComplete}
                     onError={handleLiveLoggerError}
@@ -554,8 +596,13 @@ export function DataGenerationClient() {
       )}
       <form
         onSubmit={(e) => {
-          if (isGenerationInProgress || isRequestActiveRef.current) {
-            console.log('[DataGeneration] Form submission prevented - request in progress');
+          const now = Date.now();
+          if (isGenerationInProgress || isRequestActiveRef.current || (now - lastSubmissionTimeRef.current < 3000)) {
+            console.log('[DataGeneration] ❌ Form submission prevented - request in progress or too soon', {
+              isGenerationInProgress,
+              isRequestActiveRef: isRequestActiveRef.current,
+              timeSinceLastSubmission: now - lastSubmissionTimeRef.current
+            });
             e.preventDefault();
             e.stopPropagation();
             return false;
@@ -563,7 +610,7 @@ export function DataGenerationClient() {
           return form.handleSubmit(onSubmit)(e);
         }}
         className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8 order-1"
-        style={{ pointerEvents: isGenerationInProgress ? 'none' : 'auto' }}
+        style={{ pointerEvents: (isGenerationInProgress || isRequestActiveRef.current) ? 'none' : 'auto' }}
       >
         <div className="glass-card p-6">
           <div className="mb-6">
@@ -672,7 +719,11 @@ export function DataGenerationClient() {
               <div className="flex items-center space-x-3">
                 <Switch
                   id="useWebData"
-                  {...form.register("useWebData")}
+                  checked={form.watch("useWebData")}
+                  onCheckedChange={(checked) => {
+                    form.setValue("useWebData", checked);
+                    console.log('[DataGeneration] Toggle changed:', { useWebData: checked });
+                  }}
                   disabled={isGenerating}
                 />
                 <Label htmlFor="useWebData" className="text-base font-semibold text-white cursor-pointer">
@@ -770,13 +821,13 @@ export function DataGenerationClient() {
 
             <Button
               type="submit"
-              disabled={isGenerating || isGenerationInProgress}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-all duration-200"
+              disabled={isGenerating || isGenerationInProgress || isRequestActiveRef.current}
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isGenerating ? (
+              {isGenerating || isGenerationInProgress ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
+                  {showLiveLogger ? "Scraping Web Data..." : "Generating Data..."}
                 </>
               ) : (
                 <>
@@ -790,7 +841,8 @@ export function DataGenerationClient() {
       </form>
 
       {/* Results Preview Section - Full Width on Mobile */}
-      {(generationResult || generationError || isGenerating) && (
+      {/* Only show results when NOT actively scraping and we have actual results */}
+      {(generationResult || generationError || (isGenerating && !showLiveLogger)) && (
         <div className="lg:col-span-3 order-3">
           <Card className="shadow-xl">
             <CardHeader>
@@ -1105,6 +1157,7 @@ export function DataGenerationClient() {
             </CardHeader>
             <CardContent>
               <LiveLogger
+                isActive={showLiveLogger && isGenerating}
                 requestData={memoizedRequestData}
                 onComplete={handleLiveLoggerComplete}
                 onError={handleLiveLoggerError}

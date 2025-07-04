@@ -52,17 +52,24 @@ export function LiveLogger({ isActive, onComplete, onError, onScrapedContent, re
       isActive,
       hasRequestData: !!memoizedRequestData,
       isRequestInProgress,
-      requestDataPrompt: memoizedRequestData?.prompt?.substring(0, 50)
+      requestDataPrompt: memoizedRequestData?.prompt?.substring(0, 50),
+      useWebData: memoizedRequestData?.useWebData,
+      refinedSearchQuery: memoizedRequestData?.refinedSearchQuery?.substring(0, 50)
     });
 
     if (isActive && memoizedRequestData && !isRequestInProgress) {
-      console.log('[LiveLogger] Starting logging from useEffect');
+      console.log('[LiveLogger] ✅ Starting logging from useEffect - all conditions met');
       startLogging();
     } else if (!isActive) {
-      console.log('[LiveLogger] Stopping logging from useEffect');
+      console.log('[LiveLogger] ❌ Not active, stopping logging');
       stopLogging();
     } else {
-      console.log('[LiveLogger] Skipping action:', { isActive, hasRequestData: !!memoizedRequestData, isRequestInProgress });
+      console.log('[LiveLogger] ⏸️ Skipping action:', {
+        isActive,
+        hasRequestData: !!memoizedRequestData,
+        isRequestInProgress,
+        reason: !isActive ? 'not active' : !memoizedRequestData ? 'no request data' : 'request in progress'
+      });
     }
 
     return () => {
@@ -83,7 +90,7 @@ export function LiveLogger({ isActive, onComplete, onError, onScrapedContent, re
 
   const startLogging = async () => {
     if (!memoizedRequestData || isRequestInProgress) {
-      console.log('[LiveLogger] Skipping request - no data or request already in progress', {
+      console.log('[LiveLogger] ❌ Skipping request - no data or request already in progress', {
         hasData: !!memoizedRequestData,
         isRequestInProgress,
         prompt: memoizedRequestData?.prompt?.substring(0, 30)
@@ -91,9 +98,11 @@ export function LiveLogger({ isActive, onComplete, onError, onScrapedContent, re
       return;
     }
 
-    console.log('[LiveLogger] Starting new request', {
-      prompt: memoizedRequestData.prompt.substring(0, 30),
+    console.log('[LiveLogger] 🚀 Starting new web scraping request', {
+      prompt: memoizedRequestData.prompt.substring(0, 50),
       numRows: memoizedRequestData.numRows,
+      useWebData: memoizedRequestData.useWebData,
+      refinedSearchQuery: memoizedRequestData.refinedSearchQuery?.substring(0, 50),
       timestamp: new Date().toISOString()
     });
     setIsRequestInProgress(true);
@@ -104,12 +113,25 @@ export function LiveLogger({ isActive, onComplete, onError, onScrapedContent, re
       setIsConnected(true);
 
       // Start the streaming request
+      console.log('[LiveLogger] 📡 Making API call to /api/generate-stream with data:', {
+        prompt: memoizedRequestData.prompt.substring(0, 50),
+        numRows: memoizedRequestData.numRows,
+        useWebData: memoizedRequestData.useWebData,
+        refinedSearchQuery: memoizedRequestData.refinedSearchQuery?.substring(0, 50)
+      });
+
       const response = await fetch('/api/generate-stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(memoizedRequestData),
+      });
+
+      console.log('[LiveLogger] 📡 API response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        hasBody: !!response.body
       });
 
       if (!response.body) {

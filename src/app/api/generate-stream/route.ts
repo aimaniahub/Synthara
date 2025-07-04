@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
                     content: content,
                     timestamp: new Date().toISOString()
                   });
-                  writer.write(`data: ${scrapedContentData}\n\n`);
+                  controller.enqueue(encoder.encode(`data: ${scrapedContentData}\n\n`));
                 } else {
                   sendLog(`ℹ️ ${message}`, 'info');
                 }
