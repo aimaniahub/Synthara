@@ -146,6 +146,57 @@ INSTRUCTIONS:
 Focus on creating a high-quality dataset that maximizes the value of the scraped content while meeting the user's specific requirements.`;
   }
 
+  private fixJsonIssues(jsonString: string): string {
+    try {
+      // Fix common JSON formatting issues
+      let fixed = jsonString.trim();
+
+      // Remove trailing commas before closing brackets/braces
+      fixed = fixed.replace(/,(\s*[}\]])/g, '$1');
+
+      // Fix incomplete objects - find the last complete closing brace
+      if (!fixed.endsWith('}') && !fixed.endsWith(']')) {
+        const lastBraceIndex = fixed.lastIndexOf('}');
+        const lastBracketIndex = fixed.lastIndexOf(']');
+        const lastIndex = Math.max(lastBraceIndex, lastBracketIndex);
+
+        if (lastIndex > 0) {
+          fixed = fixed.substring(0, lastIndex + 1);
+        }
+      }
+
+      // Fix missing quotes around property names
+      fixed = fixed.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+
+      // Fix single quotes to double quotes
+      fixed = fixed.replace(/'/g, '"');
+
+      // Remove any control characters that might break JSON
+      fixed = fixed.replace(/[\x00-\x1F\x7F]/g, '');
+
+      // Try to balance braces and brackets
+      const openBraces = (fixed.match(/\{/g) || []).length;
+      const closeBraces = (fixed.match(/\}/g) || []).length;
+      const openBrackets = (fixed.match(/\[/g) || []).length;
+      const closeBrackets = (fixed.match(/\]/g) || []).length;
+
+      // Add missing closing braces
+      for (let i = 0; i < openBraces - closeBraces; i++) {
+        fixed += '}';
+      }
+
+      // Add missing closing brackets
+      for (let i = 0; i < openBrackets - closeBrackets; i++) {
+        fixed += ']';
+      }
+
+      return fixed;
+    } catch (error) {
+      console.warn('[OpenRouter] JSON fix attempt failed:', error);
+      return jsonString; // Return original if fixing fails
+    }
+  }
+
   private parseResponse(response: string, targetRows: number): StructuredDataResponse {
     try {
       // Clean the response and extract JSON
@@ -165,13 +216,7 @@ Focus on creating a high-quality dataset that maximizes the value of the scraped
       }
 
       // Try to fix common JSON issues
-      if (!jsonString.endsWith('}')) {
-        // Try to find the last complete object
-        const lastBraceIndex = jsonString.lastIndexOf('}');
-        if (lastBraceIndex > 0) {
-          jsonString = jsonString.substring(0, lastBraceIndex + 1);
-        }
-      }
+      jsonString = this.fixJsonIssues(jsonString);
 
       const parsed = JSON.parse(jsonString);
 

@@ -17,7 +17,7 @@
 
 import { z } from 'zod';
 import { getGoogleSearchResults, type SearchResult } from '@/services/serpapi-service';
-import { scrapeContent } from '@/services/firecrawl-service';
+import { scrapeContent, scrapeContentFallback } from '@/services/firecrawl-service';
 import { type GenerateDataOutput, type Column } from './generate-data-flow';
 import { FileManagerService, type ScrapedSource } from '@/services/file-manager-service';
 import { OpenRouterService } from '@/services/openrouter-service';
@@ -776,6 +776,25 @@ async function generateFromWebFlow(input: GenerateFromWebInput): Promise<Generat
         logProgress('Web Scraping', 5, 7, 'Extracting content from selected websites');
         log(`🕷️ Scraping content from ${filteredUrls.length} selected URLs...`);
 
+        // Helper function to check if a Firecrawl error is retryable with fallback scraping
+        const isRetryableFirecrawlError = (error: string): boolean => {
+            const retryableErrors = [
+                'Bad gateway',
+                'Gateway timeout',
+                'Service unavailable',
+                'Connection timeout',
+                'Network error',
+                'server connection issue',
+                '502',
+                '503',
+                '504'
+            ];
+
+            return retryableErrors.some(retryableError =>
+                error.toLowerCase().includes(retryableError.toLowerCase())
+            );
+        };
+
         // Optimize parallel scraping with better error handling and timeout
         const SCRAPE_TIMEOUT = 35000; // 35 seconds per URL (increased for better success rate)
         const MIN_CONTENT_SIZE = 100; // Minimum content size to be considered valid
@@ -787,7 +806,23 @@ async function generateFromWebFlow(input: GenerateFromWebInput): Promise<Generat
             );
 
             try {
-                return await Promise.race([scrapeContent(url), timeoutPromise]);
+                // Try main scraping first
+                const result = await Promise.race([scrapeContent(url), timeoutPromise]);
+
+                // If main scraping failed with retryable error, try fallback
+                if (result.error && isRetryableFirecrawlError(result.error)) {
+                    console.log(`[WebFlow] Main scraping failed for ${url}, trying fallback: ${result.error}`);
+                    const fallbackResult = await scrapeContentFallback(url);
+
+                    if (!fallbackResult.error) {
+                        console.log(`[WebFlow] Fallback scraping successful for ${url}`);
+                        return fallbackResult;
+                    }
+
+                    console.log(`[WebFlow] Both main and fallback scraping failed for ${url}`);
+                }
+
+                return result;
             } catch (error) {
                 return { error: error instanceof Error ? error.message : 'Unknown error', urlScraped: url };
             }

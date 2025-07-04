@@ -20,11 +20,59 @@ interface ScrapeResult {
 }
 
 /**
- * Scrapes content from a given URL using Firecrawl.
+ * Scrapes content from a given URL using Firecrawl with retry logic.
  * @param url The URL to scrape.
  * @returns An object containing the scraped markdown content or an error message.
  */
 export async function scrapeContent(url: string): Promise<ScrapeResult> {
+  const maxRetries = 2;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const result = await scrapeContentSingle(url, attempt);
+
+    // If successful or non-retryable error, return result
+    if (!result.error || !isRetryableError(result.error)) {
+      return result;
+    }
+
+    // If this was the last attempt, return the error
+    if (attempt === maxRetries) {
+      return result;
+    }
+
+    // Wait before retrying (exponential backoff)
+    const delay = 1000 * Math.pow(2, attempt);
+    console.log(`[FirecrawlService] Retrying ${url} in ${delay}ms (attempt ${attempt + 2}/${maxRetries + 1})`);
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  return { error: "Max retries exceeded", urlScraped: url };
+}
+
+/**
+ * Check if an error is retryable
+ */
+function isRetryableError(error: string): boolean {
+  const retryableErrors = [
+    'Bad gateway',
+    'Gateway timeout',
+    'Service unavailable',
+    'Connection timeout',
+    'Network error',
+    '502',
+    '503',
+    '504'
+  ];
+
+  return retryableErrors.some(retryableError =>
+    error.toLowerCase().includes(retryableError.toLowerCase())
+  );
+}
+
+/**
+ * Single attempt to scrape content from a URL
+ */
+async function scrapeContentSingle(url: string, attempt: number): Promise<ScrapeResult> {
   if (!firecrawlApiKey) {
     return { error: "Firecrawl API key is not configured.", urlScraped: url };
   }
@@ -33,7 +81,12 @@ export async function scrapeContent(url: string): Promise<ScrapeResult> {
   }
 
   try {
-    console.log(`[FirecrawlService] Attempting to scrape URL: ${url}`);
+    console.log(`[FirecrawlService] Attempting to scrape URL: ${url} (attempt ${attempt + 1})`);
+
+    // Add a small delay for retries to avoid overwhelming the server
+    if (attempt > 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
 
     // Use the correct Firecrawl v1 API format with optimized settings
     const response = await client.scrapeUrl(url, {
@@ -107,5 +160,47 @@ export async function scrapeContent(url: string): Promise<ScrapeResult> {
 
     console.error(`[FirecrawlService] Error scraping URL ${url}:`, errorMessage);
     return { error: errorMessage, urlScraped: url };
+  }
+}
+
+/**
+ * Fallback scraping method when Firecrawl fails
+ */
+export async function scrapeContentFallback(url: string): Promise<ScrapeResult> {
+  try {
+    console.log(`[FirecrawlService] Using fallback scraping for: ${url}`);
+
+    // Simple fetch-based scraping as fallback
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
+      timeout: 10000
+    });
+
+    if (!response.ok) {
+      return { error: `HTTP ${response.status}: ${response.statusText}`, urlScraped: url };
+    }
+
+    const html = await response.text();
+
+    // Basic HTML to text conversion
+    const textContent = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '') // Remove scripts
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '') // Remove styles
+      .replace(/<[^>]*>/g, ' ') // Remove HTML tags
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+
+    if (textContent.length < 100) {
+      return { error: 'Insufficient content extracted from fallback scraping', urlScraped: url };
+    }
+
+    console.log(`[FirecrawlService] Fallback scraping successful: ${textContent.length} characters`);
+    return { markdown: textContent, urlScraped: url };
+
+  } catch (error: any) {
+    console.error(`[FirecrawlService] Fallback scraping failed for ${url}:`, error);
+    return { error: `Fallback scraping failed: ${error.message}`, urlScraped: url };
   }
 }
