@@ -90,20 +90,12 @@ export default function DashboardLayout({
             '--sidebar-width': '22rem',
           }}
         >
-          <SidebarHeader className="p-6 h-20 flex items-center border-b border-slate-200/50 dark:border-slate-700/50">
-            <Link href="/dashboard" className="flex items-center gap-4 transition-all duration-200">
-              <div className="relative">
-                <SyntharaLogo className="h-10 w-auto text-blue-500 transition-all duration-200" />
-              </div>
-              <div className="transition-all duration-200">
-                <span className="font-headline text-2xl font-bold text-slate-800 dark:text-slate-100 block">
-                  Synthara
-                </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  AI Data Platform
-                </span>
-              </div>
-            </Link>
+          <SidebarHeader className="p-4 h-16 flex items-center border-b border-slate-200/50 dark:border-slate-700/50">
+            <div className="w-full text-center">
+              <span className="font-headline text-lg font-bold text-slate-800 dark:text-slate-100">
+                Navigation
+              </span>
+            </div>
           </SidebarHeader>
           <SidebarContent className="flex-grow p-0 overflow-y-auto">
             <SidebarNav navItems={mainNavItems} groupLabel="Main Tools" />
@@ -126,16 +118,11 @@ export default function DashboardLayout({
           }}
         >
           <SidebarHeader className="p-4 h-16 flex items-center border-b border-slate-200/50 dark:border-slate-700/50">
-            <Link href="/dashboard" className="flex items-center gap-3 group-data-[collapsible=icon]:justify-center transition-all duration-200">
-              <div className="relative">
-                <SyntharaLogo className="h-8 w-auto text-blue-500 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 transition-all duration-200" />
-              </div>
-              <div className="group-data-[collapsible=icon]:hidden transition-all duration-200">
-                <span className="font-headline text-lg font-bold text-slate-800 dark:text-slate-100 block">
-                  Synthara
-                </span>
-              </div>
-            </Link>
+            <div className="w-full text-center group-data-[collapsible=icon]:hidden">
+              <span className="font-headline text-lg font-bold text-slate-800 dark:text-slate-100">
+                Menu
+              </span>
+            </div>
           </SidebarHeader>
           <SidebarContent className="flex-grow p-0 overflow-y-auto">
             <SidebarNav navItems={mainNavItems} groupLabel="Main Tools" />

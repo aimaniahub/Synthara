@@ -558,13 +558,16 @@ export function DataGenerationClient() {
   // Main component render
   return (
     <div className="grid gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-3 items-start">
-      {/* Live Logger Overlay for Mobile */}
-      {showLiveLogger && (
-        <div className="fixed inset-0 bg-black/50 z-50 lg:hidden">
-          <div className="absolute inset-4 bg-background rounded-lg overflow-hidden">
+      {/* Live Logger Overlay for Mobile - Higher Z-Index */}
+      {showLiveLogger && memoizedRequestData && (
+        <div className="fixed inset-0 bg-black/80 z-[9999] lg:hidden flex items-center justify-center p-4">
+          <div className="bg-background rounded-lg w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl">
             <div className="h-full flex flex-col">
-              <div className="p-4 border-b flex items-center justify-between">
-                <h3 className="font-semibold">Live Generation Progress</h3>
+              <div className="p-4 border-b flex items-center justify-between bg-primary/5">
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  <h3 className="font-semibold text-lg">Web Scraping Progress</h3>
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -575,20 +578,24 @@ export function DataGenerationClient() {
                     }
                   }}
                   disabled={isGenerating}
+                  className="h-8 w-8 p-0"
                 >
-                  ×
+                  <XCircle className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="flex-1 overflow-auto p-4">
-                {memoizedRequestData && (
-                  <LiveLogger
-                    isActive={showLiveLogger && isGenerating}
-                    requestData={memoizedRequestData}
-                    onComplete={handleLiveLoggerComplete}
-                    onError={handleLiveLoggerError}
-                    onScrapedContent={handleScrapedContent}
-                  />
-                )}
+              <div className="flex-1 overflow-auto p-4 bg-muted/20">
+                <LiveLogger
+                  isActive={showLiveLogger && isGenerating}
+                  requestData={memoizedRequestData}
+                  onComplete={handleLiveLoggerComplete}
+                  onError={handleLiveLoggerError}
+                  onScrapedContent={handleScrapedContent}
+                />
+              </div>
+              <div className="p-3 border-t bg-muted/30">
+                <p className="text-xs text-muted-foreground text-center">
+                  Please wait while we scrape live data from the web...
+                </p>
               </div>
             </div>
           </div>

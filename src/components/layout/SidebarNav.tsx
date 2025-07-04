@@ -22,7 +22,7 @@ interface SidebarNavProps {
 
 export function SidebarNav({ navItems, groupLabel }: SidebarNavProps) {
   const pathname = usePathname();
-  const { state: sidebarState } = useSidebar();
+  const { state: sidebarState, isMobile, setOpenMobile } = useSidebar();
 
   if (!navItems?.length) {
     return null;
@@ -39,7 +39,15 @@ export function SidebarNav({ navItems, groupLabel }: SidebarNavProps) {
         <SidebarMenu className="space-y-1 sm:space-y-2">
           {navItems.map((item, index) => (
             <SidebarMenuItem key={index}>
-              <Link href={item.disabled ? '#' : item.href}>
+              <Link
+                href={item.disabled ? '#' : item.href}
+                onClick={() => {
+                  // Auto-close sidebar on mobile when clicking a nav item
+                  if (isMobile && !item.disabled) {
+                    setOpenMobile(false);
+                  }
+                }}
+              >
                 <SidebarMenuButton
                   isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
                   disabled={item.disabled}

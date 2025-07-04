@@ -114,9 +114,20 @@ If the prompt implies a very large number of columns or very complex data, try t
       temperature: 0.7
     });
 
+    console.log('[GenerateData] AI response received:', {
+      hasGeneratedJsonString: !!result.generatedJsonString,
+      hasDetectedSchema: !!result.detectedSchema,
+      jsonStringLength: result.generatedJsonString?.length || 0,
+      schemaLength: result.detectedSchema?.length || 0
+    });
+
     return { output: result };
-  } catch (error) {
+  } catch (error: any) {
     console.error('[GenerateData] Error:', error);
+    console.error('[GenerateData] Error details:', {
+      message: error.message,
+      stack: error.stack?.substring(0, 500)
+    });
     return { output: null };
   }
 }

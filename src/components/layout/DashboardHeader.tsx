@@ -136,15 +136,6 @@ export function DashboardHeader() {
   return (
     <header className="sticky top-0 z-40 flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 border-b border-slate-200/50 dark:border-slate-700/50 modern-card px-4 sm:px-6 shadow-lg">
       <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-        {/* Mobile-only sidebar trigger */}
-        <SidebarTrigger className="md:hidden text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors">
-          <Menu className="h-5 w-5 sm:h-6 sm:w-6"/>
-        </SidebarTrigger>
-
-        {/* Desktop sidebar trigger */}
-        <SidebarTrigger className="hidden md:flex text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors">
-          <Menu className="h-5 w-5"/>
-        </SidebarTrigger>
 
         <div className="hidden sm:block flex-1 max-w-sm md:max-w-md">{searchBar}</div>
       </div>
