@@ -86,7 +86,14 @@ export async function logActivity(input: LogActivityInput): Promise<{ success: b
       related_resource_id: relatedResourceId,
     });
 
-    if (error) throw error;
+    if (error) {
+      // Handle table not found error gracefully
+      if (error.code === 'PGRST116' || error.message.includes('relation "public.user_activities" does not exist')) {
+        console.warn('User activities table not found. Activity logging disabled.');
+        return { success: false, error: 'Activity logging not available' };
+      }
+      throw error;
+    }
     return { success: true };
   } catch (err: any) {
     console.error('Error logging activity:', err.message);
@@ -145,7 +152,14 @@ export async function saveDataset(
       .select('id')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // Handle table not found error gracefully
+      if (error.code === 'PGRST116' || error.message.includes('relation "public.generated_datasets" does not exist')) {
+        console.warn('Generated datasets table not found. Please run the database schema setup.');
+        return { success: false, error: 'Database tables not set up. Please contact support.' };
+      }
+      throw error;
+    }
     if (!data || !data.id) throw new Error("Failed to get dataset ID after insert.");
 
     // Log the save activity
@@ -175,7 +189,14 @@ export async function getUserActivities(limit = 20): Promise<ActivityLog[]> {
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (error) throw error;
+    if (error) {
+      // Handle table not found error gracefully
+      if (error.code === 'PGRST116' || error.message.includes('relation "public.user_activities" does not exist')) {
+        console.warn('User activities table not found. Please run the database schema setup.');
+        return [];
+      }
+      throw error;
+    }
     return data || [];
   } catch (err: any) {
     console.error('Error fetching user activities:', err.message);
@@ -194,7 +215,14 @@ export async function getUserDatasets(limit = 20): Promise<SavedDataset[]> {
       .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (error) throw error;
+    if (error) {
+      // Handle table not found error gracefully
+      if (error.code === 'PGRST116' || error.message.includes('relation "public.generated_datasets" does not exist')) {
+        console.warn('Generated datasets table not found. Please run the database schema setup.');
+        return [];
+      }
+      throw error;
+    }
     return data || [];
   } catch (err: any) {
     console.error('Error fetching user datasets:', err.message);
