@@ -18,6 +18,10 @@
     {
       "source": "/api/crawl4ai/(.*)",
       "destination": "/api/main"
+    },
+    {
+      "source": "/api/crawl4ai",
+      "destination": "/api/main"
     }
   ],
   

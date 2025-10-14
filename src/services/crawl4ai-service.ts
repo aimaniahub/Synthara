@@ -32,8 +32,8 @@ export class Crawl4AIService {
       // Client-side: use relative path to Vercel API
       this.baseUrl = '/api/crawl4ai';
     } else {
-      // Server-side: use environment variable or default
-      this.baseUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:8000';
+      // Server-side: use environment variable or default to local API
+      this.baseUrl = process.env.CRAWL4AI_SERVICE_URL || '/api/crawl4ai';
     }
   }
 
