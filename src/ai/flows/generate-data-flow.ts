@@ -52,8 +52,8 @@ const GenerateDataOutputSchema = z.object({
   feedback: z.string().optional().describe('Any feedback or notes from the generation process.'),
 });
 
-// This function is only used internally, so it is no longer exported.
-async function jsonToCsv(jsonData: Array<Record<string, any>>): Promise<string> {
+// Export this function so it can be used by other flows
+export async function jsonToCsv(jsonData: Array<Record<string, any>>): Promise<string> {
   if (!jsonData || jsonData.length === 0) {
     return "";
   }
@@ -115,10 +115,10 @@ If the prompt implies a very large number of columns or very complex data, try t
     });
 
     console.log('[GenerateData] AI response received:', {
-      hasGeneratedJsonString: !!result.generatedJsonString,
-      hasDetectedSchema: !!result.detectedSchema,
-      jsonStringLength: result.generatedJsonString?.length || 0,
-      schemaLength: result.detectedSchema?.length || 0
+      hasGeneratedJsonString: !!(result as any).generatedJsonString,
+      hasDetectedSchema: !!(result as any).detectedSchema,
+      jsonStringLength: (result as any).generatedJsonString?.length || 0,
+      schemaLength: (result as any).detectedSchema?.length || 0
     });
 
     return { output: result };

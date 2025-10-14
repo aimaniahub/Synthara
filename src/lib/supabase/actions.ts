@@ -30,8 +30,13 @@ async function getSupabaseUserClient() {
   );
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   
-  if (userError || !user) {
-    console.error('User not authenticated or error fetching user:', userError?.message);
+  if (userError) {
+    console.error('Error fetching user:', userError.message);
+    throw new Error(`Authentication error: ${userError.message}`);
+  }
+  
+  if (!user) {
+    console.error('User not authenticated');
     throw new Error('User not authenticated');
   }
   return { supabase, user };
@@ -81,7 +86,7 @@ export async function logActivity(input: LogActivityInput): Promise<{ success: b
       user_id: user.id,
       activity_type: activityType,
       description,
-      details,
+      metadata: details, // Map details to metadata column
       status,
       related_resource_id: relatedResourceId,
     });

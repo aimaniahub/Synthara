@@ -54,7 +54,7 @@ Your recommendation should be in JSON format with the following structure:
     console.error('[RecommendModel] Error:', error);
     // Return a fallback recommendation
     return {
-      model: 'OpenRouter DeepSeek Chat V3',
+      modelName: 'OpenRouter DeepSeek Chat V3',
       reason: 'Default recommendation due to processing error. DeepSeek Chat V3 is a reliable general-purpose model for data generation tasks.'
     };
   }

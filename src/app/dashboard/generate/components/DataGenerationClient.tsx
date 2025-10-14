@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Lightbulb, Loader2, Sparkles, TableIcon, CheckCircle, Wand2, FileSpreadsheet, Download, Save, Globe, Brain, Search, Edit3, Eye, Shield, AlertTriangle, ThumbsUp, Info, BarChart3, TrendingUp, Database, Clock, Users, Star, ArrowRight, XCircle, HelpCircle } from 'lucide-react';
 import { recommendModel, type RecommendModelInput, type RecommendModelOutput } from '@/ai/flows/recommend-model';
 import { generateData, type GenerateDataInput, type GenerateDataOutput } from '@/ai/flows/generate-data-flow';
-import { generateFromWeb, type GenerateFromWebInput, type GenerateFromWebOutput } from '@/ai/flows/generate-from-web-flow';
+import { generateFromWeb, type SimpleWebFlowInput, type SimpleWebFlowOutput } from '@/ai/flows/simple-web-flow';
 import { enhancePrompt, type EnhancePromptInput, type EnhancePromptOutput } from '@/ai/flows/enhance-prompt-flow';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +27,7 @@ import { logActivity, saveDataset } from '@/lib/supabase/actions';
 import { LiveLogger } from '@/components/ui/live-logger';
 import { dynamicContent, type ContentContext, type DynamicExample } from '@/services/dynamic-content-service';
 import DynamicExamples from '@/components/ui/dynamic-examples';
+import { CsvPreviewTable } from '@/components/dashboard/CsvPreviewTable';
 
 const dataGenerationSchema = z.object({
   prompt: z.string().min(10, { message: "Prompt must be at least 10 characters long." }).max(2000, {message: "Prompt must be 2000 characters or less."}),
@@ -298,13 +299,13 @@ export function DataGenerationClient() {
 
     toast({
       title: "Web Data Generated Successfully!",
-      description: `Your dataset with ${result.generatedRows.length} rows from live web scraping is ready.`,
+      description: `Your dataset with ${result.generatedRows.length} rows from web data extraction is ready.`,
       variant: "default",
     });
 
     await logActivity({
       activityType: 'DATA_GENERATION',
-      description: `Generated ${result.generatedRows.length} rows using live web scraping for: "${currentRequestData?.prompt?.substring(0, 50)}${currentRequestData?.prompt?.length > 50 ? '...' : ''}"`,
+      description: `Generated ${result.generatedRows.length} rows using web data extraction for: "${currentRequestData?.prompt?.substring(0, 50)}${currentRequestData?.prompt?.length > 50 ? '...' : ''}"`,
       details: {
         prompt: currentRequestData?.prompt,
         numRows: result.generatedRows.length,
@@ -407,7 +408,7 @@ export function DataGenerationClient() {
     });
 
     if (data.useWebData) {
-      console.log('[DataGeneration] ✅ Web data mode detected - starting live scraping');
+      console.log('[DataGeneration] ✅ Web data mode detected - starting web data extraction');
 
       // Use live web data generation with refined search query
       const requestDataWithSearch = {
@@ -1167,6 +1168,19 @@ export function DataGenerationClient() {
         </div>
       )}
 
+      {/* CSV Preview Section */}
+      {generationResult && generationResult.generatedRows && generationResult.generatedRows.length > 0 && (
+        <div className="lg:col-span-3 order-4">
+          <CsvPreviewTable
+            csvContent={generationResult.generatedCsv || ''}
+            data={generationResult.generatedRows}
+            schema={generationResult.detectedSchema}
+            query={form.getValues("prompt") || ""}
+            metadata={generationResult.metadata}
+          />
+        </div>
+      )}
+
       {/* Sidebar */}
       <div className="lg:col-span-1 space-y-6 lg:space-y-8 order-2 lg:order-2">
         {/* Live Logger for Desktop */}
@@ -1202,7 +1216,6 @@ export function DataGenerationClient() {
           </CardHeader>
           <CardContent>
             <DynamicExamples
-              context={{ userPrompt: currentPrompt }}
               onExampleSelect={handleExampleSelect}
               disabled={isGenerating}
             />
@@ -1267,15 +1280,8 @@ export function DataGenerationClient() {
                       Recommended Approach
                     </h4>
                     <p className="text-sm text-purple-800 dark:text-purple-200 mb-2">
-                      {suggestedModel.reasoning}
+                      {suggestedModel.reason}
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {suggestedModel.suggestedColumns.map((col, idx) => (
-                        <span key={idx} className="text-xs px-2 py-1 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-full">
-                          {col}
-                        </span>
-                      ))}
-                    </div>
                   </div>
                 </div>
               )}

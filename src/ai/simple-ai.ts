@@ -30,7 +30,7 @@ export interface SimpleAIOutput {
 
 export class SimpleAI {
   static async generate(input: SimpleAIInput): Promise<SimpleAIOutput> {
-    const { prompt, model = 'deepseek/deepseek-chat-v3-0324:free', maxTokens = 4000, temperature = 0.7 } = input;
+    const { prompt, model = 'tngtech/deepseek-r1t2-chimera:free', maxTokens = 8000, temperature = 0.7 } = input;
 
     if (!openRouterClient) {
       throw new Error('OpenRouter not initialized. Please set OPENROUTER_API_KEY environment variable.');
@@ -54,7 +54,8 @@ export class SimpleAI {
         headers: extraHeaders
       });
 
-      const text = completion.choices[0]?.message?.content || '';
+      // Get the response text from the completion
+      let text = completion.choices[0]?.message?.content || '';
 
       return {
         text,
@@ -62,6 +63,18 @@ export class SimpleAI {
       };
     } catch (error: any) {
       console.error(`[SimpleAI] Error with model ${model}:`, error.message);
+      
+      // Handle specific error types
+      if (error.message?.includes('429') || error.status === 429) {
+        throw new Error(`Rate limit exceeded. Please wait a moment and try again. If this persists, check your OpenRouter API key and model availability.`);
+      } else if (error.message?.includes('401') || error.status === 401) {
+        throw new Error(`Invalid API key. Please check your OPENROUTER_API_KEY in .env.local`);
+      } else if (error.message?.includes('404') || error.status === 404) {
+        throw new Error(`Model not found. Please check your OPENROUTER_MODEL in .env.local`);
+      } else if (error.message?.includes('quota') || error.message?.includes('limit')) {
+        throw new Error(`API quota exceeded. Please check your OpenRouter account limits.`);
+      }
+      
       throw new Error(`AI generation failed: ${error.message}`);
     }
   }

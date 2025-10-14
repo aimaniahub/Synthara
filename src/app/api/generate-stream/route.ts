@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { generateFromWeb } from '@/ai/flows/generate-from-web-flow';
+import { intelligentWebScraping } from '@/ai/flows/intelligent-web-scraping-flow';
 
 // Request deduplication for stream API
 const activeRequests = new Map<string, Promise<Response>>();
@@ -143,12 +143,12 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
               progress: sendProgress
             };
 
-            // Call the actual web generation flow with integrated logging
-            const result = await generateFromWeb({
-              prompt,
+            // Call the intelligent web scraping flow with integrated logging
+            const result = await intelligentWebScraping({
+              userQuery: prompt,
               numRows: numRows || 50,
-              logger,
-              refinedSearchQuery: refinedSearchQuery || prompt // Use refined query if available
+              maxUrls: 5, // Maximum URLs to search and scrape
+              useAI: true, // Use AI for all processing steps
             });
 
             // Add a small delay to ensure all processing is complete
@@ -159,28 +159,27 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
             // Validate result structure before sending
             console.log('[StreamAPI] Generation result validation:', {
               hasResult: !!result,
-              hasGeneratedRows: !!result?.generatedRows,
-              hasGeneratedCsv: !!result?.generatedCsv,
-              hasDetectedSchema: !!result?.detectedSchema,
-              rowsLength: result?.generatedRows?.length || 0,
-              csvLength: result?.generatedCsv?.length || 0,
-              schemaLength: result?.detectedSchema?.length || 0,
-              isFallbackData: result?.feedback?.includes('fallback') || result?.feedback?.includes('pattern matching'),
+              hasData: !!result?.data,
+              hasCsv: !!result?.csv,
+              dataLength: result?.data?.length || 0,
+              csvLength: result?.csv?.length || 0,
+              urlsFound: result?.urls?.length || 0,
+              success: result?.success || false,
             });
 
             // Always send the result, even if it's empty initially
             // The web scraping process might take time and return results later
-            if (result && (result.generatedRows || result.generatedCsv || result.detectedSchema)) {
+            if (result && result.success && result.data && result.data.length > 0) {
               // We have some data, validate completeness
-              const hasRows = result.generatedRows && result.generatedRows.length > 0;
-              const hasRequiredFields = result.generatedCsv && result.detectedSchema;
+              const hasRows = result.data && result.data.length > 0;
+              const hasCsv = result.csv && result.csv.length > 0;
 
-              if (hasRows && hasRequiredFields) {
-                sendLog(`🎉 Successfully generated ${result.generatedRows.length} rows of data!`, 'success');
-                sendProgress('Complete', 7, 7, `Generated ${result.generatedRows.length} rows`);
-              } else if (hasRows && !hasRequiredFields) {
-                sendLog(`⚠️ Data generated but missing CSV or schema. Processing...`, 'info');
-                sendProgress('Processing', 7, 7, `Generated ${result.generatedRows?.length || 0} rows, finalizing...`);
+              if (hasRows && hasCsv) {
+                sendLog(`🎉 Successfully generated ${result.data.length} rows of data from ${result.urls.length} URLs!`, 'success');
+                sendProgress('Complete', 7, 7, `Generated ${result.data.length} rows`);
+              } else if (hasRows && !hasCsv) {
+                sendLog(`⚠️ Data generated but missing CSV. Processing...`, 'info');
+                sendProgress('Processing', 7, 7, `Generated ${result.data?.length || 0} rows, finalizing...`);
               } else {
                 sendLog(`ℹ️ Processing in progress, please wait...`, 'info');
                 sendProgress('Processing', 6, 7, 'Finalizing data structure...');
@@ -188,8 +187,17 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
 
               // Always send the result, let the client decide what to do
               const finalData = JSON.stringify({
-                type: hasRows && hasRequiredFields ? 'complete' : 'progress',
-                result: result,
+                type: hasRows && hasCsv ? 'complete' : 'progress',
+                result: {
+                  success: result.success,
+                  generatedRows: result.data,
+                  generatedCsv: result.csv,
+                  detectedSchema: result.schema || (result.data.length > 0 ? Object.keys(result.data[0]).map(key => ({ name: key, type: 'String' })) : []),
+                  feedback: result.feedback,
+                  urls: result.urls || [],
+                  searchQueries: result.searchQueries || [],
+                  metadata: result.metadata || {}
+                },
                 timestamp: new Date().toISOString()
               });
               if (controller.desiredSize !== null) {

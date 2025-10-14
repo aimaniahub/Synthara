@@ -2,6 +2,37 @@
 
 Synthara is a comprehensive web application that generates structured datasets using AI and real-time web data. The platform combines web scraping, AI processing, and intelligent data structuring to create high-quality datasets for various use cases.
 
+## 🚀 Quick Start
+
+For complete setup instructions, see **[COMPLETE_SETUP_GUIDE.md](./COMPLETE_SETUP_GUIDE.md)**
+
+### Prerequisites
+- Node.js 18+
+- Python 3.8+
+- Supabase account
+- API keys for AI services
+
+### Installation
+```bash
+git clone <repository-url>
+cd Synthara-1
+npm install
+```
+
+### Environment Setup
+Create `.env.local` with your API keys (see complete guide for details).
+
+### Run the Application
+```bash
+# Start Crawl4AI service (required for web scraping)
+docker run -p 8000:8000 crawl4ai/crawl4ai:latest
+
+# Start the application
+npm run dev
+```
+
+Visit `http://localhost:3000` to access the application.
+
 ## How It Works
 
 ### 1. Dataset Generation Flow

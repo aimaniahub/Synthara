@@ -8,7 +8,7 @@
  */
 
 import { z } from 'zod';
-import { OpenRouterService } from '@/services/openrouter-service';
+import { SimpleAI } from '@/ai/simple-ai';
 
 const AnalyzeDatasetSnippetInputSchema = z.object({
   dataSnippetJson: z.string().describe('A JSON string representing a small sample of the dataset (e.g., an array of the first 5-10 rows).'),
@@ -50,21 +50,8 @@ export async function analyzeDatasetSnippet(input: AnalyzeDatasetSnippetInput): 
   return analyzeDatasetSnippetFlow(input);
 }
 
-// Fallback function using OpenRouter DeepSeek
+// Fallback function using SimpleAI
 async function analyzeWithOpenRouter(input: AnalyzeDatasetSnippetInput): Promise<AnalyzeDatasetSnippetOutput> {
-  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
-
-  if (!openRouterApiKey) {
-    throw new Error('OpenRouter API key not configured');
-  }
-
-  const openRouterService = new OpenRouterService({
-    apiKey: openRouterApiKey,
-    baseUrl: process.env.OPENROUTER_BASE_URL,
-    model: process.env.OPENROUTER_MODEL,
-    siteUrl: process.env.OPENROUTER_SITE_URL,
-    siteName: process.env.OPENROUTER_SITE_NAME,
-  });
 
   const analysisPrompt = `You are an expert Data Scientist specializing in evaluating datasets for Machine Learning readiness.
 Analyze the provided JSON data snippet with the goal of preparing it for ML model training.
@@ -122,14 +109,15 @@ Please respond with a valid JSON object in this exact format:
 }`;
 
   try {
-    const response = await openRouterService.processScrapedContent({
-      userPrompt: analysisPrompt,
-      numRows: 0, // Not used for analysis
-      scrapedContent: input.dataSnippetJson, // Use the actual data snippet
+    const response = await SimpleAI.generate({
+      prompt: analysisPrompt,
+      model: 'tngtech/deepseek-r1t2-chimera:free',
+      maxTokens: 4000,
+      temperature: 0.3
     });
 
     // Parse the JSON response
-    const analysisResult = JSON.parse(response.jsonString);
+    const analysisResult = JSON.parse(response.text);
 
     // Validate and return the result
     return {
@@ -143,27 +131,27 @@ Please respond with a valid JSON object in this exact format:
       suggestedMlModels: analysisResult.suggestedMlModels || []
     };
   } catch (error: any) {
-    console.error('[OpenRouter Analysis] Error:', error);
-    throw new Error(`OpenRouter analysis failed: ${error.message}`);
+    console.error('[SimpleAI Analysis] Error:', error);
+    throw new Error(`SimpleAI analysis failed: ${error.message}`);
   }
 }
 
 async function analyzeDatasetSnippetFlow(input: AnalyzeDatasetSnippetInput): Promise<AnalyzeDatasetSnippetOutput> {
     try {
-      console.log('[AnalyzeDatasetSnippet] Attempting analysis with OpenRouter DeepSeek...');
+      console.log('[AnalyzeDatasetSnippet] Attempting analysis with SimpleAI...');
       return await analyzeWithOpenRouter(input);
     } catch (error: any) {
-      console.error('[AnalyzeDatasetSnippet] OpenRouter error:', error.message);
+      console.error('[AnalyzeDatasetSnippet] SimpleAI error:', error.message);
       return {
         overallMlReadiness: {
           score: 0,
-          summary: "Analysis failed due to OpenRouter API error. Please check your API key and try again."
+          summary: "Analysis failed due to AI service error. Please check your configuration and try again."
         },
         dataQualitySummary: { overallScore: 0, featureSuitability: 0, structuralIntegrity: 0, valueConsistency: 0 },
         keyObservationsForML: [],
         potentialMlIssues: [{
-          issue: "OpenRouter API error",
-          recommendation: "Please check your OPENROUTER_API_KEY environment variable and try again."
+          issue: "AI service error",
+          recommendation: "Please check your AI service configuration and try again."
         }],
         featureEngineeringSuggestions: [],
         preprocessingRecommendations: [],
