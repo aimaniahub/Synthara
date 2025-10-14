@@ -14,14 +14,10 @@
     }
   ],
   
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/crawl4ai/(.*)",
-      "dest": "api/main.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/"
+      "source": "/api/crawl4ai/(.*)",
+      "destination": "/api/main"
     }
   ],
   
