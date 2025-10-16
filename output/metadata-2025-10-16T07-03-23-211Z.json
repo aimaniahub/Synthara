@@ -1,0 +1,36 @@
+{
+  "datasetName": "movies",
+  "filename": "dataset-2025-10-16T07-03-23-211Z.csv",
+  "timestamp": "2025-10-16T07:03:23.215Z",
+  "prompt": "get all latest movies of indian related in 2025 with relase and collections upto october ",
+  "numRows": 54,
+  "actualRows": 54,
+  "schema": [
+    {
+      "name": "id",
+      "type": "number",
+      "description": "Unique identifier"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "description": "Item name"
+    },
+    {
+      "name": "category",
+      "type": "string",
+      "description": "Item category"
+    },
+    {
+      "name": "value",
+      "type": "number",
+      "description": "Numeric value"
+    },
+    {
+      "name": "description",
+      "type": "string",
+      "description": "Item description"
+    }
+  ],
+  "feedback": "Sample data generated successfully. This is a demonstration of the data generation capabilities."
+}

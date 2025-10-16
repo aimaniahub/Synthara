@@ -4,8 +4,17 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { type User } from '@supabase/supabase-js';
-import type { GenerateDataOutput } from '@/ai/flows/generate-data-flow';
-import type { AnalyzeDatasetSnippetOutput } from '@/ai/flows/analyze-dataset-snippet-flow';
+// Generic types for data generation results
+interface GenerationResult {
+  generatedRows?: Array<Record<string, any>>;
+  generatedCsv?: string;
+  detectedSchema?: Array<{ name: string; type: string; description?: string }>;
+  data?: Array<Record<string, any>>;
+  csv?: string;
+  schema?: Array<{ name: string; type: string; description?: string }>;
+  feedback?: string;
+  error?: string;
+}
 import type { EnhancePromptOutput } from '@/ai/flows/enhance-prompt-flow';
 
 // Helper to get Supabase client and authenticated user
@@ -82,6 +91,8 @@ export async function logActivity(input: LogActivityInput): Promise<{ success: b
     const { supabase, user } = await getSupabaseUserClient();
     const { activityType, description, details, status = "COMPLETED", relatedResourceId } = input;
 
+    console.log('[LogActivity] Starting activity log for user:', user?.id, 'Activity:', activityType);
+
     const { error } = await supabase.from('user_activities').insert({
       user_id: user.id,
       activity_type: activityType,
@@ -109,7 +120,7 @@ export async function logActivity(input: LogActivityInput): Promise<{ success: b
 // --- Dataset Storage ---
 interface SaveDatasetInput {
   datasetName: string;
-  generationResult: GenerateDataOutput;
+  generationResult: GenerationResult;
   prompt: string;
   numRows: number;
 }
@@ -120,6 +131,8 @@ export async function saveDataset(
   try {
     const { supabase, user } = await getSupabaseUserClient();
     const { datasetName, generationResult, prompt, numRows } = input;
+
+    console.log('[SaveDataset] Starting save process for user:', user?.id);
 
     // Detailed validation logging
     console.log('[SaveDataset] Validation check:', {
@@ -133,10 +146,14 @@ export async function saveDataset(
       generationResultKeys: generationResult ? Object.keys(generationResult) : [],
     });
 
-    if (!generationResult.generatedCsv || !generationResult.detectedSchema) {
+    // Handle both old and new format
+    const csv = generationResult.generatedCsv || generationResult.csv;
+    const schema = generationResult.detectedSchema || generationResult.schema;
+    
+    if (!csv || !schema) {
       const missingFields = [];
-      if (!generationResult.generatedCsv) missingFields.push('generatedCsv');
-      if (!generationResult.detectedSchema) missingFields.push('detectedSchema');
+      if (!csv) missingFields.push('csv/generatedCsv');
+      if (!schema) missingFields.push('schema/detectedSchema');
 
       const errorMsg = `Cannot save dataset: Missing required fields: ${missingFields.join(', ')}. Available fields: ${Object.keys(generationResult || {}).join(', ')}`;
       console.error('[SaveDataset] Validation failed:', errorMsg);
@@ -150,8 +167,8 @@ export async function saveDataset(
         dataset_name: datasetName,
         prompt_used: prompt,
         num_rows: numRows,
-        schema_json: generationResult.detectedSchema,
-        data_csv: generationResult.generatedCsv,
+        schema_json: schema,
+        data_csv: csv,
         feedback: generationResult.feedback,
       })
       .select('id')
@@ -171,7 +188,7 @@ export async function saveDataset(
     await logActivity({
       activityType: 'DATASET_SAVED',
       description: `Saved dataset: "${datasetName}"`,
-      details: { datasetName, numRows, schemaColumns: generationResult.detectedSchema.length },
+      details: { datasetName, numRows, schemaColumns: generationResult.detectedSchema?.length || 0 },
       relatedResourceId: data.id,
     });
     

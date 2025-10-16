@@ -3,28 +3,6 @@
 
   "regions": ["iad1"],
   
-  "builds": [
-    {
-      "src": "api/main.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    }
-  ],
-  
-  "rewrites": [
-    {
-      "source": "/api/crawl4ai/(.*)",
-      "destination": "/api/main"
-    },
-    {
-      "source": "/api/crawl4ai",
-      "destination": "/api/main"
-    }
-  ],
-  
   "headers": [
     {
       "source": "/(.*)",

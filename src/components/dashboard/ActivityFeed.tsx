@@ -9,7 +9,7 @@ interface Activity {
   activity_type: string;
   description: string;
   created_at: string;
-  related_resource_id?: string;
+  related_resource_id?: string | null;
 }
 
 interface ActivityFeedProps {

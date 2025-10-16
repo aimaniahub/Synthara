@@ -54,9 +54,16 @@ export default async function DashboardPage() {
   let lastSavedDataset: (SavedDataset & { data_csv?: string }) | null = null; // Ensure type matches
 
   if (user) {
-    recentActivities = await getUserActivities(5);
-    datasets = await getUserDatasets();
-    lastSavedDataset = datasets.length > 0 ? datasets[0] : null;
+    try {
+      console.log('Fetching data for user:', user.id);
+      recentActivities = await getUserActivities(5);
+      datasets = await getUserDatasets();
+      lastSavedDataset = datasets.length > 0 ? datasets[0] : null;
+      console.log('Fetched data:', { activities: recentActivities.length, datasets: datasets.length });
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      // Continue with empty arrays to prevent page crash
+    }
   }
 
 
@@ -102,7 +109,7 @@ export default async function DashboardPage() {
         />
         <StatsCard
           title="Total Records"
-          value={datasets?.reduce((acc, dataset) => acc + (dataset.row_count || 0), 0) || 0}
+          value={datasets?.reduce((acc, dataset) => acc + (dataset.num_rows || 0), 0) || 0}
           icon={BarChartBig}
           color="purple"
         />

@@ -31,6 +31,59 @@ const GenerateSearchUrlsOutputSchema = z.object({
 export type GenerateSearchUrlsInput = z.infer<typeof GenerateSearchUrlsInputSchema>;
 export type GenerateSearchUrlsOutput = z.infer<typeof GenerateSearchUrlsOutputSchema>;
 
+// Simple in-memory cache for search results to avoid duplicate API calls
+const searchCache = new Map<string, { urls: any[], timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Clean up expired cache entries
+ */
+function cleanupCache() {
+  const now = Date.now();
+  for (const [key, value] of searchCache.entries()) {
+    if (now - value.timestamp > CACHE_DURATION) {
+      searchCache.delete(key);
+    }
+  }
+}
+
+/**
+ * Deduplicate search queries by normalizing and comparing them
+ */
+function deduplicateQueries(queries: GeminiSearchQuery[]): GeminiSearchQuery[] {
+  const seen = new Set<string>();
+  const deduplicated: GeminiSearchQuery[] = [];
+  
+  for (const query of queries) {
+    // Normalize query: lowercase, trim, remove extra spaces
+    const normalized = query.query.toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    // Skip if we've seen this exact query before
+    if (seen.has(normalized)) {
+      console.log(`[GenerateSearchUrls] Skipping duplicate query: "${query.query}"`);
+      continue;
+    }
+    
+    // Skip if this query is too similar to existing ones (substring match)
+    let isSimilar = false;
+    for (const existing of seen) {
+      if (normalized.includes(existing) || existing.includes(normalized)) {
+        console.log(`[GenerateSearchUrls] Skipping similar query: "${query.query}" (similar to existing)`);
+        isSimilar = true;
+        break;
+      }
+    }
+    
+    if (!isSimilar) {
+      seen.add(normalized);
+      deduplicated.push(query);
+    }
+  }
+  
+  console.log(`[GenerateSearchUrls] Deduplicated ${queries.length} queries to ${deduplicated.length} unique queries`);
+  return deduplicated;
+}
+
 /**
  * Generate and rank search URLs using AI + SerpAPI
  */
@@ -39,8 +92,23 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
   console.log(`[GenerateSearchUrls] Target URLs: ${input.maxUrls}`);
 
   try {
+    // Clean up expired cache entries
+    cleanupCache();
+    
     // Validate input
     const validatedInput = GenerateSearchUrlsInputSchema.parse(input);
+    
+    // Check cache first
+    const cacheKey = validatedInput.userQuery.toLowerCase().trim();
+    const cached = searchCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+      console.log(`[GenerateSearchUrls] Using cached results for: "${validatedInput.userQuery}"`);
+      return {
+        success: true,
+        urls: cached.urls.slice(0, validatedInput.maxUrls),
+        searchQueries: [{ query: validatedInput.userQuery, reasoning: 'Cached result', priority: 1 }],
+      };
+    }
 
     // Step 1: Generate search queries using Gemini
     console.log('[GenerateSearchUrls] Step 1: Generating search queries with AI...');
@@ -91,8 +159,12 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
       };
     }
 
-    const searchQueries = searchQueriesResponse.queries;
-    console.log(`[GenerateSearchUrls] Generated ${searchQueries.length} search queries`);
+    let searchQueries = searchQueriesResponse.queries;
+    
+    // Deduplicate queries to avoid unnecessary API calls
+    searchQueries = deduplicateQueries(searchQueries);
+    
+    console.log(`[GenerateSearchUrls] Generated ${searchQueries.length} unique search queries`);
 
     // Step 2: Search for URLs using SerpAPI
     console.log('[GenerateSearchUrls] Step 2: Searching for URLs with SerpAPI...');
@@ -158,6 +230,13 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
     );
 
     console.log(`[GenerateSearchUrls] Selected ${rankedUrls.length} most relevant URLs`);
+
+    // Cache the results to avoid duplicate API calls
+    searchCache.set(cacheKey, {
+      urls: rankedUrls,
+      timestamp: Date.now()
+    });
+    console.log(`[GenerateSearchUrls] Cached results for future use`);
 
     return {
       success: true,

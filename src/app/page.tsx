@@ -62,8 +62,10 @@ export default function HomePage() {
 
     async function getUser() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        setUser(user);
+        if (supabase) {
+          const { data: { user } } = await supabase.auth.getUser();
+          setUser(user);
+        }
       } catch (error) {
         console.warn('[HomePage] Auth check failed:', error);
       } finally {
@@ -72,12 +74,12 @@ export default function HomePage() {
     }
     getUser();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         setLoading(false);
       }
-    });
+    }) || { data: { subscription: { unsubscribe: () => {} } } };
 
     return () => {
       authListener.subscription.unsubscribe();

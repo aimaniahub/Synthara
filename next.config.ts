@@ -48,33 +48,50 @@ const nextConfig: NextConfig = {
 
 
   // Webpack optimizations
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
         net: false,
         tls: false,
+        crypto: false,
+        stream: false,
+        util: false,
+        buffer: false,
+        process: false,
       };
     }
 
-    // Completely ignore problematic OpenTelemetry modules
+    // Fix for Supabase module resolution
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@opentelemetry/exporter-jaeger': false,
-      '@opentelemetry/sdk-node': false,
-      // Force disable any Html imports
-      'next/document': false,
+      '@supabase/supabase-js': '@supabase/supabase-js',
     };
 
-    // Ignore Html import warnings from dependencies
+    // Ensure proper module resolution for vendor chunks
+    config.optimization = {
+      ...config.optimization,
+      splitChunks: {
+        ...config.optimization.splitChunks,
+        cacheGroups: {
+          ...config.optimization.splitChunks?.cacheGroups,
+          supabase: {
+            test: /[\\/]node_modules[\\/]@supabase[\\/]/,
+            name: 'supabase',
+            chunks: 'all',
+            priority: 20,
+          },
+        },
+      },
+    };
+
+    // Ignore warnings from dependencies
     config.ignoreWarnings = [
-      /Html should not be imported outside of pages\/_document/,
       /Critical dependency: the request of a dependency is an expression/,
       /require\.extensions is not supported by webpack/,
-      /Module not found: Can't resolve '@opentelemetry\/exporter-jaeger'/,
-      /Module not found: Can't resolve '@opentelemetry\/sdk-node'/,
       /Module not found: Can't resolve 'next\/document'/,
+      /Failed to parse source map/,
     ];
 
     return config;

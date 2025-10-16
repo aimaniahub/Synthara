@@ -1,1294 +1,983 @@
-// src/app/dashboard/generate/components/DataGenerationClient.tsx
 "use client";
 
-import React, { useState, useTransition, useEffect, useMemo, useRef } from 'react';
-import { useForm, type SubmitHandler } from 'react-hook-form';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Lightbulb, Loader2, Sparkles, TableIcon, CheckCircle, Wand2, FileSpreadsheet, Download, Save, Globe, Brain, Search, Edit3, Eye, Shield, AlertTriangle, ThumbsUp, Info, BarChart3, TrendingUp, Database, Clock, Users, Star, ArrowRight, XCircle, HelpCircle } from 'lucide-react';
-import { recommendModel, type RecommendModelInput, type RecommendModelOutput } from '@/ai/flows/recommend-model';
-import { generateData, type GenerateDataInput, type GenerateDataOutput } from '@/ai/flows/generate-data-flow';
-import { generateFromWeb, type SimpleWebFlowInput, type SimpleWebFlowOutput } from '@/ai/flows/simple-web-flow';
-import { enhancePrompt, type EnhancePromptInput, type EnhancePromptOutput } from '@/ai/flows/enhance-prompt-flow';
+import { Slider } from '@/components/ui/slider';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { logActivity, saveDataset } from '@/lib/supabase/actions';
-import { LiveLogger } from '@/components/ui/live-logger';
-import { dynamicContent, type ContentContext, type DynamicExample } from '@/services/dynamic-content-service';
-import DynamicExamples from '@/components/ui/dynamic-examples';
-import { CsvPreviewTable } from '@/components/dashboard/CsvPreviewTable';
+import { SimpleTerminalLogger } from '@/components/ui/simple-terminal-logger';
+import { 
+  Play, 
+  Download, 
+  Save, 
+  RefreshCw, 
+  Database, 
+  Globe, 
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Loader2
+} from 'lucide-react';
 
+// Form validation schema
 const dataGenerationSchema = z.object({
-  prompt: z.string().min(10, { message: "Prompt must be at least 10 characters long." }).max(2000, {message: "Prompt must be 2000 characters or less."}),
-  numRows: z.coerce.number().min(1, "Must generate at least 1 row.").max(100, "Maximum 100 rows for current generation.").optional().default(10),
-  datasetName: z.string().optional(),
-  useWebData: z.boolean().optional().default(false),
+  prompt: z.string().min(10, 'Prompt must be at least 10 characters long'),
+  numRows: z.number().min(1).max(1000),
+  useWebData: z.boolean(),
+  datasetName: z.string().min(1, 'Dataset name is required'),
 });
 
-type DataGenerationFormValues = z.infer<typeof dataGenerationSchema>;
+type DataGenerationFormData = z.infer<typeof dataGenerationSchema>;
+
+interface GenerationResult {
+  data: Array<Record<string, any>>;
+  csv: string;
+  schema: Array<{ name: string; type: string; description?: string }>;
+  feedback?: string;
+  error?: string;
+}
+
+interface ScrapedContent {
+  content: string;
+  timestamp: string;
+}
 
 export function DataGenerationClient() {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isSuggesting, setIsSuggesting] = useState(false);
-  const [isEnhancing, setIsEnhancing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [suggestedModel, setSuggestedModel] = useState<RecommendModelOutput | null>(null);
-  const [generationResult, setGenerationResult] = useState<GenerateDataOutput | null>(null);
-  const [generationError, setGenerationError] = useState<string | null>(null);
-  const [datasetName, setDatasetName] = useState<string>("");
-  const [showLiveLogger, setShowLiveLogger] = useState(false);
-  const [currentRequestData, setCurrentRequestData] = useState<any>(null);
-  const [isGenerationInProgress, setIsGenerationInProgress] = useState(false);
-  const [dynamicPlaceholder, setDynamicPlaceholder] = useState<string>("Describe the type of data you want to generate...");
-  const [smartDefaults, setSmartDefaults] = useState<Record<string, any>>({});
-
-  // Search query refinement states
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [searchQueryReasoning, setSearchQueryReasoning] = useState<string>("");
-  const [showSearchPreview, setShowSearchPreview] = useState(false);
-  const [isRefiningQuery, setIsRefiningQuery] = useState(false);
-  const [isEditingSearchQuery, setIsEditingSearchQuery] = useState(false);
-  const [editableSearchQuery, setEditableSearchQuery] = useState<string>("");
-  const [searchTargetType, setSearchTargetType] = useState<string>("general");
-  const [searchQualityScore, setSearchQualityScore] = useState<number>(7);
-
-  // Content quality and transparency states
-  const [scrapedContent, setScrapedContent] = useState<string>("");
-  const [contentQuality, setContentQuality] = useState<any>(null);
-  const [showContentPreview, setShowContentPreview] = useState(false);
-  const [dataSourceType, setDataSourceType] = useState<'real' | 'synthetic' | 'hybrid'>('synthetic');
-  const [showDataSourceWarning, setShowDataSourceWarning] = useState(false);
-  const [userChoice, setUserChoice] = useState<'auto' | 'extract' | 'generate'>('auto');
-
-  // Additional ref-based guard to prevent any possibility of duplicate requests
-  const isRequestActiveRef = useRef(false);
-  const lastSubmissionTimeRef = useRef(0);
-
-  // Memoize requestData to prevent unnecessary re-renders and multiple requests
-  const memoizedRequestData = useMemo(() => {
-    if (!currentRequestData) return null;
-    return {
-      prompt: currentRequestData.prompt,
-      numRows: currentRequestData.numRows,
-      useWebData: currentRequestData.useWebData || true,
-    };
-  }, [currentRequestData?.prompt, currentRequestData?.numRows, currentRequestData?.useWebData]);
-
   const { toast } = useToast();
-  const [isPending, startTransition] = useTransition();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
+  const [scrapedContent, setScrapedContent] = useState<ScrapedContent[]>([]);
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const terminalRef = useRef<HTMLDivElement>(null);
 
-  const form = useForm<DataGenerationFormValues>({
+  const form = useForm<DataGenerationFormData>({
     resolver: zodResolver(dataGenerationSchema),
     defaultValues: {
-      prompt: "",
-      numRows: 10,
-      datasetName: "",
+      prompt: '',
+      numRows: 25,
       useWebData: false,
+      datasetName: '',
     },
   });
 
-  // Watch for prompt changes to update dynamic content
-  const currentPrompt = form.watch("prompt");
+  const { watch, setValue } = form;
+  const watchedValues = watch();
 
-  // Function to validate content quality
-  const validateContentQuality = async (content: string, prompt: string, query?: string) => {
-    try {
-      const response = await fetch('/api/validate-content-quality', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scrapedContent: content,
-          userPrompt: prompt,
-          searchQuery: query
-        })
-      });
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      // Reset state when component unmounts
+      setIsGenerating(false);
+      setProgress(0);
+      setProgressLabel('');
+    };
+  }, []);
 
-      if (!response.ok) {
-        throw new Error('Failed to validate content quality');
-      }
-
-      const validation = await response.json();
-      setContentQuality(validation);
-
-      // Update data source type based on validation
-      if (validation.extractionRecommendation === 'extract') {
-        setDataSourceType('real');
-      } else if (validation.extractionRecommendation === 'hybrid') {
-        setDataSourceType('hybrid');
-      } else {
-        setDataSourceType('synthetic');
-      }
-
-      return validation;
-    } catch (error) {
-      console.error('Content quality validation failed:', error);
+  // Robust JSON parsing with multiple fallback strategies
+  const parseJsonSafely = useCallback((jsonString: string): any => {
+    if (!jsonString || typeof jsonString !== 'string') {
       return null;
     }
-  };
 
-  // Function to refine search query
-  const refineSearchQuery = async (prompt: string) => {
-    if (!prompt || prompt.trim().length < 13) {
-      setShowSearchPreview(false);
-      return;
+    const trimmed = jsonString.trim();
+    if (!trimmed) {
+      return null;
     }
 
-    setIsRefiningQuery(true);
+    // Strategy 1: Direct parsing
     try {
-      const response = await fetch('/api/refine-search-query', {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      console.log('[Client] Direct JSON parsing failed:', error);
+    }
+
+    // Strategy 2: Clean and parse
+    try {
+      const cleaned = cleanJsonString(trimmed);
+      return JSON.parse(cleaned);
+    } catch (error) {
+      console.log('[Client] Cleaned JSON parsing failed:', error);
+    }
+
+    // Strategy 3: Try to extract valid JSON from malformed string
+    try {
+      const extracted = extractValidJson(trimmed);
+      if (extracted) {
+        return JSON.parse(extracted);
+      }
+    } catch (error) {
+      console.log('[Client] Extracted JSON parsing failed:', error);
+    }
+
+    // Strategy 4: Try to complete truncated JSON
+    try {
+      const completed = completeTruncatedJson(trimmed);
+      const cleaned = cleanJsonString(completed);
+      return JSON.parse(cleaned);
+    } catch (error) {
+      console.log('[Client] Completed JSON parsing failed:', error);
+    }
+
+    // Strategy 5: Return a safe fallback object
+    console.warn('[Client] All JSON parsing strategies failed, using fallback');
+    return {
+      type: 'error',
+      message: 'Failed to parse server response',
+      timestamp: new Date().toISOString()
+    };
+  }, []);
+
+  // Helper function to clean JSON string
+  const cleanJsonString = useCallback((jsonString: string): string => {
+    let cleaned = jsonString.trim();
+    
+    // Remove any leading/trailing whitespace and newlines
+    cleaned = cleaned.replace(/^\s+|\s+$/g, '');
+    
+    // Fix common issues step by step:
+    
+    // 1. Fix single quotes to double quotes (but be careful with apostrophes in text)
+    cleaned = cleaned.replace(/([{,]\s*)'([^']*)'(\s*:)/g, '$1"$2"$3'); // Property names
+    cleaned = cleaned.replace(/:\s*'([^']*)'(\s*[,}])/g, ': "$1"$2'); // String values
+    
+    // 2. Fix unescaped quotes in string values
+    cleaned = cleaned.replace(/"([^"]*)"([^"]*)"([^"]*)":/g, '"$1\\"$2\\"$3":'); // Property names with quotes
+    cleaned = cleaned.replace(/:\s*"([^"]*)"([^"]*)"([^"]*)"/g, ': "$1\\"$2\\"$3"'); // String values with quotes
+    
+    // 3. Fix trailing commas
+    cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+    
+    // 4. Fix missing commas between properties
+    cleaned = cleaned.replace(/"\s*\n\s*"/g, '",\n"');
+    cleaned = cleaned.replace(/}\s*\n\s*{/g, '},\n{');
+    cleaned = cleaned.replace(/]\s*\n\s*\[/g, '],\n[');
+    
+    // 5. Fix unescaped newlines in strings
+    cleaned = cleaned.replace(/"([^"]*)\n([^"]*)"/g, '"$1\\n$2"');
+    
+    // 6. Fix unescaped backslashes
+    cleaned = cleaned.replace(/\\(?!["\\/bfnrt])/g, '\\\\');
+    
+    return cleaned;
+  }, []);
+
+  // Helper function to extract valid JSON from malformed string
+  const extractValidJson = useCallback((text: string): string | null => {
+    // Look for JSON objects/arrays
+    const patterns = [
+      /\{[\s\S]*\}/g,
+      /\[[\s\S]*\]/g
+    ];
+    
+    for (const pattern of patterns) {
+      const matches = text.match(pattern);
+      if (matches) {
+        for (const match of matches) {
+          try {
+            // Test if it's valid JSON without cleaning first
+            JSON.parse(match);
+            return match;
+          } catch {
+            // Try with basic cleaning
+            try {
+              const cleaned = match.trim().replace(/,(\s*[}\]])/g, '$1');
+              JSON.parse(cleaned);
+              return cleaned;
+            } catch {
+              continue;
+            }
+          }
+        }
+      }
+    }
+    
+    return null;
+  }, []);
+
+  // Helper function to complete truncated JSON
+  const completeTruncatedJson = useCallback((jsonString: string): string => {
+    let completed = jsonString.trim();
+    
+    // Count opening and closing braces/brackets
+    const openBraces = (completed.match(/\{/g) || []).length;
+    const closeBraces = (completed.match(/\}/g) || []).length;
+    const openBrackets = (completed.match(/\[/g) || []).length;
+    const closeBrackets = (completed.match(/\]/g) || []).length;
+    
+    // If we're in the middle of a string, try to close it
+    if (completed.match(/"[^"]*$/)) {
+      completed += '"';
+    }
+    
+    // Add missing closing brackets/braces
+    for (let i = 0; i < openBrackets - closeBrackets; i++) {
+      completed += ']';
+    }
+    
+    for (let i = 0; i < openBraces - closeBraces; i++) {
+      completed += '}';
+    }
+    
+    return completed;
+  }, []);
+
+  // Handle form submission - live AI generation
+  const onSubmit = useCallback(async (data: DataGenerationFormData) => {
+    if (isGenerating || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setIsGenerating(true);
+    setGenerationResult(null);
+    setScrapedContent([]);
+    setProgress(0);
+    setProgressLabel('');
+    setShowTerminal(true);
+
+    try {
+      // Scroll to terminal
+      if (terminalRef.current) {
+        terminalRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+
+      // Create request data
+      const requestData = {
+        prompt: data.prompt,
+        numRows: data.numRows,
+        useWebData: data.useWebData,
+        datasetName: data.datasetName,
+      };
+
+      // Start the generation process
+      const response = await fetch('/api/generate-stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          userPrompt: prompt,
-          useNewRefiner: true // Use the new SearchQueryRefiner
-        }),
+        body: JSON.stringify(requestData),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to refine search query');
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
 
-      const result = await response.json();
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      // Handle new refiner response format
-      if (result.isNewRefiner && result.refinedQueries) {
-        // Display the primary query in UI, but store all queries for backend
-        const displayQuery = result.refinedQueries[0];
-        const allQueries = result.refinedQueries.join(' | ');
-
-        setSearchQuery(allQueries); // Backend will use all queries
-        setSearchQueryReasoning(`${result.reasoning}\n📝 Generated queries: ${result.refinedQueries.join(', ')}`);
-        setEditableSearchQuery(displayQuery); // User sees/edits the primary query
-      } else {
-        // Handle old format
-        setSearchQuery(result.searchQuery);
-        setSearchQueryReasoning(result.reasoning);
-        setEditableSearchQuery(result.searchQuery);
+      if (!reader) {
+        throw new Error('No response body reader available');
       }
 
-      setSearchTargetType(result.targetType || 'general');
-      setSearchQualityScore(result.qualityScore || 7);
-      setShowSearchPreview(true);
+      let hasCompleted = false;
+      const startTime = Date.now();
+      const timeout = 300000; // 5 minutes timeout
+      let lastDataTime = startTime;
+      const maxSilenceTime = 60000; // 1 minute of silence before considering it failed
 
-      // Show warning if quality score is low
-      if (result.qualityScore < 6) {
-        setShowDataSourceWarning(true);
+      while (true) {
+        // Check for timeout
+        if (Date.now() - startTime > timeout) {
+          throw new Error('Generation timed out after 5 minutes');
+        }
+
+        // Check for silence timeout
+        if (Date.now() - lastDataTime > maxSilenceTime) {
+          throw new Error('Generation appears to have stopped responding');
+        }
+
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        lastDataTime = Date.now(); // Update last data time
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const jsonString = line.substring(6);
+              const parsedData = parseJsonSafely(jsonString);
+              
+              // Check if parsing failed and returned fallback error
+              if (!parsedData || (parsedData.type === 'error' && parsedData.message === 'Failed to parse server response')) {
+                console.warn('[Client] Skipping malformed JSON line:', line.substring(0, 100) + '...');
+                continue; // Skip this line and continue processing
+              }
+              
+              if (parsedData.type === 'progress') {
+                setProgress(parsedData.percentage || 0);
+                setProgressLabel(parsedData.message || '');
+              } else if (parsedData.type === 'log' || parsedData.type === 'info') {
+                // Log messages are handled by the terminal logger
+                console.log('Generation log:', parsedData.message);
+              } else if (parsedData.type === 'scraped_content') {
+                if (parsedData.content) {
+                  try {
+                    const content = JSON.parse(parsedData.content);
+                    setScrapedContent(prev => [...prev, {
+                      content: content.content || content,
+                      timestamp: new Date().toISOString()
+                    }]);
+                  } catch (e) {
+                    setScrapedContent(prev => [...prev, {
+                      content: parsedData.content,
+                      timestamp: new Date().toISOString()
+                    }]);
+                  }
+                }
+              } else if (parsedData.type === 'complete') {
+                if (parsedData.result && Array.isArray(parsedData.result.data)) {
+                  setGenerationResult(parsedData.result);
+                  setIsGenerating(false);
+                  setIsSubmitting(false);
+                  setProgress(100);
+                  setProgressLabel('Generation complete!');
+                  hasCompleted = true;
+                  
+                  toast({
+                    title: "Data generation complete!",
+                    description: `Successfully generated ${parsedData.result.data.length} rows of data.`,
+                  });
+                } else {
+                  console.error('Invalid result data structure:', parsedData.result);
+                  throw new Error('Invalid result data received from server');
+                }
+              } else if (parsedData.type === 'error') {
+                throw new Error(parsedData.message || parsedData.error || 'Unknown error occurred');
+              }
+            } catch (parseError) {
+              console.error('Error parsing SSE data:', parseError, 'Line:', line);
+              // Continue processing other lines even if one fails
+            }
+          }
+        }
       }
+
+      // If we didn't receive a complete signal, something went wrong
+      if (!hasCompleted && !isGenerating) {
+        throw new Error('Generation process ended unexpectedly');
+      }
+
     } catch (error: any) {
-      console.error('Search query refinement failed:', error);
-      // Don't show error to user, just don't show preview
-      setShowSearchPreview(false);
-    } finally {
-      setIsRefiningQuery(false);
-    }
-  };
-
-  // Update dynamic content based on user input
-  useEffect(() => {
-    const context: ContentContext = {
-      userPrompt: currentPrompt,
-    };
-
-    // Update placeholder text
-    const placeholderData = dynamicContent.generatePlaceholder(context);
-    setDynamicPlaceholder(placeholderData.text);
-
-    // Update smart defaults
-    const defaults = dynamicContent.generateSmartDefaults(context);
-    setSmartDefaults(defaults);
-
-    // Trigger search query refinement if prompt is long enough and web data is enabled
-    if (currentPrompt && currentPrompt.trim().length >= 13 && form.watch("useWebData")) {
-      const timeoutId = setTimeout(() => {
-        refineSearchQuery(currentPrompt);
-      }, 1000); // Debounce for 1 second
-
-      return () => clearTimeout(timeoutId);
-    } else {
-      setShowSearchPreview(false);
-    }
-
-    // Auto-update form defaults if user hasn't manually changed them
-    if (currentPrompt && currentPrompt.length > 20) {
-      const currentNumRows = form.getValues("numRows");
-      const currentUseWebData = form.getValues("useWebData");
-      const currentDatasetName = form.getValues("datasetName");
-
-      // Only update if user hasn't manually changed from defaults
-      if (currentNumRows === 10 || currentNumRows === smartDefaults.numRows) {
-        form.setValue("numRows", defaults.numRows);
-      }
-
-      if (!currentUseWebData && defaults.useWebData) {
-        form.setValue("useWebData", defaults.useWebData);
-      }
-
-      if (!currentDatasetName && defaults.datasetName) {
-        form.setValue("datasetName", defaults.datasetName);
-      }
-    }
-  }, [currentPrompt, form]);
-
-  // Handle example selection
-  const handleExampleSelect = (example: DynamicExample) => {
-    form.setValue("prompt", example.prompt);
-
-    // Apply smart defaults for the example
-    const context: ContentContext = {
-      userPrompt: example.prompt,
-    };
-    const defaults = dynamicContent.generateSmartDefaults(context);
-
-    form.setValue("numRows", defaults.numRows);
-    form.setValue("useWebData", defaults.useWebData);
-    if (defaults.datasetName) {
-      form.setValue("datasetName", defaults.datasetName);
-    }
-  };
-
-  // Handle live logger completion
-  const handleLiveLoggerComplete = async (result: GenerateDataOutput) => {
-    console.log('[DataGeneration] ✅ Web scraping completed, processing final result');
-
-    // CRITICAL: Only process if we have valid data and this is the active request
-    if (!isRequestActiveRef.current) {
-      console.log('[DataGeneration] ⚠️ Ignoring completion - request no longer active');
-      return;
-    }
-
-    // Clear all generation states first
-    setIsGenerating(false);
-    setIsGenerationInProgress(false);
-    isRequestActiveRef.current = false;
-    setShowLiveLogger(false);
-    setCurrentRequestData(null);
-
-    // Validate result
-    if (!result || !result.generatedRows || result.generatedRows.length === 0) {
-      console.log('[DataGeneration] ❌ No valid data generated');
-      toast({
-        title: "Generation Failed",
-        description: "No data was generated. Please try a different prompt.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    console.log('[DataGeneration] 🎯 Setting final result with', result.generatedRows.length, 'rows');
-
-    // Set the final result - this will trigger the UI to show the data
-    setGenerationResult(result);
-
-    // Auto-generate dataset name
-    const autoName = `Dataset for "${currentRequestData?.prompt?.substring(0, 30)}${currentRequestData?.prompt?.length > 30 ? '...' : ''}" - ${new Date().toLocaleDateString()}`;
-    setDatasetName(autoName);
-    form.setValue("datasetName", autoName);
-
-    toast({
-      title: "Web Data Generated Successfully!",
-      description: `Your dataset with ${result.generatedRows.length} rows from web data extraction is ready.`,
-      variant: "default",
-    });
-
-    await logActivity({
-      activityType: 'DATA_GENERATION',
-      description: `Generated ${result.generatedRows.length} rows using web data extraction for: "${currentRequestData?.prompt?.substring(0, 50)}${currentRequestData?.prompt?.length > 50 ? '...' : ''}"`,
-      details: {
-        prompt: currentRequestData?.prompt,
-        numRows: result.generatedRows.length,
-        feedback: result.feedback,
-        columns: result.detectedSchema.length,
-        dataSourcePreference: 'web_scraping',
-        generationMode: 'Live Web Data',
-      },
-      status: result.generatedRows.length > 0 ? "COMPLETED" : "COMPLETED_EMPTY"
-    });
-  };
-
-  // Handle scraped content from live logger
-  const handleScrapedContent = async (content: string) => {
-    setScrapedContent(content);
-
-    // Validate content quality
-    const validation = await validateContentQuality(content, currentRequestData?.prompt || '', searchQuery);
-    if (validation) {
-      console.log('Content quality validation:', validation);
-    }
-  };
-
-  // Handle live logger error
-  const handleLiveLoggerError = (error: string) => {
-    // Only handle critical errors that actually stop the process
-    const isCriticalError = error && (
-      error.includes('API key') ||
-      error.includes('authentication') ||
-      error.includes('Failed during web search') ||
-      error.includes('No relevant search results found')
-    );
-
-    if (isCriticalError) {
-      console.log('[DataGeneration] Critical error occurred, clearing guards');
+      console.error('Generation error:', error);
       setIsGenerating(false);
-      setIsGenerationInProgress(false);
-      isRequestActiveRef.current = false;
-      setShowLiveLogger(false);
-      setCurrentRequestData(null);
-      setGenerationError(error);
+      setIsSubmitting(false);
+      setProgress(0);
+      setProgressLabel('');
+      
       toast({
-        title: "Generation Failed",
-        description: error,
+        title: "Generation failed",
+        description: error.message || "An error occurred during data generation.",
         variant: "destructive",
-        duration: 9000,
       });
-    } else {
-      // For non-critical errors, just log them but don't stop the process
-      console.log('Non-critical error (process continues):', error);
-      // Don't show error toast or stop the generation
     }
-  };
+  }, [isGenerating, isSubmitting, toast, parseJsonSafely]);
 
-  const onSubmit: SubmitHandler<DataGenerationFormValues> = async (data) => {
-    const now = Date.now();
-    console.log('[DataGeneration] 🚀 onSubmit called', {
-      prompt: data.prompt.substring(0, 30),
-      numRows: data.numRows,
-      useWebData: data.useWebData,
-      isGenerationInProgress,
-      isRequestActiveRef: isRequestActiveRef.current,
-      timeSinceLastSubmission: now - lastSubmissionTimeRef.current,
-      timestamp: new Date().toISOString()
-    });
+  // Generate sample data based on prompt
+  const generateSampleData = useCallback((prompt: string, numRows: number) => {
+    const lowerPrompt = prompt.toLowerCase();
+    
+    // Determine data type based on prompt keywords
+    let schema: Array<{ name: string; type: string; description?: string }> = [];
+    let data: Array<Record<string, any>> = [];
 
-    // CRITICAL: Prevent multiple concurrent requests to save API quotas
-    // Add stronger debounce: ignore requests within 3 seconds of each other
-    if (isGenerationInProgress || isRequestActiveRef.current || (now - lastSubmissionTimeRef.current < 3000)) {
-      console.log('[DataGeneration] ❌ Request blocked - already in progress or too soon', {
-        isGenerationInProgress,
-        isRequestActiveRef: isRequestActiveRef.current,
-        timeSinceLastSubmission: now - lastSubmissionTimeRef.current,
-        reason: isGenerationInProgress ? 'generation in progress' :
-                isRequestActiveRef.current ? 'request active' : 'too soon after last request'
-      });
+    if (lowerPrompt.includes('company') || lowerPrompt.includes('business')) {
+      schema = [
+        { name: 'name', type: 'string', description: 'Company name' },
+        { name: 'industry', type: 'string', description: 'Industry sector' },
+        { name: 'employees', type: 'number', description: 'Number of employees' },
+        { name: 'revenue', type: 'number', description: 'Annual revenue in millions' },
+        { name: 'location', type: 'string', description: 'Headquarters location' },
+        { name: 'founded', type: 'number', description: 'Year founded' }
+      ];
+
+      const industries = ['Technology', 'Healthcare', 'Finance', 'Manufacturing', 'Retail', 'Education', 'Energy', 'Transportation'];
+      const locations = ['New York', 'San Francisco', 'London', 'Tokyo', 'Berlin', 'Toronto', 'Sydney', 'Singapore'];
+      const companyNames = ['TechCorp', 'DataFlow', 'CloudSync', 'InnovateLab', 'FutureSoft', 'QuantumTech', 'AISolutions', 'NextGen'];
+
+      data = Array.from({ length: numRows }, (_, i) => ({
+        name: `${companyNames[i % companyNames.length]} ${i + 1}`,
+        industry: industries[Math.floor(Math.random() * industries.length)],
+        employees: Math.floor(Math.random() * 10000) + 50,
+        revenue: Math.floor(Math.random() * 1000) + 10,
+        location: locations[Math.floor(Math.random() * locations.length)],
+        founded: Math.floor(Math.random() * 30) + 1990
+      }));
+    } else if (lowerPrompt.includes('car') || lowerPrompt.includes('vehicle') || lowerPrompt.includes('automobile')) {
+      schema = [
+        { name: 'model', type: 'string', description: 'Car model' },
+        { name: 'brand', type: 'string', description: 'Car brand' },
+        { name: 'year', type: 'number', description: 'Model year' },
+        { name: 'price', type: 'number', description: 'Price in thousands' },
+        { name: 'fuel_type', type: 'string', description: 'Fuel type' },
+        { name: 'horsepower', type: 'number', description: 'Engine horsepower' }
+      ];
+
+      const brands = ['Toyota', 'Honda', 'BMW', 'Mercedes', 'Audi', 'Ford', 'Chevrolet', 'Nissan'];
+      const models = ['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Convertible', 'Truck', 'Crossover', 'Sports Car'];
+      const fuelTypes = ['Gasoline', 'Electric', 'Hybrid', 'Diesel'];
+
+      data = Array.from({ length: numRows }, (_, i) => ({
+        model: `${models[i % models.length]} ${i + 1}`,
+        brand: brands[Math.floor(Math.random() * brands.length)],
+        year: Math.floor(Math.random() * 10) + 2015,
+        price: Math.floor(Math.random() * 50) + 20,
+        fuel_type: fuelTypes[Math.floor(Math.random() * fuelTypes.length)],
+        horsepower: Math.floor(Math.random() * 300) + 100
+      }));
+    } else {
+      // Generic data structure
+      schema = [
+        { name: 'id', type: 'number', description: 'Unique identifier' },
+        { name: 'name', type: 'string', description: 'Item name' },
+        { name: 'category', type: 'string', description: 'Item category' },
+        { name: 'value', type: 'number', description: 'Numeric value' },
+        { name: 'description', type: 'string', description: 'Item description' }
+      ];
+
+      const categories = ['Type A', 'Type B', 'Type C', 'Type D', 'Type E'];
+      const descriptions = ['High quality', 'Standard grade', 'Premium', 'Basic', 'Professional'];
+
+      data = Array.from({ length: numRows }, (_, i) => ({
+        id: i + 1,
+        name: `Item ${i + 1}`,
+        category: categories[Math.floor(Math.random() * categories.length)],
+        value: Math.floor(Math.random() * 1000) + 10,
+        description: descriptions[Math.floor(Math.random() * descriptions.length)]
+      }));
+    }
+
+    return { data, schema };
+  }, []);
+
+  // Convert data to CSV format
+  const convertToCSV = useCallback((data: Array<Record<string, any>>, schema: Array<{ name: string; type: string }>) => {
+    if (!data || data.length === 0) return '';
+    
+    const headers = schema.map(col => col.name);
+    const csvRows = data.map(row => 
+      headers.map(header => {
+        const value = row[header];
+        // Escape CSV values properly
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value || '';
+      }).join(',')
+    );
+    
+    return [headers.join(','), ...csvRows].join('\n');
+  }, []);
+
+  // Handle dataset saving
+  const handleSaveDataset = useCallback(async () => {
+    if (!generationResult || !watchedValues.datasetName) {
       toast({
-        title: "Generation in Progress",
-        description: "Please wait for the current generation to complete before starting a new one.",
-        variant: "default"
+        title: "Cannot save dataset",
+        description: "Please ensure you have generated data and provided a dataset name.",
+        variant: "destructive",
       });
       return;
     }
 
-    console.log('[DataGeneration] ✅ Starting new generation request');
-    lastSubmissionTimeRef.current = now;
-    setIsGenerationInProgress(true);
-    isRequestActiveRef.current = true;
-    setIsGenerating(true);
-    setGenerationResult(null);
-    setGenerationError(null);
-    setSuggestedModel(null);
-
-    const generationMode = data.useWebData ? "Live Web Data" : "AI Knowledge";
-
-    console.log('[DataGeneration] 🔍 Checking useWebData flag:', {
-      useWebData: data.useWebData,
-      dataType: typeof data.useWebData,
-      formValues: form.getValues()
-    });
-
-    if (data.useWebData) {
-      console.log('[DataGeneration] ✅ Web data mode detected - starting web data extraction');
-
-      // Use live web data generation with refined search query
-      const requestDataWithSearch = {
-        ...data,
-        refinedSearchQuery: searchQuery || data.prompt // Use refined query if available, fallback to original prompt
-      };
-
-      console.log('[DataGeneration] 🌐 Starting web data generation:', {
-        prompt: data.prompt.substring(0, 50),
-        useWebData: data.useWebData,
-        refinedSearchQuery: requestDataWithSearch.refinedSearchQuery?.substring(0, 50),
-        numRows: data.numRows,
-        fullRequestData: requestDataWithSearch
-      });
-
-      setShowLiveLogger(true);
-      setCurrentRequestData(requestDataWithSearch);
-
+    // Validate generation result structure
+    if (!generationResult.data || !Array.isArray(generationResult.data)) {
       toast({
-        title: "Starting Web Data Generation...",
-        description: searchQuery
-          ? `Searching the web for: "${searchQuery}"`
-          : "Searching the web and extracting real-time data for your request."
-      });
-
-      console.log('[DataGeneration] 📡 Live logger should now be active:', {
-        showLiveLogger: true,
-        isGenerating,
-        requestData: requestDataWithSearch
-      });
-
-      return; // The live logger will handle the rest
-    } else {
-      console.log('[DataGeneration] 🤖 AI knowledge mode - using traditional generation');
-    }
-
-    // Use traditional flow for AI generation
-    toast({
-      title: "Generating Data...",
-      description: `Please wait while we generate your dataset using ${generationMode}.`
-    });
-
-    startTransition(async () => {
-      try {
-        const result = await generateData({
-          prompt: data.prompt,
-          numRows: data.numRows || 10,
-        });
-
-        setGenerationResult(result);
-
-        // Auto-generate dataset name from prompt
-        const words = data.prompt.split(' ').slice(0, 3);
-        const autoName = words.join('_').toLowerCase().replace(/[^a-z0-9_]/g, '') + '_dataset';
-        setDatasetName(autoName);
-        form.setValue("datasetName", autoName);
-
-        toast({
-          title: "Data Generated Successfully!",
-          description: `Generated ${result.generatedRows.length} rows using ${generationMode}.`,
-          variant: "default"
-        });
-
-        await logActivity({
-          activityType: 'DATA_GENERATION',
-          description: `Generated ${result.generatedRows.length} rows using ${generationMode}`,
-          details: {
-            prompt: data.prompt,
-            numRows: result.generatedRows.length,
-            feedback: result.feedback,
-            columns: result.detectedSchema.length,
-            dataSourcePreference: 'synthetic',
-            generationMode,
-          },
-          status: result.generatedRows.length > 0 ? "COMPLETED" : "COMPLETED_EMPTY"
-        });
-
-      } catch (error: any) {
-        setGenerationError(error.message);
-        toast({
-          title: "Generation Failed",
-          description: error.message || "An unexpected error occurred during data generation.",
-          variant: "destructive",
-          duration: 9000,
-        });
-      } finally {
-        console.log('[DataGeneration] Generation process finished, clearing guards');
-        setIsGenerating(false);
-        setIsGenerationInProgress(false);
-        isRequestActiveRef.current = false;
-      }
-    });
-  };
-
-  const handleSaveDataset = async () => {
-    if (!generationResult || !generationResult.generatedRows || generationResult.generatedRows.length === 0) {
-      toast({
-        title: "No Data to Save",
-        description: "Please generate data first before saving.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!datasetName.trim()) {
-      toast({
-        title: "Dataset Name Required",
-        description: "Please enter a name for your dataset.",
-        variant: "destructive"
+        title: "Invalid data",
+        description: "Generated data is not in the expected format.",
+        variant: "destructive",
       });
       return;
     }
 
     setIsSaving(true);
-    startTransition(async () => {
-      try {
-        await saveDataset({
-          datasetName: datasetName.trim(),
+    try {
+      const response = await fetch('/api/save-dataset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          datasetName: watchedValues.datasetName,
           generationResult: generationResult,
-          prompt: form.getValues("prompt") || "",
-          numRows: form.getValues("numRows") || 10,
-        });
+          prompt: watchedValues.prompt,
+          numRows: watchedValues.numRows,
+        }),
+      });
 
-        toast({
-          title: "Dataset Saved Successfully!",
-          description: `"${datasetName}" has been saved to your datasets.`,
-          variant: "default"
-        });
-
-        await logActivity({
-          activityType: 'DATASET_SAVED',
-          description: `Saved dataset "${datasetName}" with ${generationResult.generatedRows.length} rows`,
-          details: {
-            datasetName: datasetName,
-            prompt: form.getValues("prompt"),
-            numRows: generationResult.generatedRows.length,
-            columns: generationResult.detectedSchema.length,
-          },
-          status: "COMPLETED"
-        });
-
-      } catch (error: any) {
-        console.error("Error saving dataset:", error);
-        toast({ title: "Save Failed", description: error.message || "An unexpected error occurred while saving.", variant: "destructive" });
-      } finally {
-        setIsSaving(false);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
-    });
-  };
 
-  const downloadFile = (content: string, filename: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast({ title: "Download Started", description: `${filename} is being downloaded.`, variant: "default"});
-  };
+      const result = await response.json();
+      
+      if (result.success) {
+        const saveMessage = result.supabaseSave 
+          ? `Dataset "${watchedValues.datasetName}" saved to both local storage and Supabase!`
+          : `Dataset "${watchedValues.datasetName}" saved to local storage${result.supabaseError ? ` (Supabase: ${result.supabaseError})` : ''}`;
+        
+        toast({
+          title: "Dataset saved!",
+          description: saveMessage,
+        });
+        
+        console.log('[Save Dataset] Result:', {
+          localSave: result.localSave,
+          supabaseSave: result.supabaseSave,
+          supabaseError: result.supabaseError,
+          filename: result.filename
+        });
+      } else {
+        throw new Error(result.error || 'Failed to save dataset');
+      }
+    } catch (error: any) {
+      console.error('Save error:', error);
+      toast({
+        title: "Save failed",
+        description: error.message || "An error occurred while saving the dataset.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [generationResult, watchedValues, toast]);
 
-  // Main component render
+  // Handle CSV download
+  const handleDownloadCSV = useCallback(() => {
+    if (!generationResult?.csv) {
+      toast({
+        title: "No data to download",
+        description: "Please generate data first before downloading.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const blob = new Blob([generationResult.csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${watchedValues.datasetName || 'dataset'}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Download started",
+        description: "CSV file download has started.",
+      });
+    } catch (error: any) {
+      console.error('Download error:', error);
+      toast({
+        title: "Download failed",
+        description: "An error occurred while downloading the CSV file.",
+        variant: "destructive",
+      });
+    }
+  }, [generationResult, watchedValues.datasetName, toast]);
+
+  // Reset form
+  const handleReset = useCallback(() => {
+    form.reset();
+    setGenerationResult(null);
+    setScrapedContent([]);
+    setProgress(0);
+    setProgressLabel('');
+    setShowTerminal(false);
+    setIsGenerating(false);
+    setIsSubmitting(false);
+  }, [form]);
+
   return (
-    <div className="grid gap-4 sm:gap-6 lg:gap-8 lg:grid-cols-3 items-start">
-      {/* Live Logger Overlay for Mobile - Higher Z-Index */}
-      {showLiveLogger && memoizedRequestData && (
-        <div className="fixed inset-0 bg-black/80 z-[9999] lg:hidden flex items-center justify-center p-4">
-          <div className="bg-background rounded-lg w-full max-w-md max-h-[80vh] overflow-hidden shadow-2xl">
-            <div className="h-full flex flex-col">
-              <div className="p-4 border-b flex items-center justify-between bg-primary/5">
-                <div className="flex items-center space-x-2">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                  <h3 className="font-semibold text-lg">Web Scraping Progress</h3>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    // Don't allow closing during active generation
-                    if (!isGenerating) {
-                      setShowLiveLogger(false);
-                    }
-                  }}
-                  disabled={isGenerating}
-                  className="h-8 w-8 p-0"
-                >
-                  <XCircle className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="flex-1 overflow-auto p-4 bg-muted/20">
-                <LiveLogger
-                  isActive={showLiveLogger && isGenerating}
-                  requestData={memoizedRequestData}
-                  onComplete={handleLiveLoggerComplete}
-                  onError={handleLiveLoggerError}
-                  onScrapedContent={handleScrapedContent}
-                />
-              </div>
-              <div className="p-3 border-t bg-muted/30">
-                <p className="text-xs text-muted-foreground text-center">
-                  Please wait while we scrape live data from the web...
+    <div className="space-y-6">
+      {/* Generation Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Data Generation Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Dataset Name */}
+            <div className="space-y-2">
+              <Label htmlFor="datasetName">Dataset Name</Label>
+              <Input
+                id="datasetName"
+                placeholder="Enter a name for your dataset"
+                {...form.register('datasetName')}
+                disabled={isGenerating}
+              />
+              {form.formState.errors.datasetName && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.datasetName.message}
                 </p>
-              </div>
+              )}
             </div>
-          </div>
-        </div>
-      )}
-      <form
-        onSubmit={(e) => {
-          const now = Date.now();
-          if (isGenerationInProgress || isRequestActiveRef.current || (now - lastSubmissionTimeRef.current < 3000)) {
-            console.log('[DataGeneration] ❌ Form submission prevented - request in progress or too soon', {
-              isGenerationInProgress,
-              isRequestActiveRef: isRequestActiveRef.current,
-              timeSinceLastSubmission: now - lastSubmissionTimeRef.current
-            });
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }
-          return form.handleSubmit(onSubmit)(e);
-        }}
-        className="lg:col-span-2 space-y-4 sm:space-y-6 lg:space-y-8 order-1"
-        style={{ pointerEvents: (isGenerationInProgress || isRequestActiveRef.current) ? 'none' : 'auto' }}
-      >
-        <div className="glass-card p-6">
-          <div className="mb-6">
-            <h2 className="font-headline text-xl sm:text-2xl lg:text-3xl text-white mb-2">Describe Your Data Needs</h2>
-          </div>
-          <div className="space-y-4 sm:space-y-6">
-            <div>
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0 mb-2">
-                <Label htmlFor="prompt" className="text-base sm:text-lg font-semibold text-white">
-                  What data do you want to generate?
-                </Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full sm:w-auto"
-                  onClick={async () => {
-                    const currentPrompt = form.getValues("prompt");
-                    if (!currentPrompt || currentPrompt.trim().length < 10) {
-                      toast({
-                        title: "Prompt Too Short",
-                        description: "Please enter at least 10 characters before enhancing.",
-                        variant: "destructive"
-                      });
-                      return;
-                    }
 
-                    setIsEnhancing(true);
-                    try {
-                      const input: EnhancePromptInput = { currentPrompt: currentPrompt };
-                      const result = await enhancePrompt(input);
-                      form.setValue("prompt", result.enhancedPrompt);
-                      toast({
-                        title: "Prompt Enhanced!",
-                        description: "Your prompt has been improved with AI suggestions.",
-                        variant: "default"
-                      });
-                    } catch (error: any) {
-                      toast({
-                        title: "Enhancement Failed",
-                        description: error.message || "Could not enhance the prompt.",
-                        variant: "destructive"
-                      });
-                    } finally {
-                      setIsEnhancing(false);
-                    }
-                  }}
-                  disabled={isGenerating || isEnhancing}
-                >
-                  {isEnhancing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Enhancing...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="mr-2 h-4 w-4" />
-                      Enhance Prompt
-                    </>
-                  )}
-                </Button>
-              </div>
+            {/* Prompt */}
+            <div className="space-y-2">
+              <Label htmlFor="prompt">Data Description</Label>
               <Textarea
                 id="prompt"
-                {...form.register("prompt")}
-                placeholder={dynamicPlaceholder}
-                rows={4}
-                className="mt-2 text-sm sm:text-base shadow-sm"
+                placeholder="Describe the data you want to generate (e.g., 'Generate a dataset of 100 tech companies with their names, locations, employee counts, and revenue')"
+                className="min-h-[100px]"
+                {...form.register('prompt')}
                 disabled={isGenerating}
               />
               {form.formState.errors.prompt && (
-                <p className="text-sm text-destructive mt-1">{form.formState.errors.prompt.message}</p>
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.prompt.message}
+                </p>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-              <div>
-                <Label htmlFor="numRows" className="text-base font-semibold text-white">Number of Rows</Label>
-                <Input
-                  id="numRows"
-                  type="number"
-                  {...form.register("numRows", { valueAsNumber: true })}
-                  min={1}
-                  max={100}
-                  className="mt-2 shadow-sm"
-                  disabled={isGenerating}
-                />
-                {form.formState.errors.numRows && (
-                  <p className="text-sm text-destructive mt-1">{form.formState.errors.numRows.message}</p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="datasetName" className="text-base font-semibold text-white">Dataset Name (Optional)</Label>
-                <Input
-                  id="datasetName"
-                  {...form.register("datasetName")}
-                  placeholder="my_dataset"
-                  className="mt-2 shadow-sm"
-                  disabled={isGenerating}
-                />
-              </div>
-            </div>
-
+            {/* Number of Rows */}
             <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <Switch
-                  id="useWebData"
-                  checked={form.watch("useWebData")}
-                  onCheckedChange={(checked) => {
-                    form.setValue("useWebData", checked);
-                    console.log('[DataGeneration] Toggle changed:', { useWebData: checked });
-                  }}
-                  disabled={isGenerating}
-                />
-                <Label htmlFor="useWebData" className="text-base font-semibold text-white cursor-pointer">
-                  Use Live Web Data
-                </Label>
-                <div className="flex items-center space-x-1">
-                  <Globe className="h-4 w-4 text-emerald-400" />
-                  <span className="text-xs text-emerald-400">Real-time data extraction</span>
-                </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="numRows">Number of Rows: {watchedValues.numRows}</Label>
+                <Badge variant="outline">{watchedValues.numRows} rows</Badge>
               </div>
-
-              {/* Search Query Preview */}
-              {showSearchPreview && searchQuery && (
-                <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <Search className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                        Optimized Search Query
-                      </span>
-                      <div className="flex items-center space-x-1">
-                        <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
-                          Quality: {searchQualityScore}/10
-                        </span>
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsEditingSearchQuery(!isEditingSearchQuery)}
-                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
-                    >
-                      {isEditingSearchQuery ? <Eye className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
-                    </Button>
-                  </div>
-
-                  {isEditingSearchQuery ? (
-                    <div className="space-y-2">
-                      <Input
-                        value={editableSearchQuery}
-                        onChange={(e) => setEditableSearchQuery(e.target.value)}
-                        className="text-sm"
-                        placeholder="Edit search query..."
-                      />
-                      <div className="flex space-x-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => {
-                            setSearchQuery(editableSearchQuery);
-                            setIsEditingSearchQuery(false);
-                          }}
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                          <CheckCircle className="mr-1 h-3 w-3" />
-                          Apply
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditableSearchQuery(searchQuery);
-                            setIsEditingSearchQuery(false);
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <p className="text-sm text-blue-800 dark:text-blue-200 font-mono bg-white dark:bg-slate-800 p-2 rounded border">
-                        "{searchQuery}"
-                      </p>
-                      {searchQueryReasoning && (
-                        <p className="text-xs text-blue-700 dark:text-blue-300">
-                          <Info className="inline h-3 w-3 mr-1" />
-                          {searchQueryReasoning}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {isRefiningQuery && (
-                <div className="flex items-center space-x-2 text-sm text-blue-600 dark:text-blue-400">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Optimizing search query for better results...</span>
-                </div>
-              )}
+              <Slider
+                id="numRows"
+                min={1}
+                max={1000}
+                step={1}
+                value={[watchedValues.numRows]}
+                onValueChange={([value]) => setValue('numRows', value)}
+                disabled={isGenerating}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>1</span>
+                <span>1000</span>
+              </div>
             </div>
 
+            {/* Web Data Toggle */}
+            <div className="flex items-center justify-between space-x-2">
+              <div className="space-y-1">
+                <Label htmlFor="useWebData" className="flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  Use Web Data
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Enable to scrape real data from the web instead of generating synthetic data
+                </p>
+              </div>
+              <Switch
+                id="useWebData"
+                checked={watchedValues.useWebData}
+                onCheckedChange={(checked) => setValue('useWebData', checked)}
+                disabled={isGenerating}
+              />
+            </div>
+
+            <Separator />
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
             <Button
               type="submit"
-              disabled={isGenerating || isGenerationInProgress || isRequestActiveRef.current}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isGenerating || isSubmitting || !form.formState.isValid || !watchedValues.prompt.trim()}
+              className="flex-1"
             >
-              {isGenerating || isGenerationInProgress ? (
+              {isGenerating || isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {showLiveLogger ? "Scraping Web Data..." : "Generating Data..."}
+                  {isSubmitting ? 'Starting...' : 'Generating...'}
                 </>
               ) : (
                 <>
-                  <Sparkles className="mr-2 h-4 w-4" />
+                  <Play className="mr-2 h-4 w-4" />
                   Generate Data
                 </>
               )}
             </Button>
-          </div>
-        </div>
-      </form>
+              
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleReset}
+                disabled={isGenerating}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Reset
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
-      {/* Results Preview Section - Full Width on Mobile */}
-      {/* Only show results when NOT actively scraping and we have actual results */}
-      {(generationResult || generationError || (isGenerating && !showLiveLogger)) && (
-        <div className="lg:col-span-3 order-3">
-          <Card className="shadow-xl">
-            <CardHeader>
-              <CardTitle className="font-headline flex items-center">
-                <TableIcon className="mr-2 h-5 w-5 text-green-500" />
-                Generated Dataset
-                {generationResult && (
-                  <Badge variant="secondary" className="ml-2">
-                    {generationResult.generatedRows.length} rows
-                  </Badge>
-                )}
-              </CardTitle>
-              <CardDescription>
-                {isGenerating
-                  ? "Your dataset is being generated..."
-                  : generationResult
-                    ? "Your dataset has been generated successfully"
-                    : "Generation failed"
-                }
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {/* Loading State */}
-              {isGenerating && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-center py-8">
-                    <div className="text-center space-y-4">
-                      <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-                      <div className="space-y-2">
-                        <p className="text-lg font-semibold">Generating Your Dataset</p>
-                        <p className="text-sm text-muted-foreground">
-                          {form.watch("useWebData")
-                            ? "Searching the web and extracting real-time data..."
-                            : "Using AI to generate structured data..."
-                          }
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Progress indicators for mobile */}
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Clock className="h-4 w-4 text-blue-500" />
-                      <span className="text-sm font-medium">Generation in Progress</span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Processing your request...</span>
-                        <span>Please wait</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-2">
-                        <div className="bg-primary h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Error State */}
-              {generationError && (
-                <Alert className="border-destructive">
-                  <XCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    <strong>Generation Failed:</strong> {generationError}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Success State with Data Preview */}
-              {generationResult && generationResult.generatedRows && generationResult.generatedRows.length > 0 && (
-                <div className="space-y-6">
-                  {/* Dataset Stats */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                        {generationResult.generatedRows.length}
-                      </div>
-                      <div className="text-xs text-blue-600 dark:text-blue-400">Rows</div>
-                    </div>
-                    <div className="bg-green-50 dark:bg-green-950/30 p-3 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                        {generationResult.detectedSchema.length}
-                      </div>
-                      <div className="text-xs text-green-600 dark:text-green-400">Columns</div>
-                    </div>
-                    <div className="bg-purple-50 dark:bg-purple-950/30 p-3 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                        {form.watch("useWebData") ? "Web" : "AI"}
-                      </div>
-                      <div className="text-xs text-purple-600 dark:text-purple-400">Source</div>
-                    </div>
-                    <div className="bg-orange-50 dark:bg-orange-950/30 p-3 rounded-lg text-center">
-                      <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                        CSV
-                      </div>
-                      <div className="text-xs text-orange-600 dark:text-orange-400">Format</div>
-                    </div>
-                  </div>
-
-                  {/* Data Preview Tabs */}
-                  <Tabs defaultValue="preview" className="w-full">
-                    <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
-                      <TabsTrigger value="preview" className="text-xs sm:text-sm">
-                        <Eye className="mr-1 sm:mr-2 h-3 sm:h-4 w-3 sm:w-4" />
-                        Preview
-                      </TabsTrigger>
-                      <TabsTrigger value="schema" className="text-xs sm:text-sm">
-                        <Database className="mr-1 sm:mr-2 h-3 sm:h-4 w-3 sm:w-4" />
-                        Schema
-                      </TabsTrigger>
-                      <TabsTrigger value="actions" className="text-xs sm:text-sm">
-                        <Download className="mr-1 sm:mr-2 h-3 sm:h-4 w-3 sm:w-4" />
-                        Actions
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="preview" className="space-y-4">
-                      {/* Mobile Card View */}
-                      <div className="block sm:hidden space-y-3">
-                        {generationResult.generatedRows.slice(0, 5).map((row, rowIndex) => (
-                          <Card key={rowIndex} className="p-3">
-                            <div className="space-y-2">
-                              <div className="text-xs text-muted-foreground mb-2">Row {rowIndex + 1}</div>
-                              {generationResult.detectedSchema.map((col) => (
-                                <div key={col.name} className="flex justify-between items-start gap-2">
-                                  <span className="text-xs font-medium text-muted-foreground min-w-0 flex-1">
-                                    {col.name}:
-                                  </span>
-                                  <span className="text-xs text-right break-words max-w-[60%]">
-                                    {String(row[col.name])}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </Card>
-                        ))}
-                        {generationResult.generatedRows.length > 5 && (
-                          <div className="text-center text-sm text-muted-foreground">
-                            ... and {generationResult.generatedRows.length - 5} more rows
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Desktop Table View */}
-                      <div className="hidden sm:block overflow-x-auto rounded-md border max-h-96">
-                        <Table>
-                          <TableHeader className="sticky top-0 bg-muted/70">
-                            <TableRow>
-                              {generationResult.detectedSchema.map((col) => (
-                                <TableHead key={col.name} className="min-w-[120px]">
-                                  <div className="flex items-center space-x-1">
-                                    <span className="font-semibold">{col.name}</span>
-                                    <Badge variant="outline" className="text-xs">
-                                      {col.type}
-                                    </Badge>
-                                  </div>
-                                </TableHead>
-                              ))}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {generationResult.generatedRows.slice(0, 10).map((row, rowIndex) => (
-                              <TableRow key={rowIndex}>
-                                {generationResult.detectedSchema.map((col) => (
-                                  <TableCell key={col.name} className="max-w-[200px] truncate">
-                                    {String(row[col.name])}
-                                  </TableCell>
-                                ))}
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                        {generationResult.generatedRows.length > 10 && (
-                          <div className="p-3 text-center text-sm text-muted-foreground bg-muted/30">
-                            Showing 10 of {generationResult.generatedRows.length} rows
-                          </div>
-                        )}
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="schema" className="space-y-4">
-                      <div className="grid gap-3">
-                        {generationResult.detectedSchema.map((col, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                                <span className="text-xs font-bold text-primary">{index + 1}</span>
-                              </div>
-                              <div>
-                                <div className="font-semibold">{col.name}</div>
-                                <div className="text-xs text-muted-foreground">Column {index + 1}</div>
-                              </div>
-                            </div>
-                            <Badge variant="secondary">{col.type}</Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </TabsContent>
-
-                    <TabsContent value="actions" className="space-y-4">
-                      <div className="space-y-4">
-                        {/* Save Dataset */}
-                        <div className="space-y-3">
-                          <Label htmlFor="saveDatasetName" className="text-base font-semibold">
-                            Save to Database
-                          </Label>
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <Input
-                              id="saveDatasetName"
-                              value={datasetName}
-                              onChange={(e) => setDatasetName(e.target.value)}
-                              placeholder="Enter dataset name..."
-                              className="flex-1"
-                            />
-                            <Button
-                              onClick={handleSaveDataset}
-                              disabled={isSaving || !datasetName.trim()}
-                              className="w-full sm:w-auto"
-                            >
-                              {isSaving ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                  Saving...
-                                </>
-                              ) : (
-                                <>
-                                  <Save className="mr-2 h-4 w-4" />
-                                  Save Dataset
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-
-                        <Separator />
-
-                        {/* Download Options */}
-                        <div className="space-y-3">
-                          <Label className="text-base font-semibold">Download Options</Label>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                const csvContent = [
-                                  generationResult.detectedSchema.map(col => col.name).join(','),
-                                  ...generationResult.generatedRows.map(row =>
-                                    generationResult.detectedSchema.map(col =>
-                                      JSON.stringify(row[col.name] || '')
-                                    ).join(',')
-                                  )
-                                ].join('\n');
-                                downloadFile(csvContent, `${datasetName || 'dataset'}.csv`, 'text/csv');
-                              }}
-                              className="w-full"
-                            >
-                              <FileSpreadsheet className="mr-2 h-4 w-4" />
-                              Download CSV
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                const jsonContent = JSON.stringify({
-                                  schema: generationResult.detectedSchema,
-                                  data: generationResult.generatedRows,
-                                  metadata: {
-                                    generatedAt: new Date().toISOString(),
-                                    prompt: form.getValues("prompt"),
-                                    rowCount: generationResult.generatedRows.length
-                                  }
-                                }, null, 2);
-                                downloadFile(jsonContent, `${datasetName || 'dataset'}.json`, 'application/json');
-                              }}
-                              className="w-full"
-                            >
-                              <Database className="mr-2 h-4 w-4" />
-                              Download JSON
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </TabsContent>
-                  </Tabs>
-
-                  {/* Feedback */}
-                  {generationResult.feedback && (
-                    <Alert>
-                      <Info className="h-4 w-4" />
-                      <AlertDescription>
-                        <strong>AI Feedback:</strong> {generationResult.feedback}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+      {/* Progress Indicator */}
+      {isGenerating && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">{progressLabel}</span>
+                <span className="text-sm text-muted-foreground">{progress}%</span>
+              </div>
+              <Progress value={progress} className="w-full" />
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* CSV Preview Section */}
-      {generationResult && generationResult.generatedRows && generationResult.generatedRows.length > 0 && (
-        <div className="lg:col-span-3 order-4">
-          <CsvPreviewTable
-            csvContent={generationResult.generatedCsv || ''}
-            data={generationResult.generatedRows}
-            schema={generationResult.detectedSchema}
-            query={form.getValues("prompt") || ""}
-            metadata={generationResult.metadata}
+      {/* Terminal Logger */}
+      {showTerminal && (
+        <div ref={terminalRef}>
+          <SimpleTerminalLogger
+            isActive={isGenerating}
+            requestData={{
+              prompt: watchedValues.prompt,
+              numRows: watchedValues.numRows,
+              useWebData: watchedValues.useWebData,
+            }}
+            onComplete={(result) => {
+              setGenerationResult(result);
+              setIsGenerating(false);
+            }}
+            onError={(error) => {
+              console.error('Generation error:', error);
+              setIsGenerating(false);
+            }}
+            onScrapedContent={(content) => {
+              setScrapedContent(prev => [...prev, {
+                content,
+                timestamp: new Date().toISOString()
+              }]);
+            }}
+            onClose={() => setShowTerminal(false)}
           />
         </div>
       )}
 
-      {/* Sidebar */}
-      <div className="lg:col-span-1 space-y-6 lg:space-y-8 order-2 lg:order-2">
-        {/* Live Logger for Desktop */}
-        {showLiveLogger && memoizedRequestData && (
-          <Card className="shadow-xl hidden lg:block">
-            <CardHeader>
-              <CardTitle className="font-headline flex items-center">
-                <Loader2 className="mr-2 h-5 w-5 animate-spin text-blue-500" />
-                Live Generation
-              </CardTitle>
-              <CardDescription>Real-time progress tracking</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <LiveLogger
-                isActive={showLiveLogger && isGenerating}
-                requestData={memoizedRequestData}
-                onComplete={handleLiveLoggerComplete}
-                onError={handleLiveLoggerError}
-                onScrapedContent={handleScrapedContent}
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Dynamic Examples */}
-        <Card className="shadow-xl">
+      {/* Results Display */}
+      {generationResult && (
+        <Card>
           <CardHeader>
-            <CardTitle className="font-headline flex items-center">
-              <Lightbulb className="mr-2 h-5 w-5 text-yellow-500" />
-              Quick Start Examples
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              Generation Results
             </CardTitle>
-            <CardDescription>Get inspired with these example prompts</CardDescription>
           </CardHeader>
           <CardContent>
-            <DynamicExamples
-              onExampleSelect={handleExampleSelect}
-              disabled={isGenerating}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Model Recommendation */}
-        {!isGenerating && currentPrompt && currentPrompt.length > 20 && (
-          <Card className="shadow-xl">
-            <CardHeader>
-              <CardTitle className="font-headline flex items-center">
-                <Brain className="mr-2 h-5 w-5 text-purple-500" />
-                AI Recommendations
-              </CardTitle>
-              <CardDescription>Get personalized suggestions for your data generation</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={async () => {
-                  setIsSuggesting(true);
-                  try {
-                    const input: RecommendModelInput = { prompt: currentPrompt };
-                    const result = await recommendModel(input);
-                    setSuggestedModel(result);
-                    toast({
-                      title: "Recommendations Ready!",
-                      description: "AI has analyzed your prompt and provided suggestions.",
-                      variant: "default"
-                    });
-                  } catch (error: any) {
-                    toast({
-                      title: "Recommendation Failed",
-                      description: error.message || "Could not get AI recommendations.",
-                      variant: "destructive"
-                    });
-                  } finally {
-                    setIsSuggesting(false);
-                  }
-                }}
-                disabled={isSuggesting}
-              >
-                {isSuggesting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Get AI Suggestions
-                  </>
-                )}
-              </Button>
-
-              {suggestedModel && (
-                <div className="mt-4 space-y-3">
-                  <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
-                    <h4 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">
-                      Recommended Approach
-                    </h4>
-                    <p className="text-sm text-purple-800 dark:text-purple-200 mb-2">
-                      {suggestedModel.reason}
-                    </p>
+            <Tabs defaultValue="preview" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="preview">Data Preview</TabsTrigger>
+                <TabsTrigger value="schema">Schema</TabsTrigger>
+                <TabsTrigger value="raw">Raw Data</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="preview" className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">
+                      {generationResult.data?.length || 0} rows
+                    </Badge>
+                    <Badge variant="outline">
+                      {generationResult.schema?.length || 0} columns
+                    </Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadCSV}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download CSV
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={handleSaveDataset}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="mr-2 h-4 w-4" />
+                      )}
+                      Save Dataset
+                    </Button>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+                
+                <ScrollArea className="h-[400px] w-full border rounded-md">
+                  {generationResult.data && generationResult.data.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {generationResult.schema?.map((column) => (
+                              <TableHead key={column.name} className="whitespace-nowrap">
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{column.name}</span>
+                                  <span className="text-xs text-muted-foreground font-normal">
+                                    {column.type}
+                                  </span>
+                                </div>
+                              </TableHead>
+                            )) || Object.keys(generationResult.data[0] || {}).map((key) => (
+                              <TableHead key={key} className="whitespace-nowrap">
+                                {key}
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {generationResult.data.slice(0, 50).map((row, index) => (
+                            <TableRow key={index}>
+                              {generationResult.schema?.map((column) => (
+                                <TableCell key={column.name} className="max-w-[200px] truncate">
+                                  <div className="truncate" title={String(row[column.name] || '')}>
+                                    {String(row[column.name] || '')}
+                                  </div>
+                                </TableCell>
+                              )) || Object.keys(generationResult.data[0] || {}).map((key) => (
+                                <TableCell key={key} className="max-w-[200px] truncate">
+                                  <div className="truncate" title={String(row[key] || '')}>
+                                    {String(row[key] || '')}
+                                  </div>
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-32 text-muted-foreground">
+                      No data available to display
+                    </div>
+                  )}
+                </ScrollArea>
+                
+                {generationResult.data && generationResult.data.length > 50 && (
+                  <p className="text-sm text-muted-foreground text-center">
+                    Showing first 50 rows of {generationResult.data.length} total rows
+                  </p>
+                )}
+              </TabsContent>
+              
+              <TabsContent value="schema" className="space-y-4">
+                <div className="space-y-2">
+                  {generationResult.schema && generationResult.schema.length > 0 ? (
+                    generationResult.schema.map((column, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 border rounded-md">
+                        <div>
+                          <span className="font-medium">{column.name}</span>
+                          <span className="text-sm text-muted-foreground ml-2">
+                            ({column.type})
+                          </span>
+                        </div>
+                        {column.description && (
+                          <span className="text-sm text-muted-foreground">
+                            {column.description}
+                          </span>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex items-center justify-center h-32 text-muted-foreground">
+                      No schema information available
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="raw" className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">CSV Data</span>
+                    <Badge variant="outline">
+                      {generationResult.csv ? `${generationResult.csv.split('\n').length - 1} lines` : '0 lines'}
+                    </Badge>
+                  </div>
+                  <ScrollArea className="h-[400px] w-full border rounded-md">
+                    {generationResult.csv ? (
+                      <div className="p-4">
+                        <pre className="text-xs font-mono whitespace-pre-wrap break-words">
+                          {generationResult.csv}
+                        </pre>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-32 text-muted-foreground">
+                        No CSV data available
+                      </div>
+                    )}
+                  </ScrollArea>
+                </div>
+              </TabsContent>
+            </Tabs>
+            
+            {generationResult.feedback && (
+              <div className="mt-4 p-3 bg-muted rounded-md">
+                <p className="text-sm">
+                  <strong>AI Feedback:</strong> {generationResult.feedback}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Scraped Content Display */}
+      {scrapedContent.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5" />
+              Scraped Content
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px] w-full">
+              <div className="space-y-3">
+                {scrapedContent.map((item, index) => (
+                  <div key={index} className="p-3 border rounded-md">
+                    <div className="flex items-center justify-between mb-2">
+                      <Badge variant="secondary">Content {index + 1}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(item.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {item.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
+

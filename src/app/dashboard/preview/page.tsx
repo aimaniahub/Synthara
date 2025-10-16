@@ -14,9 +14,8 @@ import { getUserDatasets, type SavedDataset, getDatasetById } from '@/lib/supaba
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
-// Placeholder chart components (could be removed if not showing any charts for list view)
-import { ResponsiveContainer, BarChart as RechartsBarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
-const PIE_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))'];
+// MUI X Charts components
+import { BarChart, PieChart, type BarChartData, type PieChartData } from '@/components/charts';
 
 
 function DataPreviewContent() {
@@ -317,30 +316,45 @@ function DataPreviewContent() {
                 <Card className="shadow-xl">
                     <CardHeader><CardTitle className="font-headline">Data Distribution (Placeholder)</CardTitle></CardHeader>
                     <CardContent className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <RechartsBarChart data={[{name: 'Sample', value: 100}]}>
-                        <XAxis dataKey="name" fontSize={12} />
-                        <YAxis fontSize={12} />
-                        <Tooltip wrapperClassName="!bg-popover !border-border !rounded-md" labelClassName="!text-popover-foreground" itemStyle={{color: "hsl(var(--popover-foreground))"}}/>
-                        <Bar dataKey="value" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                        </RechartsBarChart>
-                    </ResponsiveContainer>
+                    <BarChart
+                      data={{
+                        series: [{
+                          data: [100, 80, 60, 40, 20],
+                          label: 'Sample Data',
+                        }],
+                        xAxis: {
+                          data: ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'],
+                          scaleType: 'band',
+                        }
+                      }}
+                      config={{
+                        height: 300,
+                        showLegend: false,
+                        showTooltip: true,
+                        showGrid: true,
+                      }}
+                      className="w-full h-full"
+                    />
                     <p className="text-center text-sm text-muted-foreground mt-2">Dynamic visualizations based on your data will appear here (Feature coming soon).</p>
                     </CardContent>
                 </Card>
                 <Card className="shadow-xl">
                     <CardHeader><CardTitle className="font-headline">Category Breakdown (Placeholder)</CardTitle></CardHeader>
                     <CardContent className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                        <Pie data={[{name: 'Group A', value: 60}, {name: 'Group B', value: 40}]} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                            {[{name: 'Group A', value: 60}, {name: 'Group B', value: 40}].map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                            ))}
-                        </Pie>
-                        <Tooltip wrapperClassName="!bg-popover !border-border !rounded-md" labelClassName="!text-popover-foreground" itemStyle={{color: "hsl(var(--popover-foreground))"}}/>
-                        </PieChart>
-                    </ResponsiveContainer>
+                    <PieChart
+                      data={{
+                        data: [
+                          { id: 0, label: 'Group A', value: 60 },
+                          { id: 1, label: 'Group B', value: 40 },
+                        ]
+                      }}
+                      config={{
+                        height: 300,
+                        showLegend: true,
+                        showTooltip: true,
+                      }}
+                      className="w-full h-full"
+                    />
                     <p className="text-center text-sm text-muted-foreground mt-2">Dynamic visualizations based on your data will appear here (Feature coming soon).</p>
                     </CardContent>
                 </Card>
