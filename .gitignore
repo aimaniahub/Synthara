@@ -50,6 +50,11 @@ temp/
 *.tmp
 *.temp
 
+# output files (generated datasets)
+output/*.csv
+output/*.json
+!output/.gitkeep
+
 # logs
 *.log
 logs/

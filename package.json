@@ -31,9 +31,7 @@
     "clean": "rimraf .next out node_modules/.cache temp",
     "optimize": "npm run clean && npm ci && npm run build",
     "vercel-build": "npm run build",
-    "setup:db": "node scripts/setup-database.js",
-    "test:db": "node scripts/test-database.js",
-    "debug:save": "node scripts/debug-save.js"
+    "setup:db": "node scripts/setup-database.js"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

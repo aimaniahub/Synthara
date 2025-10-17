@@ -197,52 +197,24 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Right Content - Product Demo */}
+              {/* Right Content - CTA */}
               <div className="relative">
-                <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gray-900 border border-white/10">
-                  {/* Mock browser header */}
-                  <div className="flex items-center gap-2 px-4 py-3 bg-gray-800 border-b border-gray-700">
-                    <div className="flex gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-white/10 p-8 text-center">
+                  <div className="space-y-6">
+                    <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
+                      <Sparkles className="w-8 h-8 text-emerald-400" />
                     </div>
-                    <div className="flex-1 text-center">
-                      <div className="text-sm text-gray-400">synthara.ai/dashboard</div>
-                    </div>
-                  </div>
-
-                  {/* Mock dashboard content */}
-                  <div className="p-6 bg-gray-900 min-h-[400px]">
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-white font-semibold text-lg">Projects</h3>
-                      <div className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-                        Take a self-guided tour
-                      </div>
-                    </div>
-
-                    {/* Mock project cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {[
-                        { name: 'Customer Analytics', type: 'Tabular Data', status: 'Active' },
-                        { name: 'Product Reviews', type: 'Text Corpus', status: 'Processing' },
-                        { name: 'Sales Forecast', type: 'Time Series', status: 'Complete' },
-                        { name: 'User Behavior', type: 'JSON Data', status: 'Active' }
-                      ].map((project, index) => (
-                        <div key={index} className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="text-white font-medium text-sm">{project.name}</h4>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${
-                              project.status === 'Active' ? 'bg-green-500/20 text-green-400' :
-                              project.status === 'Processing' ? 'bg-yellow-500/20 text-yellow-400' :
-                              'bg-blue-500/20 text-blue-400'
-                            }`}>
-                              {project.status}
-                            </span>
-                          </div>
-                          <p className="text-gray-400 text-xs">{project.type}</p>
-                        </div>
-                      ))}
+                    <h3 className="text-2xl font-bold text-white">Ready to Get Started?</h3>
+                    <p className="text-white/70">
+                      Join thousands of developers and data scientists who trust Synthara for their synthetic data needs.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                      <Button asChild size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                        <Link href="/auth">Get Started Free</Link>
+                      </Button>
+                      <Button asChild variant="outline" size="lg" className="border-white/20 text-white hover:bg-white/10">
+                        <Link href="/help">Learn More</Link>
+                      </Button>
                     </div>
                   </div>
                 </div>

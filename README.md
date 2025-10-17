@@ -102,6 +102,181 @@ Visit `http://localhost:3000` to access the application.
 ### Processing Flow
 **Input Validation → Query Optimization → Web Search → Content Scraping → AI Analysis → Data Structuring → Export Generation**
 
+## 🗄️ Database Setup (Supabase)
+
+### Step 1: Create a Supabase Project
+
+1. Go to [supabase.com](https://supabase.com) and sign in
+2. Click "New Project"
+3. Choose your organization
+4. Enter project details:
+   - **Name**: `synthara-ai` (or your preferred name)
+   - **Database Password**: Generate a strong password and save it
+   - **Region**: Choose the closest region to your users
+5. Click "Create new project"
+6. Wait for the project to be created (this may take a few minutes)
+
+### Step 2: Get Your Supabase Credentials
+
+1. In your Supabase dashboard, go to **Settings** → **API**
+2. Copy the following values:
+   - **Project URL** (looks like: `https://your-project-id.supabase.co`)
+   - **Anon/Public Key** (starts with `eyJ...`)
+
+### Step 3: Set Up Database Schema
+
+1. In your Supabase dashboard, go to **SQL Editor**
+2. Click "New Query"
+3. Copy the entire contents of `supabase-complete-schema.sql` from your project
+4. Paste it into the SQL Editor
+5. Click "Run" to execute the schema
+
+This will create:
+- `user_activities` table for logging user actions
+- `generated_datasets` table for storing CSV data and metadata
+- `user_profiles` table for user information
+- `file_storage` table for file tracking
+- All necessary indexes and security policies
+
+### Step 4: Configure Authentication
+
+1. In your Supabase dashboard, go to **Authentication** → **Settings**
+2. Configure your site URL:
+   - **Site URL**: `http://localhost:3000` (for development)
+   - **Redirect URLs**: Add `http://localhost:3000/auth/callback`
+3. Go to **Authentication** → **Providers**
+4. Enable the providers you want to use:
+   - **Email**: Enable for email/password authentication
+   - **Google**: Enable if you want Google OAuth
+   - **GitHub**: Enable if you want GitHub OAuth
+
+### Step 5: Set Up File Storage (Optional)
+
+1. In your Supabase dashboard, go to **Storage**
+2. You should see a `datasets` bucket created by the schema
+3. If not, create a new bucket:
+   - **Name**: `datasets`
+   - **Public**: No (private bucket)
+   - **File size limit**: 50MB (or your preferred limit)
+
+### Step 6: Test Your Setup
+
+1. Start your development server:
+   ```bash
+   npm run dev
+   ```
+
+2. Go to `http://localhost:3000`
+
+3. Try to:
+   - Sign up for a new account
+   - Generate some data
+   - Save a dataset
+   - Check the history page
+
+4. Verify in Supabase dashboard:
+   - **Authentication** → **Users**: Should see your test user
+   - **Table Editor** → **user_activities**: Should see activity logs
+   - **Table Editor** → **generated_datasets**: Should see saved datasets
+
+## 🐳 Crawl4AI Service Setup
+
+The web scraping service needs to be deployed separately. Here are the deployment options:
+
+### Option 1: Railway (Recommended)
+1. Create account at [railway.app](https://railway.app)
+2. Deploy the `src/lib/crawl4ai-python` folder
+3. Set environment variables: `PORT=8000`
+4. Update `CRAWL4AI_SERVICE_URL` in your main app
+
+### Option 2: Render
+1. Create account at [render.com](https://render.com)
+2. Deploy as web service with Python environment
+3. Configure build and start commands
+
+### Option 3: AWS EC2
+1. Launch Ubuntu 20.04 LTS instance
+2. Install Python and Chrome dependencies
+3. Deploy using PM2 for process management
+
+### Option 4: Docker (Local Development)
+
+#### Access Container Terminal
+```bash
+# Get a shell inside the running container
+docker exec -it crawal_service /bin/bash
+
+# Or use sh if bash is not available
+docker exec -it crawal_service /bin/sh
+```
+
+#### Copy Files to Container
+```bash
+# Copy a single file
+docker cp local-file.txt crawal_service:/path/in/container/
+
+# Copy entire directory
+docker cp ./local-directory/ crawal_service:/path/in/container/
+
+# Copy from container to local
+docker cp crawal_service:/path/in/container/file.txt ./local-file.txt
+```
+
+#### Update Container with New Image
+```bash
+# Stop current container
+docker stop crawal_service
+
+# Remove old container
+docker rm crawal_service
+
+# Run new container with proper port mapping
+docker run -d \
+  --name crawal_service \
+  -p 8000:6379 \
+  -p 11235:11235 \
+  -p 11234:11234 \
+  unclecode/crawl4ai:latest
+```
+
+#### Mount Local Directory (for development)
+```bash
+# Run container with local directory mounted
+docker run -d \
+  --name crawal_service \
+  -p 8000:6379 \
+  -p 11235:11235 \
+  -p 11234:11234 \
+  -v /path/to/your/local/code:/app/code \
+  unclecode/crawl4ai:latest
+```
+
+#### Check Container Status
+```bash
+# List running containers
+docker ps
+
+# Check container logs
+docker logs crawal_service
+
+# Check container details
+docker inspect crawal_service
+```
+
+#### Restart Services Inside Container
+```bash
+# Access container
+docker exec -it crawal_service /bin/bash
+
+# Restart specific services
+supervisorctl restart gunicorn
+supervisorctl restart redis
+supervisorctl restart mcp_server
+
+# Or restart all services
+supervisorctl restart all
+```
+
 ## 🚀 Deployment
 
 ### Vercel Deployment (Recommended)
@@ -109,24 +284,22 @@ Visit `http://localhost:3000` to access the application.
 2. Configure environment variables in Vercel dashboard
 3. Deploy automatically on push to main branch
 
-### Crawl4AI Service Deployment
-The web scraping service needs to be deployed separately. See deployment options below:
+### Production Deployment Checklist
 
-#### Option 1: Railway (Recommended)
-1. Create account at [railway.app](https://railway.app)
-2. Deploy the `src/lib/crawl4ai-python` folder
-3. Set environment variables: `PORT=8000`
-4. Update `CRAWL4AI_SERVICE_URL` in your main app
+#### Pre-Deployment
+- [x] Environment variables configured
+- [x] Database schema applied
+- [x] API keys obtained and tested
+- [x] Build process verified
+- [x] TypeScript compilation successful
 
-#### Option 2: Render
-1. Create account at [render.com](https://render.com)
-2. Deploy as web service with Python environment
-3. Configure build and start commands
-
-#### Option 3: AWS EC2
-1. Launch Ubuntu 20.04 LTS instance
-2. Install Python and Chrome dependencies
-3. Deploy using PM2 for process management
+#### Post-Deployment
+- [ ] Health check endpoint tested
+- [ ] Authentication flow verified
+- [ ] Data generation working
+- [ ] Web scraping functional
+- [ ] File downloads working
+- [ ] Error handling verified
 
 ## 🔐 Security Features
 
@@ -171,23 +344,6 @@ NEXT_PUBLIC_APP_URL=https://your-domain.com
 - **Bundle Size**: Optimized dependencies and tree shaking
 - **Database**: Indexed queries and RLS optimization
 
-## 🚨 Production Checklist
-
-### Pre-Deployment
-- [x] Environment variables configured
-- [x] Database schema applied
-- [x] API keys obtained and tested
-- [x] Build process verified
-- [x] TypeScript compilation successful
-
-### Post-Deployment
-- [ ] Health check endpoint tested
-- [ ] Authentication flow verified
-- [ ] Data generation working
-- [ ] Web scraping functional
-- [ ] File downloads working
-- [ ] Error handling verified
-
 ## 🔍 Monitoring & Health Checks
 
 The application includes comprehensive health check endpoints:
@@ -206,6 +362,39 @@ src/
 ├── lib/                   # Utility functions and configurations
 └── hooks/                 # Custom React hooks
 ```
+
+## 🛠️ Troubleshooting
+
+### Common Issues:
+
+1. **"Database tables not set up" error**:
+   - Make sure you ran the complete schema SQL
+   - Check that all tables exist in the Table Editor
+
+2. **Authentication not working**:
+   - Verify your Supabase URL and anon key are correct
+   - Check that authentication is enabled in Supabase dashboard
+   - Ensure redirect URLs are configured correctly
+
+3. **Data not saving**:
+   - Check browser console for errors
+   - Verify environment variables are loaded correctly
+   - Check Supabase logs in the dashboard
+
+4. **RLS (Row Level Security) errors**:
+   - Make sure you're authenticated
+   - Check that RLS policies are created correctly
+   - Verify user ID matches in the database
+
+### Debug Steps:
+
+1. Check browser console for errors
+2. Check Supabase dashboard logs
+3. Verify environment variables are loaded:
+   ```javascript
+   console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+   console.log('Supabase Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+   ```
 
 ## 🤝 Contributing
 
