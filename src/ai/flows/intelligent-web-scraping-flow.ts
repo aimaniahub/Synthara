@@ -27,6 +27,7 @@ const IntelligentWebScrapingOutputSchema = z.object({
   feedback: z.string().optional(),
   metadata: z.record(z.any()).optional(),
   error: z.string().optional(),
+  fallbackToAI: z.boolean().optional(),
 });
 
 export type IntelligentWebScrapingInput = z.infer<typeof IntelligentWebScrapingInputSchema>;
@@ -56,7 +57,7 @@ export async function intelligentWebScraping(
     const validatedInput = IntelligentWebScrapingInputSchema.parse(input);
 
     // Step 1: Generate search URLs
-    logger?.log('🔍 Step 1: Generating search queries and finding relevant URLs...');
+    logger?.log('Step 1: Generating search queries and finding relevant URLs...');
     logger?.progress('Search URLs', 1, 6, 'Finding relevant web sources');
     
     const searchResult = await generateSearchUrls({
@@ -77,8 +78,8 @@ export async function intelligentWebScraping(
     logger?.log(`Search queries used: ${searchResult.searchQueries.map(q => q.query).join(', ')}`);
 
     // Step 2: Scrape ALL content from URLs using Crawl4AI (wait for ALL to complete)
-    logger?.log('🕷️ Step 2: Scraping ALL content from web pages...');
-    logger?.progress('Web Scraping', 2, 6, 'Extracting raw content from all URLs - WAITING FOR ALL TO COMPLETE');
+    logger?.log('Step 2: Scraping content from web pages...');
+    logger?.progress('Web Scraping', 2, 6, 'Extracting content from URLs');
 
     const scrapedContent = await scrapeUrlsWithCrawl4AI(
       searchResult.urls.map(url => url.url),
@@ -88,19 +89,29 @@ export async function intelligentWebScraping(
     if (!scrapedContent.success || scrapedContent.content.length === 0) {
       const errorMsg = `Failed to scrape content: ${scrapedContent.error || 'No content extracted'}`;
       logger?.error(errorMsg);
-      return {
-        success: false,
-        error: errorMsg,
-        urls: searchResult.urls.map(url => url.url),
-        searchQueries: searchResult.searchQueries.map(q => q.query),
-      };
+      logger?.log('🔄 Some URLs failed to scrape, but continuing with available data...');
+      
+      // Check if we have any partial success
+      if (scrapedContent.content && scrapedContent.content.length > 0) {
+        logger?.log(`✅ Proceeding with ${scrapedContent.content.length} successfully scraped sources`);
+        // Continue with the partial data we have
+      } else {
+        logger?.log('🔄 No content could be scraped, falling back to AI-only data generation...');
+        return {
+          success: false,
+          error: errorMsg,
+          fallbackToAI: true, // Signal that we should fall back to AI generation
+          urls: searchResult.urls.map(url => url.url),
+          searchQueries: searchResult.searchQueries.map(q => q.query),
+        };
+      }
     }
 
     logger?.success(`Successfully scraped content from ${scrapedContent.content.length} pages`);
 
     // Step 3: Dump ALL scraped data to markdown file for AI analysis
-    logger?.log('📝 Step 3: Creating comprehensive markdown dataset...');
-    logger?.progress('Data Preparation', 3, 6, 'Dumping ALL scraped content to markdown file');
+    logger?.log('Step 3: Creating markdown dataset...');
+    logger?.progress('Data Preparation', 3, 6, 'Preparing data for AI analysis');
 
     const markdownFilePath = await dumpScrapedDataToMarkdown(
       scrapedContent.content, 
@@ -123,9 +134,9 @@ export async function intelligentWebScraping(
 
     // Step 4: Let AI analyze the complete markdown dataset and create structured output
     // CRITICAL: This should only happen ONCE after ALL scraping is complete
-    logger?.log('🧠 Step 4: AI analyzing complete markdown dataset...');
-    logger?.log(`📊 Dataset contains ${scrapedContent.content.length} scraped sources`);
-    logger?.progress('AI Analysis', 4, 6, 'Processing comprehensive markdown data - SINGLE ANALYSIS');
+    logger?.log('Step 4: AI analyzing dataset...');
+    logger?.log(`Dataset contains ${scrapedContent.content.length} scraped sources`);
+    logger?.progress('AI Analysis', 4, 6, 'Processing data with AI');
 
     const structuredData = await analyzeCompleteMarkdownDataset({
       markdownFilePath,
@@ -148,16 +159,16 @@ export async function intelligentWebScraping(
     logger?.success(`AI generated ${structuredData.data.length} rows from complete dataset analysis`);
 
     // Step 5: Generate CSV
-    logger?.log('📄 Step 5: Generating CSV format...');
+    logger?.log('Step 5: Generating CSV format...');
     logger?.progress('CSV Generation', 5, 6, 'Creating downloadable CSV');
 
     const csv = generateCSV(structuredData.data, structuredData.schema || []);
 
     // Step 6: Save CSV to output folder and finalize
     // CRITICAL: Only create ONE CSV file after all processing is complete
-    logger?.log('💾 Step 6: Saving CSV to output folder...');
-    logger?.log(`📄 Creating SINGLE CSV file with ${structuredData.data.length} rows`);
-    logger?.progress('Complete', 6, 6, 'Saving SINGLE CSV file and finalizing');
+    logger?.log('Step 6: Saving CSV to output folder...');
+    logger?.log(`Creating CSV file with ${structuredData.data.length} rows`);
+    logger?.progress('Complete', 6, 6, 'Saving CSV file and finalizing');
 
     // Save CSV to output folder
     const outputDir = join(process.cwd(), 'output');
@@ -239,6 +250,21 @@ async function scrapeUrlsWithCrawl4AI(
   try {
     const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:11235';
     logger?.log(`Using Crawl4AI service at: ${crawl4aiServiceUrl}`);
+    
+    // Test if the Crawl4AI service is available
+    try {
+      const healthCheck = await fetch(`${crawl4aiServiceUrl}/health`, { 
+        method: 'GET',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+      if (!healthCheck.ok) {
+        throw new Error(`Service health check failed: ${healthCheck.status}`);
+      }
+      logger?.log(`✅ Crawl4AI service is available`);
+    } catch (healthError: any) {
+      logger?.error(`❌ Crawl4AI service is not available: ${healthError.message}`);
+      logger?.log(`🔄 This will cause all scraping attempts to fail, but the process will continue with AI fallback`);
+    }
 
     const scrapedContent: Array<{
       url: string;
@@ -249,41 +275,65 @@ async function scrapeUrlsWithCrawl4AI(
     // Process URLs in batches to avoid overwhelming the service
     // IMPORTANT: Wait for ALL URLs to be scraped before proceeding
     const batchSize = 3;
-    logger?.log(`🔄 Starting batch processing of ${urls.length} URLs in batches of ${batchSize}`);
+    logger?.log(`Starting batch processing of ${urls.length} URLs in batches of ${batchSize}`);
     
     for (let i = 0; i < urls.length; i += batchSize) {
       const batch = urls.slice(i, i + batchSize);
-      logger?.log(`📦 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(urls.length / batchSize)}: ${batch.length} URLs`);
+      logger?.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(urls.length / batchSize)}: ${batch.length} URLs`);
 
       const batchPromises = batch.map(async (url) => {
         try {
-          logger?.log(`Scraping: ${url}`);
+            logger?.log(`Scraping: ${url.substring(0, 50)}...`);
           
-          const response = await fetch(`${crawl4aiServiceUrl}/crawl`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              urls: [url],
-              options: {
-                extract_media: false,
-                extract_links: false,
-                extract_images: false,
-                extract_tables: true,
-                extract_markdown: true,
-                extract_clean_html: true,
-                extract_text: true,
-                wait_for: 3000,
-                timeout: 30000,
-                // Additional options for better content extraction
-                remove_forms: true,
-                remove_scripts: true,
-                remove_styles: true,
-                remove_comments: true,
+          // Add retry logic for failed requests
+          let response;
+          let lastError;
+          const maxRetries = 2;
+          
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+              logger?.log(`Attempt ${attempt}/${maxRetries} for ${url.substring(0, 50)}...`);
+              
+              response = await fetch(`${crawl4aiServiceUrl}/crawl`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  urls: [url],
+                  options: {
+                    extract_media: false,
+                    extract_links: false,
+                    extract_images: false,
+                    extract_tables: true,
+                    extract_markdown: true,
+                    extract_clean_html: true,
+                    extract_text: true,
+                    wait_for: 3000,
+                    timeout: 20000, // Reduced timeout for faster failure detection
+                    // Additional options for better content extraction
+                    remove_forms: true,
+                    remove_scripts: true,
+                    remove_styles: true,
+                    remove_comments: true,
+                  }
+                }),
+              });
+              
+              // If we get a response, break out of retry loop
+              break;
+            } catch (retryError: any) {
+              lastError = retryError;
+              if (attempt < maxRetries) {
+                logger?.log(`⚠️ Attempt ${attempt} failed for ${url.substring(0, 50)}..., retrying...`);
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
               }
-            }),
-          });
+            }
+          }
+          
+          if (!response) {
+            throw lastError || new Error('Failed to get response after retries');
+          }
 
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -341,9 +391,10 @@ async function scrapeUrlsWithCrawl4AI(
               logger?.log(`⚠️ Using raw HTML for ${url} (${contentString.length} chars)`);
             }
             
-            // 5. If still no content, log warning
+            // 5. If still no content, log warning and continue with empty content
             if (!contentString) {
-              logger?.error(`❌ No usable content found for ${url}`);
+              logger?.error(`❌ No usable content found for ${url} - continuing with empty content`);
+              logger?.log(`🔍 Debug info for ${url}: title="${crawlResult.title}", content length=${crawlResult.content?.length || 0}, markdown length=${crawlResult.markdown?.length || 0}, html length=${crawlResult.html?.length || 0}`);
               contentString = '';
             }
             
@@ -361,7 +412,25 @@ async function scrapeUrlsWithCrawl4AI(
             throw new Error(result.error || 'Failed to extract content');
           }
         } catch (error: any) {
-          logger?.error(`Failed to scrape ${url}: ${error.message}`);
+          // Handle different types of errors gracefully
+          if (error.message.includes('HTTP 500')) {
+            logger?.error(`❌ Failed to scrape ${url}: HTTP 500: Internal Server Error`);
+            logger?.log(`⚠️ Server error for ${url} - this is likely a temporary issue with the target website`);
+          } else if (error.message.includes('HTTP 403')) {
+            logger?.error(`❌ Failed to scrape ${url}: HTTP 403: Forbidden - Access denied`);
+            logger?.log(`⚠️ Access denied for ${url} - the website may be blocking automated requests`);
+          } else if (error.message.includes('HTTP 404')) {
+            logger?.error(`❌ Failed to scrape ${url}: HTTP 404: Not Found`);
+            logger?.log(`⚠️ Page not found for ${url} - the URL may be invalid or moved`);
+          } else if (error.message.includes('timeout')) {
+            logger?.error(`❌ Failed to scrape ${url}: Request timeout`);
+            logger?.log(`⚠️ Timeout for ${url} - the website may be slow or unresponsive`);
+          } else {
+            logger?.error(`❌ Failed to scrape ${url}: ${error.message}`);
+          }
+          
+          // Don't fail completely - continue with other URLs
+          logger?.log(`🔄 Continuing with remaining URLs...`);
           return null;
         }
       });
@@ -374,23 +443,26 @@ async function scrapeUrlsWithCrawl4AI(
       }>;
       
       scrapedContent.push(...validResults);
-      logger?.log(`✅ Batch ${Math.floor(i / batchSize) + 1} completed: ${validResults.length}/${batch.length} successful`);
+      logger?.log(`Batch ${Math.floor(i / batchSize) + 1} completed: ${validResults.length}/${batch.length} successful`);
     }
 
     // CRITICAL: Ensure ALL URLs have been processed before proceeding
-    logger?.log(`🎯 Scraping complete: ${scrapedContent.length}/${urls.length} URLs successfully scraped`);
+    logger?.log(`Scraping complete: ${scrapedContent.length}/${urls.length} URLs successfully scraped`);
     
     if (scrapedContent.length === 0) {
+      logger?.error('No content could be scraped from any URLs - falling back to AI generation');
       return {
         success: false,
         content: [],
-        error: 'No content could be scraped from any URLs',
+        error: 'No content could be scraped from any URLs - will fall back to AI generation',
       };
     }
 
     // Only proceed if we have scraped content from at least some URLs
     if (scrapedContent.length < urls.length) {
-      logger?.log(`⚠️ Warning: Only scraped ${scrapedContent.length} out of ${urls.length} URLs, but proceeding with available data`);
+      const failedCount = urls.length - scrapedContent.length;
+      logger?.log(`⚠️ Warning: Only scraped ${scrapedContent.length} out of ${urls.length} URLs (${failedCount} failed), but proceeding with available data`);
+      logger?.log(`✅ This is normal - some websites may be temporarily unavailable or block automated requests`);
     }
 
     return {

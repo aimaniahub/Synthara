@@ -1,18 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { 
   Terminal,
-  XCircle,
-  Play,
-  Pause,
   RotateCcw,
-  CheckCircle,
-  AlertTriangle,
   Loader2
 } from 'lucide-react';
 
@@ -28,64 +23,50 @@ interface SimpleTerminalLoggerProps {
 interface LogEntry {
   id: string;
   timestamp: string;
-  type: 'info' | 'success' | 'error' | 'warning';
+  type: 'info' | 'success' | 'error' | 'warning' | 'progress';
   message: string;
-  level: 'log' | 'info' | 'warn' | 'error';
 }
 
 // Simple unique ID generator
 let logIdCounter = 0;
 const generateLogId = (): string => `log_${Date.now()}_${++logIdCounter}`;
 
-export function SimpleTerminalLogger({ 
+export const SimpleTerminalLogger = forwardRef<any, SimpleTerminalLoggerProps>(({ 
   isActive, 
   requestData, 
   onComplete, 
   onError, 
   onScrapedContent,
   onClose
-}: SimpleTerminalLoggerProps) {
+}, ref) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  
-  const eventSourceRef = useRef<EventSource | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom with smooth behavior
+  // Auto-scroll to bottom
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
       const scrollContainer = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (scrollContainer) {
-        // Use smooth scrolling for better UX
         scrollContainer.scrollTo({
           top: scrollContainer.scrollHeight,
           behavior: 'smooth'
         });
-      } else {
-        // Fallback to direct scroll
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
     }
   }, []);
 
-  // Add log entry
-  const addLog = useCallback((type: LogEntry['type'], message: string, level: LogEntry['level'] = 'log') => {
+  // Add log entry - simplified
+  const addLog = useCallback((type: LogEntry['type'], message: string) => {
     const log: LogEntry = {
       id: generateLogId(),
       timestamp: new Date().toLocaleTimeString(),
       type,
-      message,
-      level
+      message
     };
 
     setLogs(prev => [...prev, log]);
-    
-    // Auto-scroll immediately and after a short delay for better reliability
-    scrollToBottom();
-    setTimeout(scrollToBottom, 50);
-    setTimeout(scrollToBottom, 150);
+    setTimeout(scrollToBottom, 100);
   }, [scrollToBottom]);
 
   // Clear logs
@@ -93,154 +74,79 @@ export function SimpleTerminalLogger({
     setLogs([]);
   }, []);
 
-  // Start streaming - live AI generation with real-time updates
-  const startStreaming = useCallback(() => {
-    if (eventSourceRef.current) return;
-
-    console.log('[SimpleTerminalLogger] Starting live AI generation stream');
-    
-    clearLogs();
-    setIsGenerating(true);
-    addLog('info', '🚀 Starting live AI data generation...', 'info');
-    addLog('info', '📡 Connecting to AI generation service...', 'info');
-
-    // The actual streaming will be handled by the parent component
-    // This logger will receive updates through props
-    setIsConnected(true);
-    addLog('success', '✅ Connected to AI generation service', 'info');
-    addLog('info', '🤖 AI models initialized and ready', 'info');
-    addLog('info', '📊 Processing your request...', 'info');
-
-  }, [isActive, clearLogs, addLog]);
-
-  // Stop streaming
-  const stopStreaming = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    setIsConnected(false);
-    setIsGenerating(false);
-  }, []);
-
-  // Handle stream events
+  // Handle stream events - simplified
   const handleStreamEvent = useCallback((data: any) => {
-    console.log('[SimpleTerminalLogger] Handling stream event:', data);
-    
+    if (!data || !data.type) return;
+
     switch (data.type) {
       case 'log':
       case 'info':
-        addLog('info', `ℹ️  ${data.message}`, 'info');
-        if (data.details) {
-          addLog('info', `   └─ ${data.details}`, 'info');
-        }
+        addLog('info', data.message || 'Processing...');
         break;
         
       case 'progress':
-        const step = data.step || data.current || 1;
-        const total = data.total || data.totalSteps || 6;
-        const percentage = data.percentage || Math.round((step / total) * 100);
-        
-        addLog('info', `📊 Step ${step}/${total} (${percentage}%)`, 'info');
-        if (data.message) {
-          addLog('info', `   └─ ${data.message}`, 'info');
-        }
+        const percentage = data.percentage || 0;
+        const message = data.message || 'Processing...';
+        addLog('progress', `[${percentage}%] ${message}`);
         break;
         
       case 'success':
-        addLog('success', `✅ ${data.message}`, 'info');
-        if (data.details) {
-          addLog('success', `   └─ ${data.details}`, 'info');
-        }
+        addLog('success', data.message || 'Success!');
         break;
         
       case 'error':
-        addLog('error', `❌ ${data.message || data.error}`, 'error');
-        if (data.details) {
-          addLog('error', `   └─ ${data.details}`, 'error');
+        const errorMessage = data.message || data.error || 'Error occurred';
+        addLog('error', errorMessage);
+        
+        // Only call onError for critical errors, not for individual URL failures
+        if (!errorMessage.includes('Failed to scrape') && !errorMessage.includes('HTTP 500') && !errorMessage.includes('HTTP 403') && !errorMessage.includes('HTTP 404')) {
+          onError(errorMessage);
         }
-        onError(data.message || data.error);
         break;
         
       case 'scraped_content':
-        addLog('info', `📄 Content scraped (${data.content?.length || 0} chars)`, 'info');
+        const contentLength = data.content?.length || 0;
+        addLog('info', `Scraped content: ${contentLength} characters`);
         onScrapedContent(data.content || '');
         break;
         
-      case 'urls_found':
-        addLog('success', `🔍 Found ${data.count || 0} URLs`, 'info');
-        if (data.details) {
-          addLog('success', `   └─ ${data.details}`, 'info');
-        }
-        break;
-        
-      case 'pages_scraped':
-        addLog('success', `📖 Scraped ${data.count || 0} pages`, 'info');
-        if (data.details) {
-          addLog('success', `   └─ ${data.details}`, 'info');
-        }
-        break;
-        
-      case 'noise_reduction':
-        addLog('success', `🧹 Noise reduced by ${data.percentage || 0}%`, 'info');
-        if (data.details) {
-          addLog('success', `   └─ ${data.details}`, 'info');
-        }
-        break;
-        
-      case 'data_generated':
-        addLog('success', `📊 Generated ${data.rows || 0} rows`, 'info');
-        if (data.details) {
-          addLog('success', `   └─ ${data.details}`, 'info');
-        }
-        break;
-        
       case 'complete':
-        addLog('success', '🎉 Generation completed!', 'info');
-        addLog('success', '   └─ Dataset ready for download', 'info');
+        addLog('success', 'Generation completed successfully!');
         setIsGenerating(false);
         setTimeout(() => {
           onComplete(data.result);
-          // Auto-close the logger after 2 seconds
-          setTimeout(() => {
-            if (onClose) {
-              onClose();
-            }
-          }, 2000);
         }, 1000);
         break;
         
       default:
-        console.log('[SimpleTerminalLogger] Unknown message type:', data.type, data);
-        addLog('info', `ℹ️  ${data.message || 'Processing...'}`, 'info');
+        addLog('info', data.message || 'Processing...');
     }
   }, [addLog, onError, onScrapedContent, onComplete]);
 
-  // Effect to start/stop streaming
+  // Effect to handle active state
   useEffect(() => {
     if (isActive && requestData) {
-      console.log('[SimpleTerminalLogger] Starting stream for request:', requestData);
-      startStreaming();
+      setIsGenerating(true);
+      // Don't add automatic log - let backend stream events handle all logging
     } else {
-      console.log('[SimpleTerminalLogger] Stopping stream, isActive:', isActive, 'requestData:', !!requestData);
-      stopStreaming();
+      setIsGenerating(false);
     }
+  }, [isActive, requestData]);
 
-    return () => {
-      console.log('[SimpleTerminalLogger] Cleanup: stopping stream');
-      stopStreaming();
-    };
-  }, [isActive, requestData, startStreaming, stopStreaming]);
-
-  // Auto-scroll effect when logs change
+  // Auto-scroll when logs change
   useEffect(() => {
     if (logs.length > 0) {
       scrollToBottom();
     }
   }, [logs, scrollToBottom]);
 
-  // Get log color
-  const getLogColor = useCallback((log: LogEntry) => {
+  // Expose handleStreamEvent function to parent
+  useImperativeHandle(ref, () => ({
+    handleStreamEvent
+  }), [handleStreamEvent]);
+
+  // Get log color - simplified
+  const getLogColor = (log: LogEntry) => {
     switch (log.type) {
       case 'success':
         return 'text-green-400';
@@ -248,10 +154,12 @@ export function SimpleTerminalLogger({
         return 'text-red-400';
       case 'warning':
         return 'text-yellow-400';
+      case 'progress':
+        return 'text-blue-400';
       default:
         return 'text-gray-300';
     }
-  }, []);
+  };
 
   if (!isActive) {
     return (
@@ -259,14 +167,14 @@ export function SimpleTerminalLogger({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5 text-green-500" />
-            Generation Logs
+            Terminal
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8 text-muted-foreground">
             <Terminal className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Ready to show generation logs</p>
-            <p className="text-sm">Start a generation to see real-time logs</p>
+            <p>Ready to show generation progress</p>
+            <p className="text-sm">Start generation to see what's happening</p>
           </div>
         </CardContent>
       </Card>
@@ -279,12 +187,7 @@ export function SimpleTerminalLogger({
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Terminal className="h-5 w-5 text-green-500" />
-            Generation Logs
-            {isConnected && (
-              <Badge variant="outline" className="ml-2 text-green-500 border-green-500">
-                Live
-              </Badge>
-            )}
+            Terminal
             {isGenerating && (
               <Badge variant="outline" className="ml-2 text-blue-500 border-blue-500">
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
@@ -292,24 +195,14 @@ export function SimpleTerminalLogger({
               </Badge>
             )}
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsPaused(!isPaused)}
-              className="h-8"
-            >
-              {isPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearLogs}
-              className="h-8"
-            >
-              <RotateCcw className="h-3 w-3" />
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={clearLogs}
+            className="h-8"
+          >
+            <RotateCcw className="h-3 w-3" />
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -325,9 +218,9 @@ export function SimpleTerminalLogger({
                 logs.map((log) => (
                   <div
                     key={log.id}
-                    className={`flex items-start gap-2 ${getLogColor(log)}`}
+                    className={`flex items-start gap-3 ${getLogColor(log)}`}
                   >
-                    <span className="text-gray-500 text-xs mt-0.5 min-w-[60px]">
+                    <span className="text-gray-500 text-xs mt-0.5 min-w-[50px]">
                       {log.timestamp}
                     </span>
                     <span className="flex-1 break-words">
@@ -342,4 +235,4 @@ export function SimpleTerminalLogger({
       </CardContent>
     </Card>
   );
-}
+});

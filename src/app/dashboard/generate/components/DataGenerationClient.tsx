@@ -67,7 +67,7 @@ export function DataGenerationClient() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const terminalRef = useRef<HTMLDivElement>(null);
+  const terminalLoggerRef = useRef<any>(null);
 
   const form = useForm<DataGenerationFormData>({
     resolver: zodResolver(dataGenerationSchema),
@@ -254,8 +254,8 @@ export function DataGenerationClient() {
 
     try {
       // Scroll to terminal
-      if (terminalRef.current) {
-        terminalRef.current.scrollIntoView({ behavior: 'smooth' });
+      if (terminalLoggerRef.current) {
+        terminalLoggerRef.current.scrollIntoView({ behavior: 'smooth' });
       }
 
       // Create request data
@@ -316,12 +316,23 @@ export function DataGenerationClient() {
           if (line.startsWith('data: ')) {
             try {
               const jsonString = line.substring(6);
+              
+              // Skip empty lines or lines with just whitespace
+              if (!jsonString.trim()) {
+                continue;
+              }
+              
               const parsedData = parseJsonSafely(jsonString);
               
               // Check if parsing failed and returned fallback error
               if (!parsedData || (parsedData.type === 'error' && parsedData.message === 'Failed to parse server response')) {
                 console.warn('[Client] Skipping malformed JSON line:', line.substring(0, 100) + '...');
                 continue; // Skip this line and continue processing
+              }
+              
+              // Forward all stream events to the terminal logger
+              if (terminalLoggerRef.current) {
+                terminalLoggerRef.current.handleStreamEvent(parsedData);
               }
               
               if (parsedData.type === 'progress') {
@@ -359,8 +370,21 @@ export function DataGenerationClient() {
                     description: `Successfully generated ${parsedData.result.data.length} rows of data.`,
                   });
                 } else {
-                  console.error('Invalid result data structure:', parsedData.result);
-                  throw new Error('Invalid result data received from server');
+                  // Handle cases where result is undefined or doesn't have the expected structure
+                  console.warn('Complete message received but result data is missing or invalid:', {
+                    hasResult: !!parsedData.result,
+                    resultType: typeof parsedData.result,
+                    resultKeys: parsedData.result ? Object.keys(parsedData.result) : 'N/A',
+                    message: parsedData.message || 'No message'
+                  });
+                  
+                  // If this is just a stream completion message without data, don't treat it as an error
+                  if (parsedData.message === 'Stream completed' || !parsedData.result) {
+                    console.log('Stream completed without data - this is normal for some completion messages');
+                    // Don't throw an error, just log and continue
+                  } else {
+                    throw new Error('Invalid result data received from server');
+                  }
                 }
               } else if (parsedData.type === 'error') {
                 throw new Error(parsedData.message || parsedData.error || 'Unknown error occurred');
@@ -368,6 +392,7 @@ export function DataGenerationClient() {
             } catch (parseError) {
               console.error('Error parsing SSE data:', parseError, 'Line:', line);
               // Continue processing other lines even if one fails
+              // Don't throw here as it would stop the entire stream processing
             }
           }
         }
@@ -750,8 +775,9 @@ export function DataGenerationClient() {
 
       {/* Terminal Logger */}
       {showTerminal && (
-        <div ref={terminalRef}>
+        <div>
           <SimpleTerminalLogger
+            ref={terminalLoggerRef}
             isActive={isGenerating}
             requestData={{
               prompt: watchedValues.prompt,
@@ -765,6 +791,14 @@ export function DataGenerationClient() {
             onError={(error) => {
               console.error('Generation error:', error);
               setIsGenerating(false);
+              setIsSubmitting(false);
+              
+              // Show user-friendly error message
+              toast({
+                title: "Generation encountered issues",
+                description: "Some web sources couldn't be accessed, but the process will continue with available data.",
+                variant: "default",
+              });
             }}
             onScrapedContent={(content) => {
               setScrapedContent(prev => [...prev, {
@@ -980,4 +1014,3 @@ export function DataGenerationClient() {
     </div>
   );
 }
-

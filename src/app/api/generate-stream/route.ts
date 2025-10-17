@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { intelligentWebScraping } from '@/ai/flows/intelligent-web-scraping-flow';
+import { geminiService } from '@/services/gemini-service';
 
 // Request deduplication for stream API
 const activeRequests = new Map<string, Promise<Response>>();
@@ -103,10 +104,22 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
+      let isControllerClosed = false;
+      
+      // Function to check if controller is still active
+      const isControllerActive = () => {
+        return !isControllerClosed && controller.desiredSize !== null;
+      };
       
       // Function to send log messages to all active SSE connections
       const sendLog = (message: string, type: 'info' | 'success' | 'error' | 'progress' = 'info') => {
         try {
+          // Check if controller is still active before proceeding
+          if (isControllerClosed) {
+            console.log('[StreamAPI] Controller already closed, skipping log:', message.substring(0, 50));
+            return;
+          }
+
           // Safely escape the message to prevent JSON parsing errors
           const safeMessage = typeof message === 'string'
             ? message.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/"/g, '\\"').replace(/\\/g, '\\\\')
@@ -132,7 +145,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
           });
 
           // Also send to the current stream if it's still active
-          if (controller.desiredSize !== null) {
+          if (isControllerActive()) {
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           }
         } catch (error) {
@@ -164,6 +177,12 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
       // Function to send progress updates to all active SSE connections
       const sendProgress = (step: string, current: number, total: number, details?: string) => {
         try {
+          // Check if controller is still active before proceeding
+          if (isControllerClosed) {
+            console.log('[StreamAPI] Controller already closed, skipping progress:', step);
+            return;
+          }
+
           // Safely escape details to prevent JSON parsing errors
           const safeDetails = details
             ? details.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/"/g, '\\"')
@@ -193,7 +212,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
           });
 
           // Also send to the current stream if it's still active
-          if (controller.desiredSize !== null) {
+          if (isControllerActive()) {
             controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           }
         } catch (error) {
@@ -251,7 +270,9 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
                     content: content,
                     timestamp: new Date().toISOString()
                   });
-                  controller.enqueue(encoder.encode(`data: ${scrapedContentData}\n\n`));
+                  if (isControllerActive()) {
+                    controller.enqueue(encoder.encode(`data: ${scrapedContentData}\n\n`));
+                  }
                 } else {
                   sendLog(`ℹ️ ${message}`, 'info');
                 }
@@ -283,9 +304,38 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
               success: result?.success || false,
             });
 
+            // Handle fallback to AI generation if web scraping failed
+            if (result && result.fallbackToAI) {
+              sendLog('🔄 Web scraping failed, falling back to AI-only generation...', 'info');
+              sendProgress('Fallback', 6, 7, 'Switching to AI-only data generation');
+              
+              // Generate data using AI only (fallback)
+              try {
+                const fallbackResult = await generateFallbackData(prompt, numRows || 25);
+                
+                if (fallbackResult && fallbackResult.data && fallbackResult.data.length > 0) {
+                  sendLog(`🎉 Fallback successful: Generated ${fallbackResult.data.length} rows using AI only`, 'success');
+                  sendProgress('Complete', 7, 7, `Generated ${fallbackResult.data.length} rows (AI fallback)`);
+                  
+                  const fallbackData = JSON.stringify({
+                    type: 'complete',
+                    result: fallbackResult,
+                    timestamp: new Date().toISOString()
+                  });
+                  if (isControllerActive()) {
+                    controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
+                  }
+                } else {
+                  throw new Error('AI fallback generated no data');
+                }
+              } catch (fallbackError: any) {
+                sendLog(`❌ AI fallback also failed: ${fallbackError.message}`, 'error');
+                throw new Error(`Both web scraping and AI fallback failed: ${fallbackError.message}`);
+              }
+            }
             // Always send the result, even if it's empty initially
             // The web scraping process might take time and return results later
-            if (result && result.success && result.data && result.data.length > 0) {
+            else if (result && result.success && result.data && result.data.length > 0) {
               // We have some data, validate completeness
               const hasRows = result.data && result.data.length > 0;
               const hasCsv = result.csv && result.csv.length > 0;
@@ -318,7 +368,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
                 result: safeResult,
                 timestamp: new Date().toISOString()
               });
-              if (controller.desiredSize !== null) {
+              if (isControllerActive()) {
                 controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
               }
             } else {
@@ -344,7 +394,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
                 result: safeProgressResult,
                 timestamp: new Date().toISOString()
               });
-              if (controller.desiredSize !== null) {
+              if (isControllerActive()) {
                 controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
               }
             }
@@ -356,7 +406,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
         } catch (error: any) {
           sendLog(`💥 Error: ${error.message}`, 'error');
           try {
-            if (controller.desiredSize !== null) {
+            if (isControllerActive()) {
               const errorData = JSON.stringify({
                 type: 'error',
                 error: error.message,
@@ -372,21 +422,24 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
           await new Promise(resolve => setTimeout(resolve, 2000));
           
           try {
-            if (controller.desiredSize !== null) {
-              // Send a final completion message
+            if (isControllerActive()) {
+              // Send a final completion message only if we haven't already sent a complete message with data
+              // This prevents sending empty completion messages that cause client errors
               const completionData = JSON.stringify({
-                type: 'complete',
+                type: 'info',
                 message: 'Stream completed',
                 timestamp: new Date().toISOString()
               });
               controller.enqueue(encoder.encode(`data: ${completionData}\n\n`));
               
-              // Close the controller
+              // Mark controller as closed before closing
+              isControllerClosed = true;
               controller.close();
             }
           } catch (closeError) {
             // Controller already closed, ignore
             console.log('[StreamAPI] Controller already closed, ignoring close error');
+            isControllerClosed = true;
           }
         }
       })();
@@ -406,3 +459,99 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
 }
 
 // The logging is now integrated directly into the generateFromWeb flow
+
+/**
+ * Generate fallback data using AI when web scraping fails
+ */
+async function generateFallbackData(prompt: string, numRows: number) {
+  try {
+    console.log(`[Fallback] Generating ${numRows} rows using AI for prompt: "${prompt.substring(0, 100)}..."`);
+    
+    // Create a comprehensive prompt for AI generation
+    const aiPrompt = `Generate a realistic dataset with ${numRows} rows based on this description: "${prompt}"
+
+Requirements:
+- Create realistic, varied data that matches the description
+- Include appropriate data types (strings, numbers, dates, etc.)
+- Ensure data is consistent and logical
+- Generate a proper CSV format
+- Include a schema with column names and types
+
+Return the data as a JSON object with this structure:
+{
+  "data": [array of objects with the generated data],
+  "schema": [array of column definitions with name, type, description],
+  "csv": "CSV formatted string"
+}`;
+
+    const response = await geminiService.generateContent(aiPrompt);
+    
+    if (!response || !response.text) {
+      throw new Error('No response from AI service');
+    }
+
+    // Try to parse the AI response
+    let parsedResponse;
+    try {
+      // Clean the response text
+      const cleanedText = response.text
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+      
+      parsedResponse = JSON.parse(cleanedText);
+    } catch (parseError) {
+      console.error('[Fallback] Failed to parse AI response:', parseError);
+      throw new Error('Failed to parse AI response');
+    }
+
+    // Validate the response structure
+    if (!parsedResponse.data || !Array.isArray(parsedResponse.data)) {
+      throw new Error('Invalid data structure in AI response');
+    }
+
+    // Ensure we have the right number of rows
+    const actualRows = Math.min(parsedResponse.data.length, numRows);
+    const data = parsedResponse.data.slice(0, actualRows);
+
+    // Generate CSV if not provided
+    let csv = parsedResponse.csv;
+    if (!csv && data.length > 0) {
+      const headers = Object.keys(data[0]);
+      const csvRows = data.map(row => 
+        headers.map(header => {
+          const value = row[header];
+          if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value || '';
+        }).join(',')
+      );
+      csv = [headers.join(','), ...csvRows].join('\n');
+    }
+
+    return {
+      success: true,
+      data,
+      csv: csv || '',
+      schema: parsedResponse.schema || Object.keys(data[0] || {}).map(key => ({ 
+        name: key, 
+        type: 'string',
+        description: `Generated ${key} field`
+      })),
+      feedback: `Generated ${actualRows} rows using AI fallback due to web scraping issues`,
+      urls: [],
+      searchQueries: [],
+      metadata: {
+        generationMethod: 'ai_fallback',
+        originalPrompt: prompt,
+        requestedRows: numRows,
+        actualRows: actualRows
+      }
+    };
+
+  } catch (error: any) {
+    console.error('[Fallback] Error generating fallback data:', error);
+    throw new Error(`Fallback generation failed: ${error.message}`);
+  }
+}

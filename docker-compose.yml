@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # Next.js Application
+  synthara-app:
+    build: .
+    ports:
+      - "3000:3000"  # Next.js app port
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - GOOGLE_GEMINI_API_KEY=${GOOGLE_GEMINI_API_KEY}
+      - SERPAPI_KEY=${SERPAPI_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CRAWL4AI_SERVICE_URL=http://crawl4ai:8000
+      - NEXT_PUBLIC_APP_URL=http://localhost:3000
+    depends_on:
+      - crawl4ai
+    networks:
+      - synthara-network
+
+  # Crawl4AI Service
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    ports:
+      - "8000:8000"    # Main Crawl4AI service port
+      - "11234:11234"  # MCP server port
+      - "11235:11235"  # Additional service port
+    environment:
+      - PORT=8000
+    networks:
+      - synthara-network
+    restart: unless-stopped
+
+networks:
+  synthara-network:
+    driver: bridge
