@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme-provider';
+import { ErrorHandler } from '@/components/error-handler';
 import { Inter, Space_Grotesk } from 'next/font/google'; // Import GoogleFont objects
 
 // Configure Inter font with fallback handling
@@ -45,6 +46,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <ErrorHandler />
           {children}
           <Toaster />
         </ThemeProvider>

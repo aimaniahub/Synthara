@@ -193,9 +193,26 @@ export const CHART_COLORS = {
   info: 'var(--chart-3)', // cyan
 } as const;
 
+// Professional color palettes for charts
+export const PROFESSIONAL_PALETTES = {
+  blueberryTwilight: [
+    '#2e4f8a', '#4169b5', '#5983d0', '#7a9de8', '#9bb5f0',
+    '#b8c8f8', '#d5d9ff', '#f0f2ff', '#ff6b6b', '#4ecdc4',
+    '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff'
+  ],
+  category10: [
+    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+    '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+  ],
+  modern: [
+    '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981',
+    '#06b6d4', '#3b82f6', '#ef4444', '#f97316', '#84cc16'
+  ]
+} as const;
+
 // Helper function to get chart color by index
-export const getChartColor = (index: number): string => {
-  const colors = Object.values(CHART_COLORS);
+export const getChartColor = (index: number, palette: keyof typeof PROFESSIONAL_PALETTES = 'blueberryTwilight'): string => {
+  const colors = PROFESSIONAL_PALETTES[palette];
   return colors[index % colors.length];
 };
 

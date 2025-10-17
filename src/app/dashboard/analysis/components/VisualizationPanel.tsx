@@ -15,10 +15,14 @@ import {
   Filter,
   Grid3X3,
   LayoutDashboard,
-  BookOpen
+  BookOpen,
+  Star,
+  Zap,
+  Target
 } from 'lucide-react';
 import { type DatasetProfile } from '@/services/analysis-service';
 import { visualizationOrchestrator, type ChartRenderData } from '@/lib/visualization-orchestrator';
+import { CHART_SPACING } from '@/lib/chart-gradients';
 import {
   BarChart,
   PieChart,
@@ -87,8 +91,31 @@ export function VisualizationPanel({ data, profile, className, userQuery }: Visu
     filter === 'all' || chart.insightType === filter
   );
 
-  // Group charts by insight type for better organization
-  const groupedCharts = filteredCharts.reduce((groups, chart) => {
+  // Sort charts by confidence and priority for hero chart selection
+  const sortedCharts = filteredCharts.sort((a, b) => {
+    // Primary sort by confidence
+    if (b.confidence !== a.confidence) {
+      return b.confidence - a.confidence;
+    }
+    // Secondary sort by insight type priority
+    const typePriority = {
+      'trend': 5,
+      'correlation': 4,
+      'distribution': 3,
+      'anomaly': 2,
+      'comparison': 1,
+      'pattern': 0
+    };
+    return (typePriority[b.insightType as keyof typeof typePriority] || 0) - 
+           (typePriority[a.insightType as keyof typeof typePriority] || 0);
+  });
+
+  // Select hero chart (most important)
+  const heroChart = sortedCharts.length > 0 ? sortedCharts[0] : null;
+  const supportingCharts = sortedCharts.slice(1);
+
+  // Group supporting charts by insight type for better organization
+  const groupedCharts = supportingCharts.reduce((groups, chart) => {
     const type = chart.insightType;
     if (!groups[type]) groups[type] = [];
     groups[type].push(chart);
@@ -96,10 +123,15 @@ export function VisualizationPanel({ data, profile, className, userQuery }: Visu
   }, {} as Record<string, ChartRenderData[]>);
 
   // Render chart component based on type
-  const renderChart = (chart: ChartRenderData) => {
+  const renderChart = (chart: ChartRenderData, isHero: boolean = false) => {
     const commonProps = {
       data: chart.data,
-      config: chart.config,
+      config: {
+        ...chart.config,
+        height: isHero ? CHART_SPACING.heights.hero : CHART_SPACING.heights.standard,
+        title: chart.config.title || `${chart.insightType.charAt(0).toUpperCase() + chart.insightType.slice(1)} Analysis`,
+        description: chart.config.description || `AI-generated ${chart.insightType} visualization`,
+      },
       className: "w-full h-full",
       insights: chart.insights,
       confidence: chart.confidence,
@@ -276,36 +308,71 @@ export function VisualizationPanel({ data, profile, className, userQuery }: Visu
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          {/* Grouped charts by insight type */}
-          {Object.entries(groupedCharts).map(([insightType, charts]) => (
-            <div key={insightType} className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Badge variant="outline" className="capitalize">
-                  {insightType} Insights
+        <CardContent className="space-y-8">
+          {/* Hero Chart Section */}
+          {heroChart && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Star className="h-5 w-5 text-yellow-500" />
+                  <h3 className="text-lg font-semibold">Key Insight</h3>
+                </div>
+                <Badge variant="outline" className="capitalize bg-yellow-50 text-yellow-700 border-yellow-200">
+                  {heroChart.insightType} Analysis
                 </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {charts.length} visualization{charts.length !== 1 ? 's' : ''}
-                </span>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  {Math.round(heroChart.confidence * 100)}% Confidence
+                </Badge>
               </div>
               
-              <div className={`grid gap-6 ${
-                layout === 'dashboard' ? 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3' :
-                layout === 'story' ? 'grid-cols-1' :
-                'grid-cols-1 lg:grid-cols-2'
-              }`}>
-                {charts.map((chart) => (
-                  <Card key={chart.id} className="overflow-hidden">
-                    <CardContent className="p-0">
-                      <div className="h-80">
-                        {renderChart(chart)}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+              <div className="relative">
+                <div className="absolute top-4 right-4 z-10">
+                  <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Primary Insight</span>
+                  </div>
+                </div>
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-1">
+                  {renderChart(heroChart, true)}
+                </div>
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Supporting Charts Section */}
+          {Object.keys(groupedCharts).length > 0 && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-blue-500" />
+                <h3 className="text-lg font-semibold">Supporting Insights</h3>
+              </div>
+              
+              {Object.entries(groupedCharts).map(([insightType, charts]) => (
+                <div key={insightType} className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="capitalize">
+                      {insightType} Insights
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {charts.length} visualization{charts.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  
+                  <div className={`grid gap-6 ${
+                    layout === 'dashboard' ? 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3' :
+                    layout === 'story' ? 'grid-cols-1' :
+                    'grid-cols-1 lg:grid-cols-2'
+                  }`}>
+                    {charts.map((chart) => (
+                      <div key={chart.id} className="group">
+                        {renderChart(chart)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

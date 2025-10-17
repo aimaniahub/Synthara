@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { Box, Alert, Skeleton, Typography } from '@mui/material';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { AlertCircle, Loader2, Brain, TrendingUp, AlertTriangle, Info } from 'lucide-react';
 import { useMuiTheme } from '@/lib/mui-theme-adapter';
 import { ChartConfig, VisualizationInsight } from '@/types/charts';
+import { CHART_SPACING, HIGHLIGHT_CONFIG } from '@/lib/chart-gradients';
 
 interface ChartWrapperProps {
   children?: React.ReactNode;
@@ -24,7 +25,11 @@ interface ChartWrapperProps {
   aiGenerated?: boolean;
 }
 
-export function ChartWrapper({
+export interface ChartWrapperRef {
+  getElement: () => HTMLElement | null;
+}
+
+export const ChartWrapper = forwardRef<ChartWrapperRef, ChartWrapperProps>(({
   children,
   config = {},
   className = '',
@@ -36,16 +41,22 @@ export function ChartWrapper({
   confidence,
   rationale,
   aiGenerated = false,
-}: ChartWrapperProps) {
+}, ref) => {
   const muiTheme = useMuiTheme();
   const theme = useMemo(() => createTheme(muiTheme), [muiTheme]);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const {
-    height = 300,
+    height = CHART_SPACING.heights.standard,
     width = '100%',
     responsive = true,
-    margin = { top: 20, right: 20, bottom: 20, left: 20 },
+    margin = CHART_SPACING.margins.withAxis,
   } = config;
+
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    getElement: () => wrapperRef.current,
+  }), [loading, error]);
 
   if (loading) {
     return (
@@ -127,20 +138,60 @@ export function ChartWrapper({
 
   return (
     <ThemeProvider theme={theme}>
-      <Box className={`w-full ${className}`}>
+      <Box 
+        ref={wrapperRef}
+        className={`w-full ${className}`}
+        sx={{
+          borderRadius: CHART_SPACING.borderRadius.card,
+          boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+          border: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: 'background.paper',
+          overflow: 'hidden',
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': {
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+            transform: 'translateY(-1px)',
+          }
+        }}
+      >
         {/* Header with AI insights */}
-        <Box className="flex items-start justify-between mb-2">
+        <Box 
+          className="flex items-start justify-between p-4 pb-2"
+          sx={{
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            backgroundColor: 'background.default',
+          }}
+        >
           <Box className="flex-1">
             {title && (
               <Box className="flex items-center gap-2 mb-1">
-                <Typography variant="h6" component="h3">
+                <Typography 
+                  variant="h6" 
+                  component="h3"
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: '1.125rem',
+                    lineHeight: 1.4,
+                  }}
+                >
                   {title}
                 </Typography>
                 {aiGenerated && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Badge variant="outline" className="text-xs">
+                        <Badge 
+                          variant="outline" 
+                          className="text-xs px-2 py-1"
+                          sx={{
+                            backgroundColor: 'primary.main',
+                            color: 'primary.contrastText',
+                            border: 'none',
+                            fontWeight: 500,
+                          }}
+                        >
                           <Brain className="h-3 w-3 mr-1" />
                           AI
                         </Badge>
@@ -154,7 +205,15 @@ export function ChartWrapper({
               </Box>
             )}
             {description && (
-              <Typography variant="body2" color="text.secondary" className="mb-2">
+              <Typography 
+                variant="body2" 
+                color="text.secondary" 
+                className="mb-2"
+                sx={{
+                  fontSize: '0.875rem',
+                  lineHeight: 1.5,
+                }}
+              >
                 {description}
               </Typography>
             )}
@@ -168,7 +227,13 @@ export function ChartWrapper({
                   <TooltipTrigger asChild>
                     <Badge 
                       variant="outline" 
-                      className={`text-xs ${getInsightColor(primaryInsight.severity)}`}
+                      className={`text-xs px-2 py-1 ${getInsightColor(primaryInsight.severity)}`}
+                      sx={{
+                        fontWeight: 500,
+                        border: '1px solid',
+                        borderColor: primaryInsight.severity === 'high' ? 'error.main' : 
+                                   primaryInsight.severity === 'medium' ? 'warning.main' : 'info.main',
+                      }}
                     >
                       {getInsightIcon(primaryInsight.type)}
                       <span className="ml-1">{primaryInsight.message}</span>
@@ -195,7 +260,16 @@ export function ChartWrapper({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge variant="outline" className="text-xs">
+                    <Badge 
+                      variant="outline" 
+                      className="text-xs px-2 py-1"
+                      sx={{
+                        backgroundColor: 'secondary.main',
+                        color: 'secondary.contrastText',
+                        border: 'none',
+                        fontWeight: 500,
+                      }}
+                    >
                       {Math.round(confidence * 100)}%
                     </Badge>
                   </TooltipTrigger>
@@ -236,9 +310,32 @@ export function ChartWrapper({
             height: height,
             margin: `${margin.top}px ${margin.right}px ${margin.bottom}px ${margin.left}px`,
             position: 'relative',
+            padding: '16px',
             '& .MuiCharts-root': {
               width: '100%',
               height: '100%',
+            },
+            '& .MuiChartsAxis-root': {
+              '& .MuiChartsAxis-tick': {
+                fontSize: '0.75rem',
+                fill: 'text.secondary',
+              },
+              '& .MuiChartsAxis-tickLabel': {
+                fontSize: '0.75rem',
+                fill: 'text.secondary',
+              },
+            },
+            '& .MuiChartsLegend-root': {
+              '& .MuiChartsLegend-series': {
+                fontSize: '0.75rem',
+              },
+            },
+            '& .MuiChartsTooltip-root': {
+              backgroundColor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: CHART_SPACING.borderRadius.element,
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
             },
           }}
         >
@@ -247,7 +344,9 @@ export function ChartWrapper({
       </Box>
     </ThemeProvider>
   );
-}
+});
+
+ChartWrapper.displayName = 'ChartWrapper';
 
 // Loading state component
 export function ChartLoading({ height = 300 }: { height?: number }) {

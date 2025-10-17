@@ -1,0 +1,1600 @@
+/**
+ * Professional DOCX Export Service
+ * Generate comprehensive DOCX reports with professional formatting using docx library
+ */
+
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, SectionType } from 'docx';
+import { type DatasetProfile } from '@/services/analysis-service';
+
+export interface DOCXExportOptions {
+  datasetName: string;
+  analysisDate: string;
+  profile: DatasetProfile;
+  insights: {
+    columnInsights: any[];
+    deepInsights: any;
+  };
+  rawData?: Record<string, any>[];
+  exportType?: 'text-only' | 'text-with-tables';
+}
+
+export class DOCXExportService {
+  private colors = {
+    primary: '3B82F6',
+    secondary: 'A855F7',
+    accent: '22C55E',
+    warning: 'F59E0B',
+    error: 'EF4444',
+    text: '1F2937',
+    muted: '6B7280',
+    light: 'F3F4F6',
+    background: 'FFFFFF',
+  };
+
+  /**
+   * Generate comprehensive analysis report as DOCX
+   */
+  async generateReport(options: DOCXExportOptions): Promise<Uint8Array> {
+    try {
+      const { datasetName, analysisDate, profile, insights, rawData = [], exportType = 'text-with-tables' } = options;
+      
+      const doc = new Document({
+        sections: [
+          {
+            properties: {
+              page: {
+                margin: {
+                  top: 1440, // 1 inch
+                  right: 1440,
+                  bottom: 1440,
+                  left: 1440,
+                },
+              },
+            },
+            children: [
+              // Cover Page
+              ...this.getCoverPage(datasetName, analysisDate, profile),
+              
+              // Table of Contents
+              ...this.getTableOfContents(),
+              
+              // Executive Summary
+              ...this.getExecutiveSummary(profile),
+              
+              // Dataset Overview
+              ...this.getDatasetOverview(profile),
+              
+              // Statistical Summary
+              ...this.getStatisticalSummary(profile),
+              
+              // Data Quality Analysis
+              ...this.getDataQualityAnalysis(profile),
+              
+              // Column Analysis
+              ...this.getColumnAnalysis(profile),
+              
+              // Correlation Analysis
+              ...this.getCorrelationAnalysis(profile),
+              
+              // AI Insights
+              ...this.getAIInsights(insights),
+              
+              // Sample Data
+              ...this.getSampleData(rawData, exportType),
+            ],
+          },
+        ],
+      });
+
+      return await Packer.toBuffer(doc);
+    } catch (error) {
+      console.error('DOCX generation error:', error);
+      throw new Error(`Failed to generate DOCX report: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private getCoverPage(datasetName: string, analysisDate: string, profile: DatasetProfile): Paragraph[] {
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'SYNTHARA',
+            bold: true,
+            size: 32,
+            color: this.colors.primary,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 400 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'AI Data Analysis Platform',
+            size: 16,
+            color: this.colors.muted,
+            italics: true,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 600 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Data Analysis Report',
+            bold: true,
+            size: 28,
+            color: this.colors.text,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: datasetName,
+            bold: true,
+            size: 20,
+            color: this.colors.secondary,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 800 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Analysis Date: ',
+            bold: true,
+            size: 12,
+          }),
+          new TextRun({
+            text: analysisDate,
+            size: 12,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Total Rows: ${profile.totalRows.toLocaleString()} | Total Columns: ${profile.totalColumns} | Quality Score: ${profile.overallQuality.toFixed(1)}%`,
+            size: 12,
+            color: this.colors.muted,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 1200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Generated by Synthara AI',
+            size: 10,
+            color: this.colors.muted,
+            italics: true,
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+      }),
+    ];
+  }
+
+  private getTableOfContents(): Paragraph[] {
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Table of Contents',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '1. Executive Summary',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '2. Dataset Overview',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '3. Statistical Summary',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '4. Data Quality Analysis',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '5. Column Analysis',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '6. Correlation Analysis',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '7. AI Insights & Recommendations',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 100 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: '8. Sample Data',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 400 },
+      }),
+    ];
+  }
+
+  private getExecutiveSummary(profile: DatasetProfile): Paragraph[] {
+    const qualityDescription = this.getQualityDescription(profile.overallQuality);
+    
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Executive Summary',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Dataset Overview',
+            bold: true,
+            size: 14,
+            color: this.colors.secondary,
+          }),
+        ],
+        spacing: { before: 200, after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `This comprehensive analysis covers a dataset containing ${profile.totalRows.toLocaleString()} rows and ${profile.totalColumns} columns. The analysis reveals key insights about data quality, patterns, and relationships within the dataset.`,
+            size: 12,
+          }),
+        ],
+        spacing: { after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Data Quality Assessment: `,
+            bold: true,
+            size: 12,
+          }),
+          new TextRun({
+            text: qualityDescription,
+            size: 12,
+            color: this.colors.primary,
+          }),
+        ],
+        spacing: { after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: profile.missingDataPattern.length > 0 
+              ? `${profile.missingDataPattern.length} columns have missing data that may require attention.`
+              : 'No significant missing data issues were detected.',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 200 },
+      }),
+    ];
+  }
+
+  private getDatasetOverview(profile: DatasetProfile): Paragraph[] {
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Dataset Overview',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+      new Table({
+        width: {
+          size: 100,
+          type: WidthType.PERCENTAGE,
+        },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Metric', bold: true, size: 12 })],
+                })],
+                shading: { fill: this.colors.light },
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Value', bold: true, size: 12 })],
+                })],
+                shading: { fill: this.colors.light },
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Description', bold: true, size: 12 })],
+                })],
+                shading: { fill: this.colors.light },
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Total Rows', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: profile.totalRows.toLocaleString(), size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Number of data records', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Total Columns', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: profile.totalColumns.toString(), size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Number of data fields', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Data Quality Score', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: `${profile.overallQuality.toFixed(1)}%`, size: 12, color: this.colors.primary })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Overall data completeness', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Numeric Columns', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: profile.numericColumns.length.toString(), size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Columns with numerical data', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Categorical Columns', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: profile.categoricalColumns.length.toString(), size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Columns with categorical data', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+        ],
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          left: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          right: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+          insideVertical: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+        },
+      }),
+    ];
+  }
+
+  private getStatisticalSummary(profile: DatasetProfile): Paragraph[] {
+    if (!profile.columns || profile.columns.length === 0) {
+      return [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Statistical Summary',
+              bold: true,
+              size: 18,
+              color: this.colors.primary,
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { after: 400 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'No statistical data available.',
+              size: 12,
+            }),
+          ],
+        }),
+      ];
+    }
+
+    const tableRows = [
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: 'Column', bold: true, size: 12 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: 'Type', bold: true, size: 12 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: 'Count', bold: true, size: 12 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: 'Missing %', bold: true, size: 12 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: 'Unique', bold: true, size: 12 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: 'Mean', bold: true, size: 12 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: 'Std Dev', bold: true, size: 12 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+        ],
+      }),
+      ...profile.columns.map((col: any) => new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: col.name, size: 12 })],
+            })],
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: col.type, size: 12 })],
+            })],
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: col.count.toString(), size: 12 })],
+            })],
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ 
+                text: `${col.missingPercentage.toFixed(1)}%`, 
+                size: 12,
+                color: col.missingPercentage > 10 ? this.colors.error : this.colors.text
+              })],
+            })],
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: col.unique.toString(), size: 12 })],
+            })],
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ 
+                text: col.type === 'numeric' && col.mean ? col.mean.toFixed(2) : '-', 
+                size: 12 
+              })],
+            })],
+          }),
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ 
+                text: col.type === 'numeric' && col.std ? col.std.toFixed(2) : '-', 
+                size: 12 
+              })],
+            })],
+          }),
+        ],
+      })),
+    ];
+
+    return [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Statistical Summary',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+      new Table({
+        width: {
+          size: 100,
+          type: WidthType.PERCENTAGE,
+        },
+        rows: tableRows,
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          left: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          right: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+          insideVertical: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+        },
+      }),
+    ];
+  }
+
+  private getDataQualityAnalysis(profile: DatasetProfile): Paragraph[] {
+    const sections = [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Data Quality Analysis',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Overall Quality Assessment: ',
+            bold: true,
+            size: 12,
+          }),
+          new TextRun({
+            text: this.getQualityDescription(profile.overallQuality),
+            size: 12,
+            color: this.colors.primary,
+          }),
+        ],
+        spacing: { after: 200 },
+      }),
+    ];
+
+    if (profile.missingDataPattern.length > 0) {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Missing Data Details',
+              bold: true,
+              size: 14,
+              color: this.colors.secondary,
+            }),
+          ],
+          spacing: { before: 200, after: 200 },
+        })
+      );
+
+      const missingDataRows = [
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Column', bold: true, size: 12 })],
+              })],
+              shading: { fill: this.colors.light },
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Missing Count', bold: true, size: 12 })],
+              })],
+              shading: { fill: this.colors.light },
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Missing %', bold: true, size: 12 })],
+              })],
+              shading: { fill: this.colors.light },
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Severity', bold: true, size: 12 })],
+              })],
+              shading: { fill: this.colors.light },
+            }),
+          ],
+        }),
+        ...profile.missingDataPattern.map((item: any) => new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: item.column, size: 12 })],
+              })],
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: item.missingCount.toString(), size: 12 })],
+              })],
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ 
+                  text: `${item.missingPercentage.toFixed(1)}%`, 
+                  size: 12,
+                  color: item.missingPercentage > 20 ? this.colors.error : this.colors.text
+                })],
+              })],
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ 
+                  text: this.getMissingDataSeverity(item.missingPercentage), 
+                  size: 12,
+                  color: this.getSeverityColor(item.missingPercentage)
+                })],
+              })],
+            }),
+          ],
+        })),
+      ];
+
+      sections.push(
+        new Table({
+          width: {
+            size: 100,
+            type: WidthType.PERCENTAGE,
+          },
+          rows: missingDataRows,
+          borders: {
+            top: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            bottom: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            left: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            right: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+            insideVertical: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+          },
+        })
+      );
+    } else {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: '✓ No missing data detected in any columns',
+              size: 12,
+              color: this.colors.accent,
+            }),
+          ],
+          spacing: { before: 200 },
+        })
+      );
+    }
+
+    return sections;
+  }
+
+  private getColumnAnalysis(profile: DatasetProfile): Paragraph[] {
+    if (!profile.columns || profile.columns.length === 0) {
+      return [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Column Analysis',
+              bold: true,
+              size: 18,
+              color: this.colors.primary,
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { after: 400 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'No column data available.',
+              size: 12,
+            }),
+          ],
+        }),
+      ];
+    }
+
+    const sections = [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Detailed Column Analysis',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+    ];
+
+    profile.columns.forEach((column: any, index: number) => {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `Column: ${column.name} (${column.type})`,
+              bold: true,
+              size: 14,
+              color: this.colors.secondary,
+            }),
+          ],
+          spacing: { before: index > 0 ? 400 : 0, after: 200 },
+        })
+      );
+
+      // Basic stats table
+      const basicStatsRows = [
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Metric', bold: true, size: 12 })],
+              })],
+              shading: { fill: this.colors.light },
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Value', bold: true, size: 12 })],
+              })],
+              shading: { fill: this.colors.light },
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Count', size: 12 })],
+              })],
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: column.count.toString(), size: 12 })],
+              })],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Missing', size: 12 })],
+              })],
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: column.missing.toString(), size: 12 })],
+              })],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Missing %', size: 12 })],
+              })],
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ 
+                  text: `${column.missingPercentage.toFixed(1)}%`, 
+                  size: 12,
+                  color: column.missingPercentage > 10 ? this.colors.error : this.colors.text
+                })],
+              })],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Unique Values', size: 12 })],
+              })],
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: column.unique.toString(), size: 12 })],
+              })],
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ text: 'Completeness', size: 12 })],
+              })],
+            }),
+            new TableCell({
+              children: [new Paragraph({
+                children: [new TextRun({ 
+                  text: `${(100 - column.missingPercentage).toFixed(1)}%`, 
+                  size: 12,
+                  color: this.colors.accent
+                })],
+              })],
+            }),
+          ],
+        }),
+      ];
+
+      sections.push(
+        new Table({
+          width: {
+            size: 50,
+            type: WidthType.PERCENTAGE,
+          },
+          rows: basicStatsRows,
+          borders: {
+            top: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            bottom: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            left: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            right: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+            insideVertical: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+          },
+        })
+      );
+
+      // Numeric stats if applicable
+      if (column.type === 'numeric' && column.mean !== undefined) {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'Statistical Measures',
+                bold: true,
+                size: 12,
+                color: this.colors.secondary,
+              }),
+            ],
+            spacing: { before: 200, after: 100 },
+          })
+        );
+
+        const numericStatsRows = [
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Statistical Measure', bold: true, size: 12 })],
+                })],
+                shading: { fill: this.colors.light },
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Value', bold: true, size: 12 })],
+                })],
+                shading: { fill: this.colors.light },
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Mean', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: column.mean.toFixed(2), size: 12 })],
+                })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Median', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: column.median?.toFixed(2) || 'N/A', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Standard Deviation', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: column.std?.toFixed(2) || 'N/A', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Minimum', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: column.min?.toFixed(2) || 'N/A', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Maximum', size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: column.max?.toFixed(2) || 'N/A', size: 12 })],
+                })],
+              }),
+            ],
+          }),
+        ];
+
+        sections.push(
+          new Table({
+            width: {
+              size: 50,
+              type: WidthType.PERCENTAGE,
+            },
+            rows: numericStatsRows,
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+              left: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+              right: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+            },
+          })
+        );
+      }
+
+      // Categorical stats if applicable
+      if (column.type === 'categorical' && column.topValues && column.topValues.length > 0) {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'Top Values',
+                bold: true,
+                size: 12,
+                color: this.colors.secondary,
+              }),
+            ],
+            spacing: { before: 200, after: 100 },
+          })
+        );
+
+        const categoricalRows = [
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Value', bold: true, size: 12 })],
+                })],
+                shading: { fill: this.colors.light },
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Count', bold: true, size: 12 })],
+                })],
+                shading: { fill: this.colors.light },
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: 'Percentage', bold: true, size: 12 })],
+                })],
+                shading: { fill: this.colors.light },
+              }),
+            ],
+          }),
+          ...column.topValues.slice(0, 10).map((item: any) => new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: item.value.toString(), size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: item.count.toString(), size: 12 })],
+                })],
+              }),
+              new TableCell({
+                children: [new Paragraph({
+                  children: [new TextRun({ text: `${item.percentage.toFixed(1)}%`, size: 12 })],
+                })],
+              }),
+            ],
+          })),
+        ];
+
+        sections.push(
+          new Table({
+            width: {
+              size: 60,
+              type: WidthType.PERCENTAGE,
+            },
+            rows: categoricalRows,
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+              left: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+              right: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+            },
+          })
+        );
+      }
+    });
+
+    return sections;
+  }
+
+  private getCorrelationAnalysis(profile: DatasetProfile): Paragraph[] {
+    if (!profile.correlationMatrix || profile.numericColumns.length < 2) {
+      return [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Correlation Analysis',
+              bold: true,
+              size: 18,
+              color: this.colors.primary,
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { after: 400 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'No correlation analysis available (insufficient numeric columns)',
+              size: 12,
+            }),
+          ],
+        }),
+      ];
+    }
+
+    const correlations = this.findSignificantCorrelations(profile.correlationMatrix, profile.numericColumns);
+    
+    const sections = [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Correlation Analysis',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Correlation matrix for numeric variables:',
+            size: 12,
+          }),
+        ],
+        spacing: { after: 200 },
+      }),
+    ];
+
+    // Create correlation matrix table
+    const correlationRows = [
+      new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: '', size: 12 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+          ...profile.numericColumns.map(col => new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: col, bold: true, size: 10 })],
+            })],
+            shading: { fill: this.colors.light },
+          })),
+        ],
+      }),
+      ...profile.correlationMatrix.map((row: number[], i: number) => new TableRow({
+        children: [
+          new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: profile.numericColumns[i], bold: true, size: 10 })],
+            })],
+            shading: { fill: this.colors.light },
+          }),
+          ...row.map(corr => new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ 
+                text: corr.toFixed(3), 
+                size: 10,
+                color: Math.abs(corr) > 0.7 ? this.colors.primary : this.colors.text
+              })],
+            })],
+          })),
+        ],
+      })),
+    ];
+
+    sections.push(
+      new Table({
+        width: {
+          size: 100,
+          type: WidthType.PERCENTAGE,
+        },
+        rows: correlationRows,
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          left: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          right: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+          insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+          insideVertical: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+        },
+      })
+    );
+
+    if (correlations.length > 0) {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Key Correlations:',
+              bold: true,
+              size: 14,
+              color: this.colors.secondary,
+            }),
+          ],
+          spacing: { before: 400, after: 200 },
+        })
+      );
+
+      correlations.forEach(corr => {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `• ${corr.col1} ↔ ${corr.col2}: ${corr.strength} (${corr.value.toFixed(3)})`,
+                size: 12,
+              }),
+            ],
+            spacing: { after: 100 },
+          })
+        );
+      });
+    }
+
+    return sections;
+  }
+
+  private getAIInsights(insights: any): Paragraph[] {
+    const sections = [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'AI Insights & Analysis',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+    ];
+
+    if (insights.columnInsights && insights.columnInsights.length > 0) {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Column Insights',
+              bold: true,
+              size: 14,
+              color: this.colors.secondary,
+            }),
+          ],
+          spacing: { before: 200, after: 200 },
+        })
+      );
+
+      insights.columnInsights.forEach((insight: any) => {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `• ${insight.column} (${insight.quality}% quality): ${insight.semanticMeaning}`,
+                size: 12,
+              }),
+            ],
+            spacing: { after: 100 },
+          })
+        );
+      });
+    }
+
+    if (insights.deepInsights?.patterns && insights.deepInsights.patterns.length > 0) {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Patterns & Trends',
+              bold: true,
+              size: 14,
+              color: this.colors.secondary,
+            }),
+          ],
+          spacing: { before: 400, after: 200 },
+        })
+      );
+
+      insights.deepInsights.patterns.forEach((pattern: string) => {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `• ${pattern}`,
+                size: 12,
+              }),
+            ],
+            spacing: { after: 100 },
+          })
+        );
+      });
+    }
+
+    if (insights.deepInsights?.anomalies && insights.deepInsights.anomalies.length > 0) {
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Anomalies & Outliers',
+              bold: true,
+              size: 14,
+              color: this.colors.secondary,
+            }),
+          ],
+          spacing: { before: 400, after: 200 },
+        })
+      );
+
+      insights.deepInsights.anomalies.forEach((anomaly: string) => {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `• ${anomaly}`,
+                size: 12,
+              }),
+            ],
+            spacing: { after: 100 },
+          })
+        );
+      });
+    }
+
+    return sections;
+  }
+
+  private getSampleData(rawData: Record<string, any>[], exportType: string): Paragraph[] {
+    if (rawData.length === 0) {
+      return [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'Sample Data',
+              bold: true,
+              size: 18,
+              color: this.colors.primary,
+            }),
+          ],
+          heading: HeadingLevel.HEADING_1,
+          spacing: { after: 400 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: 'No sample data available.',
+              size: 12,
+            }),
+          ],
+        }),
+      ];
+    }
+
+    const headers = Object.keys(rawData[0]);
+    const sampleData = rawData.slice(0, 20).map(row => 
+      headers.map(header => {
+        const value = row[header];
+        if (value === null || value === undefined) return 'N/A';
+        if (typeof value === 'string' && value.length > 20) return value.substring(0, 17) + '...';
+        return value.toString();
+      })
+    );
+
+    const sections = [
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Sample Data',
+            bold: true,
+            size: 18,
+            color: this.colors.primary,
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 400 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Showing first ${Math.min(20, rawData.length)} rows of the dataset:`,
+            size: 12,
+          }),
+        ],
+        spacing: { after: 200 },
+      }),
+    ];
+
+    if (exportType === 'text-with-tables') {
+      const sampleDataRows = [
+        new TableRow({
+          children: headers.map(header => new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: header, bold: true, size: 10 })],
+            })],
+            shading: { fill: this.colors.light },
+          })),
+        }),
+        ...sampleData.map(row => new TableRow({
+          children: row.map(cell => new TableCell({
+            children: [new Paragraph({
+              children: [new TextRun({ text: cell, size: 10 })],
+            })],
+          })),
+        })),
+      ];
+
+      sections.push(
+        new Table({
+          width: {
+            size: 100,
+            type: WidthType.PERCENTAGE,
+          },
+          rows: sampleDataRows,
+          borders: {
+            top: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            bottom: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            left: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            right: { style: BorderStyle.SINGLE, size: 1, color: this.colors.muted },
+            insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+            insideVertical: { style: BorderStyle.SINGLE, size: 1, color: this.colors.light },
+          },
+        })
+      );
+    } else {
+      // Text-only format
+      sampleData.forEach((row, index) => {
+        sections.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Row ${index + 1}: `,
+                bold: true,
+                size: 12,
+              }),
+              new TextRun({
+                text: row.join(' | '),
+                size: 12,
+              }),
+            ],
+            spacing: { after: 100 },
+          })
+        );
+      });
+    }
+
+    return sections;
+  }
+
+  // Helper methods
+  private getQualityDescription(quality: number): string {
+    if (quality >= 95) return 'Excellent data quality';
+    if (quality >= 85) return 'Good data quality with minor issues';
+    if (quality >= 70) return 'Fair data quality requiring attention';
+    if (quality >= 50) return 'Poor data quality needing significant cleaning';
+    return 'Very poor data quality requiring major data cleaning';
+  }
+
+  private getMissingDataSeverity(percentage: number): string {
+    if (percentage === 0) return 'None';
+    if (percentage < 5) return 'Low';
+    if (percentage < 20) return 'Medium';
+    if (percentage < 50) return 'High';
+    return 'Critical';
+  }
+
+  private getSeverityColor(percentage: number): string {
+    if (percentage === 0) return this.colors.accent;
+    if (percentage < 5) return this.colors.text;
+    if (percentage < 20) return this.colors.warning;
+    if (percentage < 50) return this.colors.error;
+    return this.colors.error;
+  }
+
+  private findSignificantCorrelations(matrix: number[][], columns: string[]): Array<{col1: string, col2: string, value: number, strength: string}> {
+    const correlations = [];
+    
+    for (let i = 0; i < matrix.length; i++) {
+      for (let j = i + 1; j < matrix[i].length; j++) {
+        const value = Math.abs(matrix[i][j]);
+        if (value > 0.5) {
+          let strength = 'Weak';
+          if (value > 0.8) strength = 'Very Strong';
+          else if (value > 0.7) strength = 'Strong';
+          else if (value > 0.6) strength = 'Moderate';
+          
+          correlations.push({
+            col1: columns[i],
+            col2: columns[j],
+            value: matrix[i][j],
+            strength
+          });
+        }
+      }
+    }
+    
+    return correlations.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  }
+}
+
+// Export singleton instance
+let docxExportService: DOCXExportService | null = null;
+
+export const getDOCXExportService = () => {
+  if (!docxExportService) {
+    docxExportService = new DOCXExportService();
+  }
+  
+  return docxExportService;
+};
