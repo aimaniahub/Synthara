@@ -1,11 +1,13 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+
 import { 
   BarChart3, 
   Database, 
@@ -16,7 +18,11 @@ import {
 } from 'lucide-react';
 import { DatasetSelector } from './components/DatasetSelector';
 import { StatisticalSummary } from './components/StatisticalSummary';
-import { VisualizationPanel } from './components/VisualizationPanel';
+const VisualizationPanel = dynamic(() => import('./components/VisualizationPanel').then(m => m.VisualizationPanel), {
+  ssr: false,
+  loading: () => <Skeleton className="h-64 w-full" />,
+});
+
 import { AIInsights } from './components/AIInsights';
 import { ExportButton } from './components/ExportButton';
 import { type AnalysisResult, type AnalysisProgress } from '@/services/analysis-service';
@@ -74,13 +80,17 @@ export default function DataAnalysisPage() {
       }
 
       // Use server-side API for analysis
+      // Limit rows sent to server to prevent oversized request bodies while preserving representative sample
+      const MAX_ANALYSIS_ROWS = 1000;
+      const analysisRows = selectedData.slice(0, Math.min(MAX_ANALYSIS_ROWS, selectedData.length));
+
       const response = await fetch('/api/analyze-dataset', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          data: selectedData,
+          data: analysisRows,
         }),
       });
 

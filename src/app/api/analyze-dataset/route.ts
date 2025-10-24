@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
 import { analysisService } from '@/services/analysis-service';
 import { geminiService } from '@/services/gemini-service';
 

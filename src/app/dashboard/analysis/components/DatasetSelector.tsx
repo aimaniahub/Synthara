@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Papa from 'papaparse';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,32 +27,20 @@ interface DatasetSelectorProps {
   onAnalysisStart: () => void;
 }
 
-// Simple CSV parser for client-side use
 const parseCSV = (csvText: string): Record<string, any>[] => {
-  const lines = csvText.trim().split('\n');
-  if (lines.length < 2) return [];
-  
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-  const data: Record<string, any>[] = [];
-  
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-    if (values.length === headers.length) {
-      const row: Record<string, any> = {};
-      headers.forEach((header, index) => {
-        const value = values[index];
-        // Try to convert to number if possible
-        if (value && !isNaN(Number(value)) && value !== '') {
-          row[header] = Number(value);
-        } else {
-          row[header] = value === '' ? null : value;
-        }
-      });
-      data.push(row);
+  const result = Papa.parse(csvText, {
+    header: true,
+    dynamicTyping: true,
+    skipEmptyLines: 'greedy',
+  });
+  const rows = Array.isArray(result.data) ? (result.data as Record<string, any>[]) : [];
+  // Normalize empty strings to null for consistency with previous behavior
+  for (const row of rows) {
+    for (const key in row) {
+      if (row[key] === '') row[key] = null;
     }
   }
-  
-  return data;
+  return rows;
 };
 
 export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSelectorProps) {

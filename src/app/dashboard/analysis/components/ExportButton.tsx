@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Download, Loader2, FileText } from 'lucide-react';
-import { getDOCXExportService } from '@/services/docx-export-service';
 import { type DatasetProfile } from '@/services/analysis-service';
 
 interface ExportButtonProps {
@@ -56,24 +55,29 @@ export function ExportButton({
 
       setProgress(20);
 
-      // Generate DOCX
-      const docxService = getDOCXExportService();
-      const docxBuffer = await docxService.generateReport({
-        datasetName,
-        analysisDate,
-        profile,
-        insights,
-        rawData,
-        exportType
-      }).catch((error) => {
-        console.error('DOCX generation failed:', error);
-        throw new Error(`Failed to generate DOCX report: ${error.message || 'Unknown error'}`);
+      // Generate DOCX on the server
+      const response = await fetch('/api/export-docx', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          datasetName,
+          profile,
+          insights,
+          rawData,
+          exportType,
+        }),
       });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err?.error || 'Failed to generate DOCX');
+      }
 
       setProgress(80);
 
       // Create download link
-      const blob = new Blob([docxBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;

@@ -25,11 +25,18 @@ const nextConfig: NextConfig = {
 
   // Experimental features optimized for Vercel
   experimental: {
-    optimizePackageImports: ['lucide-react'],
+    optimizePackageImports: [
+      'lucide-react',
+      '@mui/material',
+      '@mui/system',
+      '@mui/x-charts',
+      'date-fns',
+      'react-hook-form',
+    ],
   },
 
   // Server external packages for Vercel
-  serverExternalPackages: ['openai', 'puppeteer'],
+  serverExternalPackages: ['openai'],
 
   // Ensure App Router is used exclusively
   pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
@@ -49,41 +56,10 @@ const nextConfig: NextConfig = {
 
   // Webpack optimizations
   webpack: (config, { isServer, webpack }) => {
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        fs: false,
-        net: false,
-        tls: false,
-        crypto: false,
-        stream: false,
-        util: false,
-        buffer: false,
-        process: false,
-      };
-    }
-
     // Fix for Supabase module resolution
     config.resolve.alias = {
       ...config.resolve.alias,
       '@supabase/supabase-js': '@supabase/supabase-js',
-    };
-
-    // Ensure proper module resolution for vendor chunks
-    config.optimization = {
-      ...config.optimization,
-      splitChunks: {
-        ...config.optimization.splitChunks,
-        cacheGroups: {
-          ...config.optimization.splitChunks?.cacheGroups,
-          supabase: {
-            test: /[\\/]node_modules[\\/]@supabase[\\/]/,
-            name: 'supabase',
-            chunks: 'all',
-            priority: 20,
-          },
-        },
-      },
     };
 
     // Ignore warnings from dependencies

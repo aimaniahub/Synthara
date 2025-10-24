@@ -1,9 +1,4 @@
 
-"use client"; // Needs to be client for Supabase auth check
-
-// Force dynamic rendering to prevent build-time errors
-export const dynamic = 'force-dynamic'
-
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,9 +6,7 @@ import { CheckCircle, Users, Code, Activity, School, Database, BarChart3, Zap, S
 
 import { SyntharaLogo } from '@/components/icons/SyntharaLogo';
 import { Footer } from '@/components/layout/Footer';
-import React, { useEffect, useState } from 'react';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 const features = [
   { name: 'Intelligent Data Generation', icon: Database, description: 'Create realistic synthetic datasets tailored to your needs using advanced AI models.' },
@@ -46,46 +39,9 @@ const teamMembers = [
 ];
 
 
-export default function HomePage() {
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Only initialize Supabase client on the client side
-    const supabase = createSupabaseBrowserClient();
-
-    // If Supabase client is not available (e.g., during build), skip auth
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-
-    async function getUser() {
-      try {
-        if (supabase) {
-          const { data: { user } } = await supabase.auth.getUser();
-          setUser(user);
-        }
-      } catch (error) {
-        console.warn('[HomePage] Auth check failed:', error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    getUser();
-
-    const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        setLoading(false);
-      }
-    }) || { data: { subscription: { unsubscribe: () => {} } } };
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
+export default async function HomePage() {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 relative overflow-hidden">
@@ -135,9 +91,7 @@ export default function HomePage() {
               <Link href="/help">Get Demo</Link>
             </Button>
 
-            {loading ? (
-                <Button disabled className="bg-emerald-500 hover:bg-emerald-600 text-white">Loading...</Button>
-            ) : user ? (
+            {user ? (
                 <Button asChild className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg">
                     <Link href="/dashboard">Go to Dashboard</Link>
                 </Button>
@@ -147,7 +101,7 @@ export default function HomePage() {
                 </Button>
             )}
 
-            {!loading && !user && (
+            {!user && (
               <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
                 <Link href="/auth">Sign In</Link>
               </Button>
@@ -156,9 +110,7 @@ export default function HomePage() {
 
           {/* Mobile Navigation */}
           <div className="flex md:hidden items-center space-x-2">
-            {loading ? (
-                <Button size="sm" disabled className="bg-emerald-500 text-white">Loading...</Button>
-            ) : user ? (
+            {user ? (
                 <Button size="sm" asChild className="bg-emerald-500 hover:bg-emerald-600 text-white">
                     <Link href="/dashboard">Dashboard</Link>
                 </Button>
@@ -344,11 +296,7 @@ export default function HomePage() {
               Join thousands of innovators building the future with Synthara AI. Get started today and experience the next generation of synthetic data.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              {loading ? (
-                <Button size="lg" disabled className="bg-white text-emerald-600 hover:bg-white/90 shadow-xl px-8 py-4 text-lg font-semibold">
-                  Loading...
-                </Button>
-              ) : user ? (
+              {user ? (
                 <Button size="lg" asChild className="bg-white text-emerald-600 hover:bg-white/90 shadow-xl px-8 py-4 text-lg font-semibold">
                   <Link href="/dashboard">Access Your Dashboard</Link>
                 </Button>

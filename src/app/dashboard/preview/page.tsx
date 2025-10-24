@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useState, useTransition, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -13,9 +14,8 @@ import Link from 'next/link';
 import { getUserDatasets, type SavedDataset, getDatasetById } from '@/lib/supabase/actions';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-
-// MUI X Charts components
-import { BarChart, PieChart, type BarChartData, type PieChartData } from '@/components/charts';
+const BarChart = dynamic(() => import('@/components/charts/BarChart').then(m => m.BarChart), { ssr: false });
+const PieChart = dynamic(() => import('@/components/charts/PieChart').then(m => m.PieChart), { ssr: false });
 
 
 function DataPreviewContent() {

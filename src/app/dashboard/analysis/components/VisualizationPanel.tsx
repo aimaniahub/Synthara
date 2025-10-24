@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -23,21 +24,18 @@ import {
 import { type DatasetProfile } from '@/services/analysis-service';
 import { visualizationOrchestrator, type ChartRenderData } from '@/lib/visualization-orchestrator';
 import { CHART_SPACING } from '@/lib/chart-gradients';
-import {
-  BarChart,
-  PieChart,
-  HistogramChart,
-  BoxPlotChart,
-  MissingDataChart,
-  AreaChart,
-  TimeSeriesChart,
-  HeatmapChart,
-  ScatterPlotAdvanced,
-  StackedBarChart,
-  RadarChart,
-  TreemapChart,
-  type ChartConfig,
-} from '@/components/charts';
+const BarChart = dynamic(() => import('@/components/charts/BarChart').then(m => m.BarChart), { ssr: false });
+const PieChart = dynamic(() => import('@/components/charts/PieChart').then(m => m.PieChart), { ssr: false });
+const HistogramChart = dynamic(() => import('@/components/charts/HistogramChart').then(m => m.HistogramChart), { ssr: false });
+const BoxPlotChart = dynamic(() => import('@/components/charts/BoxPlotChart').then(m => m.BoxPlotChart), { ssr: false });
+const MissingDataChart = dynamic(() => import('@/components/charts/MissingDataChart').then(m => m.MissingDataChart), { ssr: false });
+const AreaChart = dynamic(() => import('@/components/charts/AreaChart').then(m => m.AreaChart), { ssr: false });
+const TimeSeriesChart = dynamic(() => import('@/components/charts/TimeSeriesChart').then(m => m.TimeSeriesChart), { ssr: false });
+const HeatmapChart = dynamic(() => import('@/components/charts/HeatmapChart').then(m => m.HeatmapChart), { ssr: false });
+const ScatterPlotAdvanced = dynamic(() => import('@/components/charts/ScatterPlotAdvanced').then(m => m.ScatterPlotAdvanced), { ssr: false });
+const StackedBarChart = dynamic(() => import('@/components/charts/StackedBarChart').then(m => m.StackedBarChart), { ssr: false });
+const RadarChart = dynamic(() => import('@/components/charts/RadarChart').then(m => m.RadarChart), { ssr: false });
+const TreemapChart = dynamic(() => import('@/components/charts/TreemapChart').then(m => m.TreemapChart), { ssr: false });
 
 interface VisualizationPanelProps {
   data: Record<string, any>[];

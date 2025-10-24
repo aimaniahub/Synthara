@@ -55,11 +55,13 @@ export default async function DashboardPage() {
 
   if (user) {
     try {
-      console.log('Fetching data for user:', user.id);
-      recentActivities = await getUserActivities(5);
-      datasets = await getUserDatasets();
+      const [activities, ds] = await Promise.all([
+        getUserActivities(5),
+        getUserDatasets(),
+      ]);
+      recentActivities = activities;
+      datasets = ds;
       lastSavedDataset = datasets.length > 0 ? datasets[0] : null;
-      console.log('Fetched data:', { activities: recentActivities.length, datasets: datasets.length });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       // Continue with empty arrays to prevent page crash

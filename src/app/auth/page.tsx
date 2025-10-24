@@ -2,11 +2,15 @@ import { AuthForm } from '@/components/auth/AuthForm';
 import { SyntharaLogo } from '@/components/icons/SyntharaLogo';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
-// Force dynamic rendering to prevent build-time errors
-export const dynamic = 'force-dynamic'
-
-export default function AuthPage() {
+export default async function AuthPage() {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    redirect('/dashboard');
+  }
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-purple relative overflow-hidden p-3 sm:p-4 lg:p-6">
       {/* Background geometric patterns */}
