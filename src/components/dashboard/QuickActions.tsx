@@ -1,4 +1,4 @@
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, LucideIcon } from "lucide-react";
 import Link from 'next/link';
@@ -16,54 +16,42 @@ interface QuickActionsProps {
   actions: QuickAction[];
 }
 
+// Colors are ignored for minimalist monochrome UI
 const colorClasses = {
-  blue: {
-    iconBg: 'bg-blue-100 dark:bg-blue-900/30 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50',
-    iconColor: 'text-blue-600 dark:text-blue-400',
-    button: 'bg-blue-600 hover:bg-blue-700',
-  },
-  emerald: {
-    iconBg: 'bg-emerald-100 dark:bg-emerald-900/30 group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900/50',
-    iconColor: 'text-emerald-600 dark:text-emerald-400',
-    button: 'bg-emerald-600 hover:bg-emerald-700',
-  },
-  purple: {
-    iconBg: 'bg-purple-100 dark:bg-purple-900/30 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50',
-    iconColor: 'text-purple-600 dark:text-purple-400',
-    button: 'bg-purple-600 hover:bg-purple-700',
-  },
-  orange: {
-    iconBg: 'bg-orange-100 dark:bg-orange-900/30 group-hover:bg-orange-200 dark:group-hover:bg-orange-900/50',
-    iconColor: 'text-orange-600 dark:text-orange-400',
-    button: 'bg-orange-600 hover:bg-orange-700',
-  },
+  blue: { iconBg: 'bg-muted', iconColor: 'text-foreground', button: '' },
+  emerald: { iconBg: 'bg-muted', iconColor: 'text-foreground', button: '' },
+  purple: { iconBg: 'bg-muted', iconColor: 'text-foreground', button: '' },
+  orange: { iconBg: 'bg-muted', iconColor: 'text-foreground', button: '' },
 };
 
 export function QuickActions({ actions }: QuickActionsProps) {
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-headline font-bold text-slate-900 dark:text-slate-100">Quick Actions</h2>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-foreground">Quick Actions</h2>
+        <p className="text-sm text-muted-foreground">Common tasks</p>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {actions.map((action) => {
           const colors = colorClasses[action.color || 'blue'];
           
           return (
-            <Card key={action.title} className="modern-card hover:shadow-xl transition-all duration-300 group cursor-pointer">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className={`p-3 rounded-xl ${colors.iconBg} transition-colors`}>
-                    <action.Icon className={`h-7 w-7 ${colors.iconColor}`} />
+            <Card key={action.title} className="border rounded-lg bg-background">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className={`p-2 rounded-md ${colors.iconBg}`}>
+                    <action.Icon className={`h-6 w-6 ${colors.iconColor}`} />
                   </div>
                 </div>
-                <CardTitle className="text-slate-900 dark:text-slate-100 text-lg font-semibold">
+                <CardTitle className="text-foreground text-base font-semibold">
                   {action.title}
                 </CardTitle>
-                <CardDescription className="text-slate-600 dark:text-slate-400">
+                <CardDescription className="text-muted-foreground text-sm">
                   {action.description}
                 </CardDescription>
               </CardHeader>
               <CardFooter className="pt-0">
-                <Button asChild className={`w-full ${colors.button} text-white group-hover:shadow-lg transition-all`}>
+                <Button asChild variant="outline" className="w-full">
                   <Link href={action.href}>
                     {action.cta} <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>

@@ -132,21 +132,21 @@ function DataPreviewContent() {
     <div className="space-y-8">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div className="space-y-2">
-          <h1 className="text-3xl lg:text-4xl font-headline font-bold text-slate-900 dark:text-slate-100">
+          <h1 className="text-3xl lg:text-4xl font-headline font-bold text-foreground">
             {isLoadingDataset && datasetIdToLoad ? "Loading Dataset..." : loadedDataset ? `Preview: ${loadedDataset.dataset_name}` : "Dataset Preview & Management"}
           </h1>
-          <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl">
+          <p className="text-lg text-muted-foreground max-w-2xl">
             {loadedDataset ? `Generated from: ${loadedDataset.prompt_used.substring(0,120)}${loadedDataset.prompt_used.length > 120 ? '...' : ''}` : "Select a saved dataset to preview its content and statistics."}
           </p>
         </div>
         <div className="flex gap-3 flex-wrap">
-          <Button variant="outline" disabled className="border-slate-300 dark:border-slate-600">
+          <Button variant="outline" disabled>
             <UploadCloud className="mr-2 h-4 w-4" /> Upload (Soon)
           </Button>
           <Button
             disabled={!loadedDataset || !loadedDataset.data_csv || isLoadingDataset}
             onClick={handleDownloadCsv}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            variant="outline"
           >
             <Download className="mr-2 h-4 w-4" /> Download CSV
           </Button>
@@ -154,14 +154,14 @@ function DataPreviewContent() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
-        <Card className="lg:col-span-1 modern-card order-2 lg:order-1">
-            <CardHeader className="border-b border-slate-200 dark:border-slate-700">
-                <CardTitle className="font-headline text-lg sm:text-xl text-slate-900 dark:text-slate-100">Saved Datasets</CardTitle>
-                <CardDescription className="text-slate-600 dark:text-slate-400">Select a dataset to view its details</CardDescription>
+        <Card className="lg:col-span-1 order-2 lg:order-1">
+            <CardHeader className="border-b">
+                <CardTitle className="font-headline text-lg sm:text-xl text-foreground">Saved Datasets</CardTitle>
+                <CardDescription className="text-muted-foreground">Select a dataset to view its details</CardDescription>
             </CardHeader>
             <CardContent>
                 {isLoadingList ? (
-                    <div className="flex justify-center items-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary"/></div>
+                    <div className="flex justify-center items-center py-4"><Loader2 className="h-8 w-8 animate-spin"/></div>
                 ) : savedDatasets.length > 0 ? (
                     <ul className="space-y-2 max-h-96 overflow-y-auto">
                         {savedDatasets.map(ds => (
@@ -169,7 +169,7 @@ function DataPreviewContent() {
                                 <Link href={`/dashboard/preview?datasetId=${ds.id}`}>
                                       <Button 
                                         variant={datasetIdToLoad === ds.id ? "default" : "outline"} 
-                                        className={`w-full justify-start text-left h-auto py-2.5 ${datasetIdToLoad === ds.id ? 'bg-primary text-primary-foreground' : ''}`}
+                                        className={`w-full justify-start text-left h-auto py-2.5`}
                                         disabled={isLoadingDataset && datasetIdToLoad === ds.id}
                                       >
                                         <div className="flex-grow">
@@ -184,7 +184,7 @@ function DataPreviewContent() {
                         ))}
                     </ul>
                 ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">No datasets saved yet. <Link href="/dashboard/generate" className="text-primary hover:underline">Generate one now.</Link></p>
+                    <p className="text-sm text-muted-foreground text-center py-4">No datasets saved yet. <Link href="/dashboard/generate" className="underline">Generate one now.</Link></p>
                 )}
             </CardContent>
         </Card>

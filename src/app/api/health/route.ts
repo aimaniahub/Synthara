@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export async function GET() {
   try {
@@ -14,23 +13,22 @@ export async function GET() {
       }
     };
 
-    // Check Supabase connection
+    // Check Supabase connection with short timeout
     try {
-      const cookieStore = await cookies();
-      const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          cookies: {
-            get(name: string) {
-              return cookieStore.get(name)?.value;
-            },
-          },
-        }
-      );
-      
-      const { error } = await supabase.from('user_activities').select('count').limit(1);
-      health.services.database = error ? 'unhealthy' : 'healthy';
+      const supabase = await createSupabaseServerClient();
+      if (!supabase) {
+        health.services.database = 'not_configured';
+      } else {
+        const withTimeout = async <T,>(p: any, ms: number, fallback: T): Promise<T> =>
+          Promise.race([p as Promise<T>, new Promise<T>((r) => setTimeout(() => r(fallback), ms))]) as Promise<T>;
+
+        const { error } = await withTimeout(
+          supabase.from('user_activities').select('count').limit(1) as any,
+          2000,
+          { error: new Error('timeout') } as any
+        );
+        health.services.database = error ? 'unhealthy' : 'healthy';
+      }
     } catch (error) {
       health.services.database = 'unhealthy';
     }

@@ -67,7 +67,17 @@ export async function middleware(request: NextRequest) {
   )
 
   // Crucial: This call refreshes the session and potentially updates cookies via the `set` handler.
-  const { data: { user } } = await supabase.auth.getUser()
+  async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+    ]) as Promise<T>;
+  }
+  const { data: { user } = { user: null } } = await withTimeout<any>(
+    supabase.auth.getUser(),
+    2000,
+    { data: { user: null } }
+  )
 
   const { pathname } = request.nextUrl
 

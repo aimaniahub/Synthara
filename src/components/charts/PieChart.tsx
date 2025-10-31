@@ -1,11 +1,17 @@
 'use client';
 
-import React, { useState, forwardRef } from 'react';
-import { PieChart as MuiPieChart } from '@mui/x-charts/PieChart';
+import React, { useMemo, forwardRef } from 'react';
+import {
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+} from 'recharts';
 import { ChartWrapper, ChartWrapperRef } from './ChartWrapper';
 import { PieChartProps } from '@/types/charts';
-import { getChartColor } from '@/lib/mui-theme-adapter';
-import { CHART_GRADIENTS, GradientDef, HIGHLIGHT_CONFIG, CHART_SPACING } from '@/lib/chart-gradients';
+import { CHART_SPACING, getPaletteColor } from '@/lib/chart-gradients';
 
 export const PieChart = forwardRef<ChartWrapperRef, PieChartProps>(({
   data,
@@ -14,7 +20,6 @@ export const PieChart = forwardRef<ChartWrapperRef, PieChartProps>(({
   loading = false,
   error = null,
   onDataPointClick,
-  onDataPointHover,
   ...props
 }, ref) => {
   const {
@@ -23,40 +28,17 @@ export const PieChart = forwardRef<ChartWrapperRef, PieChartProps>(({
     colors,
   } = config;
 
-  // State for highlighting
-  const [highlightedItem, setHighlightedItem] = useState<{ seriesId: string; dataIndex: number } | null>(null);
+  const chartData = useMemo(() => {
+    if (!data?.data || data.data.length === 0) return [];
 
-  // Transform data for MUI X Charts with gradients
-  const chartData = React.useMemo(() => {
-    if (!data?.data || data.data.length === 0) return null;
-
-    return data.data.map((item, index) => {
-      const baseColor = item.color || colors?.[index] || getChartColor(index, 'blueberryTwilight');
-      
-      return {
-        id: item.id || index,
-        value: item.value,
-        label: item.label,
-        color: baseColor,
-      };
-    });
+    return data.data.map((item, index) => ({
+      name: item.label,
+      value: item.value,
+      color: item.color || colors?.[index] || getPaletteColor(index, 'blueberryTwilight'),
+    }));
   }, [data, colors]);
 
-  // Generate gradient definitions for pie slices
-  const gradientDefs = React.useMemo(() => {
-    if (!chartData) return null;
-    
-    return (
-      <defs>
-        {chartData.map((item, index) => {
-          const gradient = CHART_GRADIENTS.pieRadial(item.color, 0.8, index);
-          return <GradientDef key={gradient.id} gradient={gradient} />;
-        })}
-      </defs>
-    );
-  }, [chartData]);
-
-  if (!chartData || chartData.length === 0) {
+  if (!chartData.length) {
     return (
       <ChartWrapper
         config={config}
@@ -78,59 +60,48 @@ export const PieChart = forwardRef<ChartWrapperRef, PieChartProps>(({
       error={error}
       title={config.title}
       description={config.description}
-      chartType="pie"
       {...props}
     >
-      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-        {gradientDefs}
-      </svg>
-      <MuiPieChart
-        series={[
-          {
-            data: chartData,
-            innerRadius: data.innerRadius || 0,
-            outerRadius: data.outerRadius || 80,
-            paddingAngle: data.paddingAngle || 2,
-            startAngle: data.startAngle || 0,
-            endAngle: data.endAngle || 360,
-            id: 'pie-series',
-          },
-        ]}
-        height={config.height || CHART_SPACING.heights.standard}
-        tooltip={{ 
-          trigger: showTooltip ? 'item' : 'none',
-          placement: 'top',
-          slotProps: {
-            popper: {
-              sx: {
-                '& .MuiChartsTooltip-root': {
-                  backgroundColor: 'background.paper',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: CHART_SPACING.borderRadius.element,
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                },
-              },
-            },
-          },
-        }}
-        legend={showLegend ? { 
-          hidden: false,
-          direction: 'row',
-          position: { vertical: 'bottom', horizontal: 'middle' },
-          padding: 16,
-        } : { hidden: true }}
-        onItemClick={onDataPointClick}
-        slotProps={{
-          pieArc: {
-            style: {
-              transition: 'all 0.2s ease-in-out',
-              cursor: 'pointer',
-            },
-          },
-        }}
-        colors={colors || undefined}
-      />
+      <ResponsiveContainer width="100%" height={config.height || CHART_SPACING.heights.standard}>
+        <RechartsPieChart margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
+          <Pie
+            data={chartData}
+            cx="50%"
+            cy="50%"
+            innerRadius={data.innerRadius || 0}
+            outerRadius={data.outerRadius || 80}
+            paddingAngle={data.paddingAngle || 2}
+            dataKey="value"
+            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+            labelLine={{stroke: 'hsl(var(--border))'}}
+            isAnimationActive
+            onClick={(payload: unknown) => {
+              if (onDataPointClick) {
+                onDataPointClick(payload);
+              }
+            }}
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color} />
+            ))}
+          </Pie>
+
+          {showTooltip && (
+            <RechartsTooltip
+              contentStyle={{
+                borderRadius: CHART_SPACING.borderRadius.element,
+                border: '1px solid hsl(var(--border))',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                background: 'hsl(var(--card))',
+              }}
+            />
+          )}
+
+          {showLegend && (
+            <RechartsLegend verticalAlign="bottom" height={36} wrapperStyle={{ paddingTop: 16 }} />
+          )}
+        </RechartsPieChart>
+      </ResponsiveContainer>
     </ChartWrapper>
   );
 });

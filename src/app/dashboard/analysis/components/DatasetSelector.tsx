@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import Papa from 'papaparse';
+// Removed eager Papa import to reduce bundle size
+// Papa Parse will be dynamically imported when needed
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,7 +28,10 @@ interface DatasetSelectorProps {
   onAnalysisStart: () => void;
 }
 
-const parseCSV = (csvText: string): Record<string, any>[] => {
+const parseCSV = async (csvText: string): Promise<Record<string, any>[]> => {
+    // Dynamically import Papa Parse only when we actually need to parse
+  const Papa = (await import('papaparse')).default;
+
   const result = Papa.parse(csvText, {
     header: true,
     dynamicTyping: true,
@@ -40,7 +44,7 @@ const parseCSV = (csvText: string): Record<string, any>[] => {
       if (row[key] === '') row[key] = null;
     }
   }
-  return rows;
+    return rows;
 };
 
 export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSelectorProps) {
@@ -95,7 +99,7 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSel
 
     try {
       const text = await file.text();
-      const data = parseCSV(text);
+            const data = await parseCSV(text);
       
       if (data.length === 0) {
         throw new Error('No data found in CSV file');
@@ -140,7 +144,7 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSel
       }
 
       const dataset = await response.json();
-      const csvData = parseCSV(dataset.data_csv);
+            const csvData = await parseCSV(dataset.data_csv);
       
       setParsedData(csvData);
       setPreviewData(csvData.slice(0, 5));

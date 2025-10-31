@@ -25,15 +25,11 @@ interface StatisticalSummaryProps {
 
 export function StatisticalSummary({ profile, className }: StatisticalSummaryProps) {
   const getQualityColor = (quality: number) => {
-    if (quality >= 90) return 'text-green-600';
-    if (quality >= 70) return 'text-yellow-600';
-    return 'text-red-600';
+    return 'text-foreground';
   };
 
   const getQualityBadgeVariant = (quality: number): "default" | "secondary" | "destructive" | "outline" => {
-    if (quality >= 90) return 'default';
-    if (quality >= 70) return 'secondary';
-    return 'destructive';
+    return 'outline';
   };
 
   const getTypeIcon = (type: string) => {
@@ -188,8 +184,8 @@ export function StatisticalSummary({ profile, className }: StatisticalSummaryPro
                     <div>Range: {col.min !== undefined && col.max !== undefined ? `${col.min.toFixed(2)} - ${col.max.toFixed(2)}` : 'N/A'}</div>
                   </div>
                   {col.outliers && col.outliers.length > 0 && (
-                    <div className="text-xs text-orange-600">
-                      ⚠️ {col.outliers.length} outliers detected
+                    <div className="text-xs text-muted-foreground">
+                      {col.outliers.length} outliers detected
                     </div>
                   )}
                 </div>

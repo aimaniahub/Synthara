@@ -13,6 +13,7 @@ export function HeatmapChart({
   error = null,
   onDataPointClick,
   onDataPointHover,
+  ...props
 }: HeatmapProps) {
   const {
     showLegend = true,
@@ -66,6 +67,7 @@ export function HeatmapChart({
         error={error || 'No data available for heatmap'}
         title={config.title}
         description={config.description}
+        {...props}
       />
     );
   }
@@ -80,6 +82,7 @@ export function HeatmapChart({
       error={error}
       title={config.title}
       description={config.description}
+      {...props}
     >
       <div className="w-full h-full p-4">
         <div className="grid gap-1" style={{ 

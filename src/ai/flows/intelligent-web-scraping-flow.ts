@@ -43,6 +43,32 @@ export interface WebScrapingLogger {
 }
 
 /**
+ * Heuristic filter for URLs that are likely not useful or block scraping
+ */
+function isScrapableUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace('www.', '').toLowerCase();
+    const path = u.pathname.toLowerCase();
+
+    // Block Google search and similar SERP pages
+    if (host.includes('google.') && path.startsWith('/search')) return false;
+
+    // Block social platforms which aggressively block scraping
+    const socialHosts = ['facebook.com', 'instagram.com', 'x.com', 'twitter.com', 'linkedin.com'];
+    if (socialHosts.some(h => host.endsWith(h))) return false;
+
+    // Block Wikipedia Main Page (not topical)
+    if (host.endsWith('wikipedia.org') && path === '/wiki/main_page') return false;
+
+    // Otherwise allow
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Main intelligent web scraping flow that orchestrates the entire process
  */
 export async function intelligentWebScraping(
@@ -77,12 +103,32 @@ export async function intelligentWebScraping(
     logger?.success(`Found ${searchResult.urls.length} relevant URLs`);
     logger?.log(`Search queries used: ${searchResult.searchQueries.map(q => q.query).join(', ')}`);
 
+    // Filter out URLs that are known to be hard to scrape or not useful (Google SERP, social, Wikipedia Main Page, etc.)
+    const candidateUrls = searchResult.urls.map(url => url.url);
+    const filteredUrls = candidateUrls.filter(isScrapableUrl);
+    const filteredOut = candidateUrls.length - filteredUrls.length;
+    if (filteredOut > 0) {
+      logger?.log(`Filtered out ${filteredOut} non-scrapable/low-signal URLs`);
+    }
+
+    if (filteredUrls.length === 0) {
+      const errorMsg = 'No scrapable URLs after filtering (Google SERP/Wikipedia Main Page/social links removed)';
+      logger?.error(errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
+        fallbackToAI: true,
+        urls: candidateUrls,
+        searchQueries: searchResult.searchQueries.map(q => q.query),
+      };
+    }
+
     // Step 2: Scrape ALL content from URLs using Crawl4AI (wait for ALL to complete)
     logger?.log('Step 2: Scraping content from web pages...');
     logger?.progress('Web Scraping', 2, 6, 'Extracting content from URLs');
 
     const scrapedContent = await scrapeUrlsWithCrawl4AI(
-      searchResult.urls.map(url => url.url),
+      filteredUrls,
       logger
     );
 
@@ -263,7 +309,12 @@ async function scrapeUrlsWithCrawl4AI(
       logger?.log(`✅ Crawl4AI service is available`);
     } catch (healthError: any) {
       logger?.error(`❌ Crawl4AI service is not available: ${healthError.message}`);
-      logger?.log(`🔄 This will cause all scraping attempts to fail, but the process will continue with AI fallback`);
+      logger?.log(`🔄 Skipping scraping and triggering AI fallback`);
+      return {
+        success: false,
+        content: [],
+        error: `Crawl4AI service unavailable: ${healthError.message}`,
+      };
     }
 
     const scrapedContent: Array<{

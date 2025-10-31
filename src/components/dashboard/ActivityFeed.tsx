@@ -20,27 +20,27 @@ interface ActivityFeedProps {
 const getActivityIcon = (activityType: string) => {
   switch (activityType) {
     case 'DATASET_SAVED':
-      return <Database className="h-4 w-4 text-blue-600 dark:text-blue-400" />;
+      return <Database className="h-4 w-4 text-foreground" />;
     case 'DATA_GENERATION':
-      return <Brain className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
+      return <Brain className="h-4 w-4 text-foreground" />;
     case 'DATA_ANALYSIS_SNIPPET':
-      return <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />;
+      return <FileText className="h-4 w-4 text-foreground" />;
     default:
-      return <Settings className="h-4 w-4 text-slate-600 dark:text-slate-400" />;
+      return <Settings className="h-4 w-4 text-foreground" />;
   }
 };
 
 export function ActivityFeed({ activities, isLoading }: ActivityFeedProps) {
   if (isLoading) {
     return (
-      <Card className="modern-card">
-        <CardHeader className="border-b border-slate-200 dark:border-slate-700">
-          <CardTitle className="text-xl font-semibold text-slate-900 dark:text-slate-100">Recent Activity</CardTitle>
-          <CardDescription className="text-slate-600 dark:text-slate-400">Loading your latest actions...</CardDescription>
+      <Card className="border rounded-lg bg-background">
+        <CardHeader className="border-b">
+          <CardTitle className="text-base font-semibold text-foreground">Recent Activity</CardTitle>
+          <CardDescription className="text-muted-foreground">Loading your latest actions...</CardDescription>
         </CardHeader>
         <CardContent className="p-12">
           <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-muted-foreground"></div>
           </div>
         </CardContent>
       </Card>
@@ -48,25 +48,35 @@ export function ActivityFeed({ activities, isLoading }: ActivityFeedProps) {
   }
 
   return (
-    <Card className="modern-card">
-      <CardHeader className="border-b border-slate-200 dark:border-slate-700">
-        <CardTitle className="text-xl font-semibold text-slate-900 dark:text-slate-100">Recent Activity</CardTitle>
-        <CardDescription className="text-slate-600 dark:text-slate-400">Your latest actions and events</CardDescription>
+    <Card className="border rounded-lg bg-background overflow-hidden">
+      <CardHeader className="border-b">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-md bg-muted">
+            <Clock className="h-5 w-5 text-foreground" />
+          </div>
+          <div>
+            <CardTitle className="text-base font-semibold text-foreground">Recent Activity</CardTitle>
+            <CardDescription className="text-muted-foreground">Your latest actions and events</CardDescription>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         {activities && activities.length > 0 ? (
-          <div className="divide-y divide-slate-200 dark:divide-slate-700">
+          <div className="divide-y">
             {activities.map(activity => (
-              <div key={activity.id} className="p-4 sm:p-6 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+              <div key={activity.id} className="p-4 sm:p-6 hover:bg-muted/40 transition-colors">
                 <div className="flex items-start gap-3 sm:gap-4">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full mt-1 flex-shrink-0">
+                  <div className="p-2.5 bg-muted rounded-md mt-1 flex-shrink-0">
                      {getActivityIcon(activity.activity_type)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 break-words">{activity.description}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}
-                    </p>
+                    <p className="text-sm font-medium text-foreground break-words leading-relaxed">{activity.description}</p>
+                    <div className="flex items-center gap-2 mt-2 text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      <p className="text-xs">
+                        {formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}
+                      </p>
+                    </div>
                     {activity.related_resource_id && activity.activity_type === 'DATASET_SAVED' && (
                       <div className="mt-3 sm:hidden">
                         <Button variant="outline" size="sm" className="w-full" asChild>
@@ -86,13 +96,15 @@ export function ActivityFeed({ activities, isLoading }: ActivityFeedProps) {
           </div>
         ) : (
           <div className="text-center p-12">
-            <Clock className="mx-auto h-12 w-12 mb-4 text-slate-400" />
-            <p className="font-medium text-slate-900 dark:text-slate-100 mb-2">No recent activity</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Start using the platform to see your activity here</p>
+            <div className="p-4 bg-muted rounded-full w-fit mx-auto mb-4">
+              <Clock className="h-12 w-12 text-muted-foreground" />
+            </div>
+            <p className="font-semibold text-foreground mb-2 text-lg">No recent activity</p>
+            <p className="text-sm text-muted-foreground">Start using the platform to see your activity here</p>
           </div>
         )}
       </CardContent>
-      <CardFooter className="border-t border-slate-200 dark:border-slate-700">
+      <CardFooter className="border-t">
         <Button variant="outline" size="sm" className="ml-auto" asChild>
           <Link href="/dashboard/history">View All Activity</Link>
         </Button>

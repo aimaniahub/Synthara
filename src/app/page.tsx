@@ -41,68 +41,59 @@ const teamMembers = [
 
 export default async function HomePage() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+    ]) as Promise<T>;
+  }
+  const { data: { user } = { user: null } } = supabase
+    ? await withTimeout<any>(supabase.auth.getUser(), 2000, { data: { user: null } })
+    : ({ data: { user: null } } as any);
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 relative overflow-hidden">
-      {/* Background geometric patterns */}
-      <div className="absolute inset-0 opacity-20">
-        <svg className="absolute top-0 left-0 w-full h-full" viewBox="0 0 1000 1000" preserveAspectRatio="none">
-          <path d="M0,0 Q250,100 500,0 T1000,0 L1000,300 Q750,200 500,300 T0,300 Z" fill="url(#gradient1)" />
-          <path d="M0,700 Q250,600 500,700 T1000,700 L1000,1000 L0,1000 Z" fill="url(#gradient2)" />
-          <defs>
-            <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="rgba(139, 92, 246, 0.3)" />
-              <stop offset="100%" stopColor="rgba(79, 70, 229, 0.3)" />
-            </linearGradient>
-            <linearGradient id="gradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="rgba(79, 70, 229, 0.3)" />
-              <stop offset="100%" stopColor="rgba(139, 92, 246, 0.3)" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
+    <div className="flex flex-col min-h-screen bg-background relative">
 
-      <header className="relative z-50 py-4 border-b border-white/10 backdrop-blur-md bg-white/5">
+      <header className="relative z-50 py-4 border-b bg-background">
         <nav className="container mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <Link href="/" aria-label="Synthara AI Homepage" className="flex-shrink-0">
-            <SyntharaLogo className="h-8 sm:h-9 lg:h-10 w-auto text-white" />
+            <SyntharaLogo className="h-8 sm:h-9 lg:h-10 w-auto text-foreground" />
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+            <Button variant="ghost" asChild>
               <Link href="#features">Platform</Link>
             </Button>
-            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+            <Button variant="ghost" asChild>
               <Link href="#solutions">Solutions</Link>
             </Button>
-            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+            <Button variant="ghost" asChild>
               <Link href="#team">Resources</Link>
             </Button>
-            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+            <Button variant="ghost" asChild>
               <Link href="/help">Customers</Link>
             </Button>
-            <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+            <Button variant="ghost" asChild>
               <Link href="#pricing">Pricing</Link>
             </Button>
 
-            <Button variant="outline" asChild className="border-white/20 text-white hover:bg-white/10">
+            <Button variant="outline" asChild>
               <Link href="/help">Get Demo</Link>
             </Button>
 
             {user ? (
-                <Button asChild className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg">
+                <Button asChild variant="default">
                     <Link href="/dashboard">Go to Dashboard</Link>
                 </Button>
             ) : (
-                <Button asChild className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg">
+                <Button asChild variant="default">
                     <Link href="/auth">Start for Free →</Link>
                 </Button>
             )}
 
             {!user && (
-              <Button variant="ghost" asChild className="text-white/80 hover:text-white hover:bg-white/10">
+              <Button variant="ghost" asChild>
                 <Link href="/auth">Sign In</Link>
               </Button>
             )}
@@ -111,11 +102,11 @@ export default async function HomePage() {
           {/* Mobile Navigation */}
           <div className="flex md:hidden items-center space-x-2">
             {user ? (
-                <Button size="sm" asChild className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                <Button size="sm" asChild>
                     <Link href="/dashboard">Dashboard</Link>
                 </Button>
             ) : (
-                <Button size="sm" asChild className="bg-emerald-500 hover:bg-emerald-600 text-white">
+                <Button size="sm" asChild>
                     <Link href="/auth">Start Free</Link>
                 </Button>
             )}
@@ -130,18 +121,16 @@ export default async function HomePage() {
             <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
               {/* Left Content */}
               <div className="text-left">
-                <h1 className="font-headline text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 text-white leading-tight">
+                <h1 className="font-headline text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 text-foreground leading-tight">
                   Secure secrets.<br />
                   Prevent breaches.<br />
-                  <span className="text-transparent bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text">
-                    Keep teams moving.
-                  </span>
+                  Keep teams moving.
                 </h1>
-                <p className="text-lg sm:text-xl text-white/80 mb-8 max-w-2xl leading-relaxed">
+                <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-2xl leading-relaxed">
                   Securely manage, orchestrate, and govern your secrets and non-human identities at scale with Synthara's cloud platform integrated with your favorite DevOps tools for secure workflows.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Button size="lg" asChild className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl px-8 py-4 text-lg font-semibold">
+                  <Button size="lg" asChild variant="default" className="px-8 py-4 text-lg font-semibold">
                     <Link href={user ? "/dashboard/generate" : "/auth"}>
                       Start for Free →
                     </Link>
@@ -151,20 +140,20 @@ export default async function HomePage() {
 
               {/* Right Content - CTA */}
               <div className="relative">
-                <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-emerald-500/20 to-blue-500/20 border border-white/10 p-8 text-center">
+                <div className="relative rounded-2xl overflow-hidden border p-8 text-center bg-card">
                   <div className="space-y-6">
-                    <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
-                      <Sparkles className="w-8 h-8 text-emerald-400" />
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto bg-muted">
+                      <Sparkles className="w-8 h-8" />
                     </div>
-                    <h3 className="text-2xl font-bold text-white">Ready to Get Started?</h3>
-                    <p className="text-white/70">
+                    <h3 className="text-2xl font-bold text-foreground">Ready to Get Started?</h3>
+                    <p className="text-muted-foreground">
                       Join thousands of developers and data scientists who trust Synthara for their synthetic data needs.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                      <Button asChild size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                      <Button asChild size="lg" variant="default">
                         <Link href="/auth">Get Started Free</Link>
                       </Button>
-                      <Button asChild variant="outline" size="lg" className="border-white/20 text-white hover:bg-white/10">
+                      <Button asChild variant="outline" size="lg">
                         <Link href="/help">Learn More</Link>
                       </Button>
                     </div>
@@ -176,26 +165,26 @@ export default async function HomePage() {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="py-16 md:py-24 bg-white/5 backdrop-blur-sm">
+        <section id="features" className="py-16 md:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12 md:mb-16">
-              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-foreground">
                 Powerful Platform Features
               </h2>
-              <p className="text-lg text-white/70 max-w-3xl mx-auto">
+              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
                 Everything you need to generate, manage, and deploy synthetic data at scale with enterprise-grade security and performance.
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
               {features.map((feature) => (
-                <div key={feature.name} className="group bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300 hover:scale-105">
+                <div key={feature.name} className="group rounded-xl p-6 border hover:bg-muted transition-colors">
                   <div className="flex items-start gap-4">
-                    <div className="p-3 bg-emerald-500/20 rounded-lg">
-                      <feature.icon className="w-6 h-6 text-emerald-400" />
+                    <div className="p-3 rounded-lg bg-muted">
+                      <feature.icon className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="font-headline text-lg font-semibold mb-2 text-white">{feature.name}</h3>
-                      <p className="text-white/70 text-sm leading-relaxed">{feature.description}</p>
+                      <h3 className="font-headline text-lg font-semibold mb-2 text-foreground">{feature.name}</h3>
+                      <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
                     </div>
                   </div>
                 </div>
@@ -208,22 +197,22 @@ export default async function HomePage() {
         <section id="solutions" className="py-16 md:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12 md:mb-16">
-              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-foreground">
                 Built For Every Use Case
               </h2>
-              <p className="text-lg text-white/70 max-w-3xl mx-auto">
+              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
                 From AI training to compliance testing, Synthara adapts to your specific needs with intelligent data generation.
               </p>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
               {useCases.map((useCase) => (
-                <div key={useCase.title} className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
-                  <h3 className="font-headline text-xl font-semibold text-emerald-400 mb-4">{useCase.title}</h3>
+                <div key={useCase.title} className="rounded-xl p-6 border">
+                  <h3 className="font-headline text-xl font-semibold mb-4 text-foreground">{useCase.title}</h3>
                   <ul className="space-y-3">
                     {useCase.items.map((item, index) => (
                       <li key={index} className="flex items-start">
-                        <CheckCircle className="w-5 h-5 text-emerald-400 mr-3 mt-0.5 shrink-0" />
-                        <span className="text-white/80 text-sm">{item}</span>
+                        <CheckCircle className="w-5 h-5 mr-3 mt-0.5 shrink-0" />
+                        <span className="text-muted-foreground text-sm">{item}</span>
                       </li>
                     ))}
                   </ul>
@@ -234,24 +223,24 @@ export default async function HomePage() {
         </section>
 
         {/* Target Audience Section */}
-        <section className="py-16 md:py-24 bg-white/5 backdrop-blur-sm">
+        <section className="py-16 md:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12 md:mb-16">
-              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-foreground">
                 Trusted by Innovators
               </h2>
-              <p className="text-lg text-white/70 max-w-3xl mx-auto">
+              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
                 From startups to enterprises, teams worldwide rely on Synthara for their synthetic data needs.
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
               {targetAudiences.map((audience) => (
-                <div key={audience.name} className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
-                  <div className="p-4 bg-emerald-500/20 rounded-full mb-4 inline-block">
-                    <audience.icon className="w-8 h-8 text-emerald-400" />
+                <div key={audience.name} className="text-center rounded-xl p-6 border hover:bg-muted transition-colors">
+                  <div className="p-4 rounded-full mb-4 inline-block bg-muted">
+                    <audience.icon className="w-8 h-8" />
                   </div>
-                  <h3 className="font-headline text-lg font-semibold text-white mb-2">{audience.name}</h3>
-                  <p className="text-white/70 text-sm">{audience.description}</p>
+                  <h3 className="font-headline text-lg font-semibold text-foreground mb-2">{audience.name}</h3>
+                  <p className="text-muted-foreground text-sm">{audience.description}</p>
                 </div>
               ))}
             </div>
@@ -262,24 +251,24 @@ export default async function HomePage() {
         <section id="team" className="py-16 md:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-8">
-              <div className="inline-block bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 mb-4">
-                <span className="text-emerald-400 font-semibold text-sm">AIML • Government Engineering College Challakere</span>
+              <div className="inline-block rounded-full px-4 py-2 mb-4 border">
+                <span className="font-semibold text-sm">AIML • Government Engineering College Challakere</span>
               </div>
-              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-6">
+              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-6">
                 Meet the Team
               </h2>
-              <p className="text-lg text-white/70 max-w-2xl mx-auto">
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
                 Built by passionate students dedicated to advancing AI and synthetic data technology.
               </p>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
               {teamMembers.map((member) => (
-                <div key={member.name} className="text-center bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/15 transition-all duration-300">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-emerald-400/20 to-cyan-400/20 flex items-center justify-center border-2 border-emerald-400/30 mx-auto mb-4">
+                <div key={member.name} className="text-center rounded-xl p-6 border hover:bg-muted transition-colors">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center border mx-auto mb-4">
                     <div className="text-2xl">👤</div>
                   </div>
-                  <h3 className="font-headline text-lg font-semibold text-white mb-1">{member.name}</h3>
-                  <p className="text-emerald-400 text-sm font-medium">{member.role}</p>
+                  <h3 className="font-headline text-lg font-semibold text-foreground mb-1">{member.name}</h3>
+                  <p className="text-sm font-medium text-muted-foreground">{member.role}</p>
                 </div>
               ))}
             </div>
@@ -287,25 +276,25 @@ export default async function HomePage() {
         </section>
 
         {/* Call to Action Section */}
-        <section className="py-20 md:py-32 text-center bg-gradient-to-r from-emerald-600 to-cyan-600">
+        <section className="py-20 md:py-32 text-center border-t">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-white">
+            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-foreground">
               Ready to Transform Your Data Strategy?
             </h2>
-            <p className="text-lg md:text-xl text-white/90 mb-10 max-w-2xl mx-auto">
+            <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
               Join thousands of innovators building the future with Synthara AI. Get started today and experience the next generation of synthetic data.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               {user ? (
-                <Button size="lg" asChild className="bg-white text-emerald-600 hover:bg-white/90 shadow-xl px-8 py-4 text-lg font-semibold">
+                <Button size="lg" asChild variant="default" className="px-8 py-4 text-lg font-semibold">
                   <Link href="/dashboard">Access Your Dashboard</Link>
                 </Button>
               ) : (
-                <Button size="lg" asChild className="bg-white text-emerald-600 hover:bg-white/90 shadow-xl px-8 py-4 text-lg font-semibold">
+                <Button size="lg" asChild variant="default" className="px-8 py-4 text-lg font-semibold">
                   <Link href="/auth">Get Started for Free</Link>
                 </Button>
               )}
-              <Button size="lg" variant="outline" asChild className="border-white/30 text-white hover:bg-white/10 px-8 py-4 text-lg font-semibold">
+              <Button size="lg" variant="outline" asChild className="px-8 py-4 text-lg font-semibold">
                 <Link href="/help">Schedule Demo</Link>
               </Button>
             </div>
@@ -314,47 +303,47 @@ export default async function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-black/20 backdrop-blur-sm border-t border-white/10">
+      <footer className="border-t bg-background">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="md:col-span-1">
               <Link href="/" className="inline-block mb-4">
-                <SyntharaLogo className="h-8 w-auto text-white" />
+                <SyntharaLogo className="h-8 w-auto text-foreground" />
               </Link>
-              <p className="text-white/60 text-sm mb-4">
+              <p className="text-muted-foreground text-sm mb-4">
                 Generate Synthetic Data with Intelligence.
               </p>
-              <p className="text-white/40 text-xs">
+              <p className="text-muted-foreground text-xs">
                 © 2024 Synthara AI. All rights reserved.
               </p>
             </div>
 
             <div>
-              <h3 className="font-semibold text-white mb-4">Platform</h3>
+              <h3 className="font-semibold text-foreground mb-4">Platform</h3>
               <ul className="space-y-2">
-                <li><Link href="#features" className="text-white/60 hover:text-white text-sm transition-colors">Features</Link></li>
-                <li><Link href="/dashboard" className="text-white/60 hover:text-white text-sm transition-colors">Dashboard</Link></li>
-                <li><Link href="/dashboard/generate" className="text-white/60 hover:text-white text-sm transition-colors">Data Generation</Link></li>
-                <li><Link href="/dashboard/analysis" className="text-white/60 hover:text-white text-sm transition-colors">Analytics</Link></li>
+                <li><Link href="#features" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Features</Link></li>
+                <li><Link href="/dashboard" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Dashboard</Link></li>
+                <li><Link href="/dashboard/generate" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Data Generation</Link></li>
+                <li><Link href="/dashboard/analysis" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Analytics</Link></li>
               </ul>
             </div>
 
             <div>
-              <h3 className="font-semibold text-white mb-4">Resources</h3>
+              <h3 className="font-semibold text-foreground mb-4">Resources</h3>
               <ul className="space-y-2">
-                <li><Link href="/help" className="text-white/60 hover:text-white text-sm transition-colors">Documentation</Link></li>
-                <li><Link href="/help" className="text-white/60 hover:text-white text-sm transition-colors">Help Center</Link></li>
-                <li><Link href="#team" className="text-white/60 hover:text-white text-sm transition-colors">About Team</Link></li>
-                <li><Link href="/help" className="text-white/60 hover:text-white text-sm transition-colors">Contact</Link></li>
+                <li><Link href="/help" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Documentation</Link></li>
+                <li><Link href="/help" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Help Center</Link></li>
+                <li><Link href="#team" className="text-muted-foreground hover:text-foreground text-sm transition-colors">About Team</Link></li>
+                <li><Link href="/help" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Contact</Link></li>
               </ul>
             </div>
 
             <div>
-              <h3 className="font-semibold text-white mb-4">Legal</h3>
+              <h3 className="font-semibold text-foreground mb-4">Legal</h3>
               <ul className="space-y-2">
-                <li><Link href="#" className="text-white/60 hover:text-white text-sm transition-colors">Privacy Policy</Link></li>
-                <li><Link href="#" className="text-white/60 hover:text-white text-sm transition-colors">Terms of Service</Link></li>
-                <li><Link href="#" className="text-white/60 hover:text-white text-sm transition-colors">Security</Link></li>
+                <li><Link href="#" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Privacy Policy</Link></li>
+                <li><Link href="#" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Terms of Service</Link></li>
+                <li><Link href="#" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Security</Link></li>
               </ul>
             </div>
           </div>

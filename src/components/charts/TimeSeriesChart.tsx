@@ -1,10 +1,19 @@
 'use client';
 
-import React from 'react';
-import { LineChart as MuiLineChart } from '@mui/x-charts/LineChart';
+import React, { useMemo } from 'react';
+import {
+  LineChart as RechartsLineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer,
+} from 'recharts';
 import { ChartWrapper } from './ChartWrapper';
 import { TimeSeriesProps } from '@/types/charts';
-import { getChartColor } from '@/lib/mui-theme-adapter';
+import { CHART_SPACING, getPaletteColor } from '@/lib/chart-gradients';
 
 export function TimeSeriesChart({
   data,
@@ -13,7 +22,7 @@ export function TimeSeriesChart({
   loading = false,
   error = null,
   onDataPointClick,
-  onDataPointHover,
+  ...props
 }: TimeSeriesProps) {
   const {
     showLegend = true,
@@ -23,26 +32,45 @@ export function TimeSeriesChart({
     colors,
   } = config;
 
-  // Transform data for MUI X Charts
-  const chartData = React.useMemo(() => {
-    if (!data?.series || data.series.length === 0) return null;
-
-    return data.series.map((series, index) => ({
-      data: series.data.map(point => point.y),
-      label: series.label || `Series ${index + 1}`,
-      color: series.color || colors?.[index] || getChartColor(index),
-      curve: series.curve || 'linear',
-    }));
-  }, [data, colors]);
-
-  const xAxisData = React.useMemo(() => {
+  const xValues = useMemo(() => {
     if (data?.series && data.series[0]?.data) {
       return data.series[0].data.map(point => point.x);
     }
     return [];
   }, [data]);
 
-  if (!chartData || chartData.length === 0) {
+  const chartData = useMemo(() => {
+    if (!xValues.length) return [];
+
+    return xValues.map((x, index) => {
+      const point: Record<string, number | string> = {
+        x,
+        label: typeof x === 'number' ? new Date(x).toLocaleDateString() : String(x),
+      };
+
+      data?.series?.forEach((series, sIndex) => {
+        const value = series.data[index]?.y;
+        if (value !== undefined) {
+          point[`series_${sIndex}`] = value;
+        }
+      });
+
+      return point;
+    });
+  }, [data, xValues]);
+
+  const resolvedSeries = useMemo(() => {
+    return data?.series?.map((series, index) => ({
+      key: `series_${index}`,
+      label: series.label || `Series ${index + 1}`,
+      color: series.color || colors?.[index] || getPaletteColor(index, 'blueberryTwilight'),
+      strokeWidth: 3,
+      dot: { r: 3 },
+      type: series.curve || 'linear',
+    })) ?? [];
+  }, [data, colors]);
+
+  if (!resolvedSeries.length || !chartData.length) {
     return (
       <ChartWrapper
         config={config}
@@ -63,27 +91,63 @@ export function TimeSeriesChart({
       error={error}
       title={config.title}
       description={config.description}
+      {...props}
     >
-      <MuiLineChart
-        series={chartData}
-        xAxis={[{
-          data: xAxisData,
-          scaleType: 'time',
-          valueFormatter: (value) => {
-            // Format time values appropriately
-            if (typeof value === 'number') {
-              return new Date(value).toLocaleDateString();
-            }
-            return String(value);
-          },
-        }]}
-        height={config.height || 300}
-        grid={{ vertical: showGrid, horizontal: showGrid }}
-        tooltip={{ trigger: showTooltip ? 'item' : 'none' }}
-        legend={showLegend ? { hidden: false } : { hidden: true }}
-        axisHighlight={{ x: 'line', y: 'line' }}
-        onItemClick={onDataPointClick}
-      />
+      <ResponsiveContainer width="100%" height={config.height || CHART_SPACING.heights.standard}>
+        <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
+          {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />}
+
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.xAxisLabel}
+          />
+
+          <YAxis
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.yAxisLabel}
+          />
+
+          {showTooltip && (
+            <RechartsTooltip
+              cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+              contentStyle={{
+                borderRadius: CHART_SPACING.borderRadius.element,
+                border: '1px solid hsl(var(--border))',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                background: 'hsl(var(--card))',
+              }}
+            />
+          )}
+
+          {showLegend && (
+            <RechartsLegend verticalAlign="bottom" height={36} wrapperStyle={{ paddingTop: 16 }} />
+          )}
+
+          {resolvedSeries.map(series => (
+            <Line
+              key={series.key}
+              type={series.type as any}
+              dataKey={series.key}
+              name={series.label}
+              stroke={series.color}
+              strokeWidth={series.strokeWidth}
+              dot={series.dot}
+              activeDot={{ r: 5 }}
+              isAnimationActive
+              onClick={(payload: unknown) => {
+                if (onDataPointClick) {
+                  onDataPointClick(payload);
+                }
+              }}
+            />
+          ))}
+        </RechartsLineChart>
+      </ResponsiveContainer>
     </ChartWrapper>
   );
 }

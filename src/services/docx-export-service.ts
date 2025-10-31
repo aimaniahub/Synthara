@@ -1,9 +1,10 @@
 /**
  * Professional DOCX Export Service
  * Generate comprehensive DOCX reports with professional formatting using docx library
+ * Note: This service is lazily loaded when needed for exports
  */
 
-import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, BorderStyle, WidthType, ShadingType, PageBreak, SectionType } from 'docx';
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, BorderStyle, WidthType } from 'docx';
 import { type DatasetProfile } from '@/services/analysis-service';
 
 export interface DOCXExportOptions {

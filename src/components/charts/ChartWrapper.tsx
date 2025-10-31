@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { Box, Alert, Skeleton, Typography } from '@mui/material';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { AlertCircle, Loader2, Brain, TrendingUp, AlertTriangle, Info } from 'lucide-react';
-import { useMuiTheme } from '@/lib/mui-theme-adapter';
+import { AlertCircle, Brain, TrendingUp, AlertTriangle, Info } from 'lucide-react';
 import { ChartConfig, VisualizationInsight } from '@/types/charts';
-import { CHART_SPACING, HIGHLIGHT_CONFIG } from '@/lib/chart-gradients';
+import { CHART_SPACING } from '@/lib/chart-gradients';
+import { cn } from '@/lib/utils';
 
 interface ChartWrapperProps {
   children?: React.ReactNode;
@@ -23,13 +23,14 @@ interface ChartWrapperProps {
   confidence?: number;
   rationale?: string;
   aiGenerated?: boolean;
+  metrics?: string[];
 }
 
 export interface ChartWrapperRef {
   getElement: () => HTMLElement | null;
 }
 
-export const ChartWrapper = forwardRef<ChartWrapperRef, ChartWrapperProps>(({
+export const ChartWrapper = forwardRef<ChartWrapperRef, ChartWrapperProps>(({ 
   children,
   config = {},
   className = '',
@@ -41,9 +42,8 @@ export const ChartWrapper = forwardRef<ChartWrapperRef, ChartWrapperProps>(({
   confidence,
   rationale,
   aiGenerated = false,
+  metrics,
 }, ref) => {
-  const muiTheme = useMuiTheme();
-  const theme = useMemo(() => createTheme(muiTheme), [muiTheme]);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -60,53 +60,45 @@ export const ChartWrapper = forwardRef<ChartWrapperRef, ChartWrapperProps>(({
 
   if (loading) {
     return (
-      <Box className={`w-full ${className}`}>
+      <div
+        className={cn(
+          'w-full rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-all',
+          'p-6 space-y-3',
+          className,
+        )}
+      >
         {title && (
-          <Typography variant="h6" component="h3" gutterBottom>
-            {title}
-          </Typography>
+          <h3 className="text-lg font-semibold leading-tight">{title}</h3>
         )}
         {description && (
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            {description}
-          </Typography>
+          <p className="text-sm text-muted-foreground">{description}</p>
         )}
-        <Skeleton
-          variant="rectangular"
-          width="100%"
-          height={height}
-          sx={{ borderRadius: 2 }}
-        />
-      </Box>
+        <Skeleton className="w-full rounded-lg" style={{ height }} />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box className={`w-full ${className}`}>
+      <div
+        className={cn(
+          'w-full rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-all',
+          'p-6 space-y-3',
+          className,
+        )}
+      >
         {title && (
-          <Typography variant="h6" component="h3" gutterBottom>
-            {title}
-          </Typography>
+          <h3 className="text-lg font-semibold leading-tight">{title}</h3>
         )}
         {description && (
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            {description}
-          </Typography>
+          <p className="text-sm text-muted-foreground">{description}</p>
         )}
-        <Alert 
-          severity="error" 
-          icon={<AlertCircle className="h-4 w-4" />}
-          sx={{ 
-            borderRadius: 2,
-            '& .MuiAlert-icon': {
-              fontSize: '1rem',
-            }
-          }}
-        >
-          {error}
+        <Alert variant="destructive" className="mt-2" style={{ minHeight: height }}>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
-      </Box>
+      </div>
     );
   }
 
@@ -129,220 +121,147 @@ export const ChartWrapper = forwardRef<ChartWrapperRef, ChartWrapperProps>(({
 
   const getInsightColor = (severity: VisualizationInsight['severity']) => {
     switch (severity) {
-      case 'high': return 'bg-red-100 text-red-800 border-red-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'low': return 'bg-blue-100 text-blue-800 border-blue-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'high':
+      case 'medium':
+      case 'low':
+        return 'bg-muted text-foreground border';
+      default:
+        return 'bg-muted text-foreground border';
     }
   };
 
   return (
-    <ThemeProvider theme={theme}>
-      <Box 
-        ref={wrapperRef}
-        className={`w-full ${className}`}
-        sx={{
-          borderRadius: CHART_SPACING.borderRadius.card,
-          boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-          border: '1px solid',
-          borderColor: 'divider',
-          backgroundColor: 'background.paper',
-          overflow: 'hidden',
-          transition: 'all 0.2s ease-in-out',
-          '&:hover': {
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            transform: 'translateY(-1px)',
-          }
-        }}
-      >
-        {/* Header with AI insights */}
-        <Box 
-          className="flex items-start justify-between p-4 pb-2"
-          sx={{
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            backgroundColor: 'background.default',
-          }}
-        >
-          <Box className="flex-1">
-            {title && (
-              <Box className="flex items-center gap-2 mb-1">
-                <Typography 
-                  variant="h6" 
-                  component="h3"
-                  sx={{
-                    fontWeight: 600,
-                    fontSize: '1.125rem',
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {title}
-                </Typography>
-                {aiGenerated && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Badge 
-                          variant="outline" 
-                          className="text-xs px-2 py-1"
-                          sx={{
-                            backgroundColor: 'primary.main',
-                            color: 'primary.contrastText',
-                            border: 'none',
-                            fontWeight: 500,
-                          }}
-                        >
-                          <Brain className="h-3 w-3 mr-1" />
-                          AI
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>AI-generated visualization</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                )}
-              </Box>
-            )}
-            {description && (
-              <Typography 
-                variant="body2" 
-                color="text.secondary" 
-                className="mb-2"
-                sx={{
-                  fontSize: '0.875rem',
-                  lineHeight: 1.5,
-                }}
-              >
-                {description}
-              </Typography>
-            )}
-          </Box>
-          
-          {/* AI Insights and Confidence */}
-          <Box className="flex items-center gap-2">
-            {primaryInsight && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge 
-                      variant="outline" 
-                      className={`text-xs px-2 py-1 ${getInsightColor(primaryInsight.severity)}`}
-                      sx={{
-                        fontWeight: 500,
-                        border: '1px solid',
-                        borderColor: primaryInsight.severity === 'high' ? 'error.main' : 
-                                   primaryInsight.severity === 'medium' ? 'warning.main' : 'info.main',
-                      }}
-                    >
-                      {getInsightIcon(primaryInsight.type)}
-                      <span className="ml-1">{primaryInsight.message}</span>
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="max-w-xs">
-                      <p className="font-medium">{primaryInsight.message}</p>
-                      {primaryInsight.recommendation && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {primaryInsight.recommendation}
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Confidence: {Math.round(primaryInsight.confidence * 100)}%
-                      </p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            
-            {confidence !== undefined && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge 
-                      variant="outline" 
-                      className="text-xs px-2 py-1"
-                      sx={{
-                        backgroundColor: 'secondary.main',
-                        color: 'secondary.contrastText',
-                        border: 'none',
-                        fontWeight: 500,
-                      }}
-                    >
-                      {Math.round(confidence * 100)}%
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>AI confidence score</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-          </Box>
-        </Box>
+    <div
+      ref={wrapperRef}
+      className={cn(
+        'w-full rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-all duration-200',
+        'hover:shadow-md hover:-translate-y-0.5 overflow-hidden',
+        className,
+      )}
+    >
+      <div className="flex items-start justify-between border-b border-border/60 bg-muted/20 p-4 pb-2">
+        <div className="flex-1">
+          {title && (
+            <div className="mb-1 flex items-center gap-2">
+              <h3 className="text-lg font-semibold leading-tight">{title}</h3>
+              {aiGenerated && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge
+                        variant="outline"
+                        className="flex items-center gap-1"
+                      >
+                        <Brain className="h-3 w-3" />
+                        AI
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>AI-generated visualization</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          )}
+          {description && (
+            <p className="mb-2 text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
 
-        {/* Rationale tooltip */}
-        {rationale && (
-          <Box className="mb-2">
+        <div className="flex items-center gap-2">
+          {primaryInsight && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Typography 
-                    variant="caption" 
-                    color="text.secondary" 
-                    className="cursor-help underline decoration-dotted"
+                  <Badge
+                    variant="outline"
+                    className={cn('flex items-center gap-1 border', getInsightColor(primaryInsight.severity))}
                   >
-                    Why this visualization?
-                  </Typography>
+                    {getInsightIcon(primaryInsight.type)}
+                    <span className="ml-1">{primaryInsight.message}</span>
+                  </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p className="max-w-xs">{rationale}</p>
+                  <div className="max-w-xs space-y-1">
+                    <p className="font-medium">{primaryInsight.message}</p>
+                    {primaryInsight.recommendation && (
+                      <p className="text-sm text-muted-foreground">
+                        {primaryInsight.recommendation}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Confidence: {Math.round(primaryInsight.confidence * 100)}%
+                    </p>
+                  </div>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          </Box>
-        )}
+          )}
 
-        <Box
-          sx={{
-            width: responsive ? '100%' : width,
-            height: height,
-            margin: `${margin.top}px ${margin.right}px ${margin.bottom}px ${margin.left}px`,
-            position: 'relative',
-            padding: '16px',
-            '& .MuiCharts-root': {
-              width: '100%',
-              height: '100%',
-            },
-            '& .MuiChartsAxis-root': {
-              '& .MuiChartsAxis-tick': {
-                fontSize: '0.75rem',
-                fill: 'text.secondary',
-              },
-              '& .MuiChartsAxis-tickLabel': {
-                fontSize: '0.75rem',
-                fill: 'text.secondary',
-              },
-            },
-            '& .MuiChartsLegend-root': {
-              '& .MuiChartsLegend-series': {
-                fontSize: '0.75rem',
-              },
-            },
-            '& .MuiChartsTooltip-root': {
-              backgroundColor: 'background.paper',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: CHART_SPACING.borderRadius.element,
-              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-            },
-          }}
-        >
-          {children}
-        </Box>
-      </Box>
-    </ThemeProvider>
+          {confidence !== undefined && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="text-xs px-2 py-1"
+                  >
+                    {Math.round(confidence * 100)}%
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>AI confidence score</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {metrics && metrics.length > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="text-xs px-2 py-1">
+                    Cols: {metrics.join(', ')}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Columns used for this chart</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      </div>
+
+      {rationale && (
+        <div className="px-4 pt-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="cursor-help text-xs text-muted-foreground underline decoration-dotted">
+                  Why this visualization?
+                </p>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs text-sm">{rationale}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
+
+      <div
+        className="relative"
+        style={{
+          width: responsive ? '100%' : width,
+          height,
+          padding: '16px',
+        }}
+      >
+        {children}
+      </div>
+    </div>
   );
 });
 
@@ -351,14 +270,9 @@ ChartWrapper.displayName = 'ChartWrapper';
 // Loading state component
 export function ChartLoading({ height = 300 }: { height?: number }) {
   return (
-    <Box className="w-full">
-      <Skeleton
-        variant="rectangular"
-        width="100%"
-        height={height}
-        sx={{ borderRadius: 2 }}
-      />
-    </Box>
+    <div className="w-full rounded-xl border border-border bg-card p-6 shadow-sm">
+      <Skeleton className="w-full rounded-lg" style={{ height }} />
+    </div>
   );
 }
 
@@ -371,22 +285,12 @@ export function ChartError({
   height?: number;
 }) {
   return (
-    <Box className="w-full">
-      <Alert 
-        severity="error" 
-        icon={<AlertCircle className="h-4 w-4" />}
-        sx={{ 
-          borderRadius: 2,
-          minHeight: height,
-          display: 'flex',
-          alignItems: 'center',
-          '& .MuiAlert-icon': {
-            fontSize: '1rem',
-          }
-        }}
-      >
-        {error}
+    <div className="w-full rounded-xl border border-border bg-card p-6 shadow-sm">
+      <Alert variant="destructive" style={{ minHeight: height }}>
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Error</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
       </Alert>
-    </Box>
+    </div>
   );
 }

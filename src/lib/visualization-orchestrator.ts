@@ -72,7 +72,6 @@ export class VisualizationOrchestrator {
           error: 'No visualization recommendations generated'
         };
       }
-
       // Step 2: Generate chart data and enhance with AI insights
       const charts = await this.generateChartData(analysis.recommendations, input.data, input.profile);
 
@@ -109,6 +108,19 @@ export class VisualizationOrchestrator {
   }
 
   /**
+   * Public helper: regenerate chart-specific data for a given chart type and columns
+   */
+  public generateChartDataFor(
+    chartType: ChartType,
+    dataColumns: string[],
+    data: Record<string, any>[],
+    profile: DatasetProfile
+  ): any {
+    const mockRecommendation = { chartType, dataColumns } as unknown as AIVisualizationRecommendation;
+    return this.generateChartSpecificData(mockRecommendation, data, profile);
+  }
+
+  /**
    * Generate chart data for each recommendation
    */
   private async generateChartData(
@@ -122,6 +134,10 @@ export class VisualizationOrchestrator {
       try {
         // Generate chart-specific data
         const chartData = this.generateChartSpecificData(recommendation, data, profile);
+        // Skip charts with empty or invalid data
+        if (this.isChartDataEmpty(recommendation.chartType, chartData)) {
+          continue;
+        }
         
         // Enhance with AI insights for the specific chart
         const enhancedInsights = await this.generateChartInsights(recommendation, data, profile);
@@ -535,7 +551,7 @@ export class VisualizationOrchestrator {
       column: item.column,
       missingCount: item.missingCount,
       missingPercentage: item.missingPercentage,
-      totalCount: item.totalCount,
+      totalCount: profile.totalRows,
     }));
   }
 
@@ -636,6 +652,40 @@ export class VisualizationOrchestrator {
     const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
     
     return denominator === 0 ? 0 : numerator / denominator;
+  }
+
+  /**
+   * Determine if generated chart data is effectively empty
+   */
+  private isChartDataEmpty(chartType: ChartType, chartData: any): boolean {
+    if (!chartData) return true;
+    switch (chartType) {
+      case 'bar':
+      case 'stacked-bar':
+        return !chartData.series?.length || !chartData.xAxis?.data?.length;
+      case 'line':
+      case 'area':
+        return !chartData.series?.[0]?.data?.length;
+      case 'pie':
+      case 'treemap':
+        return !chartData.data?.length;
+      case 'scatter':
+      case 'scatter-advanced':
+        return !chartData.series?.[0]?.data?.length;
+      case 'histogram':
+        return !chartData.bins?.length || chartData.totalCount === 0;
+      case 'boxplot':
+        return [chartData.min, chartData.max, chartData.q1, chartData.q3, chartData.median]
+          .some((v) => v === undefined || v === null);
+      case 'timeseries':
+        return !chartData.series?.[0]?.data?.length;
+      case 'heatmap':
+        return !chartData.data?.length;
+      case 'missing-data':
+        return !Array.isArray(chartData) || chartData.length === 0;
+      default:
+        return false;
+    }
   }
 }
 

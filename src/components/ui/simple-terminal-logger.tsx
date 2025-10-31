@@ -149,15 +149,13 @@ export const SimpleTerminalLogger = forwardRef<any, SimpleTerminalLoggerProps>((
   const getLogColor = (log: LogEntry) => {
     switch (log.type) {
       case 'success':
-        return 'text-green-400';
       case 'error':
-        return 'text-red-400';
       case 'warning':
-        return 'text-yellow-400';
+        return 'text-foreground';
       case 'progress':
-        return 'text-blue-400';
+        return 'text-muted-foreground';
       default:
-        return 'text-gray-300';
+        return 'text-muted-foreground';
     }
   };
 
@@ -166,7 +164,7 @@ export const SimpleTerminalLogger = forwardRef<any, SimpleTerminalLoggerProps>((
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5 text-green-500" />
+            <Terminal className="h-5 w-5 text-foreground" />
             Terminal
           </CardTitle>
         </CardHeader>
@@ -186,10 +184,10 @@ export const SimpleTerminalLogger = forwardRef<any, SimpleTerminalLoggerProps>((
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
-            <Terminal className="h-5 w-5 text-green-500" />
+            <Terminal className="h-5 w-5 text-foreground" />
             Terminal
             {isGenerating && (
-              <Badge variant="outline" className="ml-2 text-blue-500 border-blue-500">
+              <Badge variant="outline" className="ml-2">
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                 Running
               </Badge>

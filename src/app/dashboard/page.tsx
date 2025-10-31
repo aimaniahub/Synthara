@@ -10,8 +10,7 @@ import { QuickActions } from "@/components/dashboard/QuickActions";
 import Link from "next/link";
 import { getUserActivities, getUserDatasets, type ActivityLog, type SavedDataset } from '@/lib/supabase/actions';
 import { format, formatDistanceToNow } from 'date-fns';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 const quickActions = [
   { title: "Generate New Dataset", Icon: PlusCircle, href: "/dashboard/generate", description: "Start generating a new synthetic dataset.", cta: "Generate Data" },
@@ -22,29 +21,26 @@ const quickActions = [
 
 function getActivityIcon(activityType: string) {
   switch (activityType) {
-    case "DATA_GENERATION": return <DatabaseZap className="h-5 w-5 text-emerald-400" />;
-    case "PROMPT_ENHANCEMENT": return <Wand2 className="h-5 w-5 text-purple-400" />;
-    case "DATA_ANALYSIS_SNIPPET": return <BarChartBig className="h-5 w-5 text-cyan-400" />;
-    case "DATASET_SAVED": return <Save className="h-5 w-5 text-emerald-400" />;
-    default: return <AlertCircle className="h-5 w-5 text-white/60" />;
+    case "DATA_GENERATION": return <DatabaseZap className="h-5 w-5 text-foreground" />;
+    case "PROMPT_ENHANCEMENT": return <Wand2 className="h-5 w-5 text-foreground" />;
+    case "DATA_ANALYSIS_SNIPPET": return <BarChartBig className="h-5 w-5 text-foreground" />;
+    case "DATASET_SAVED": return <Save className="h-5 w-5 text-foreground" />;
+    default: return <AlertCircle className="h-5 w-5 text-muted-foreground" />;
   }
 }
 
 export default async function DashboardPage() {
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    }
-  );
+  const supabase = await createSupabaseServerClient();
+  async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+    ]) as Promise<T>;
+  }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } = { user: null } } = supabase
+    ? await withTimeout<any>(supabase.auth.getUser(), 2000, { data: { user: null } })
+    : ({ data: { user: null } } as any);
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
   
   // Fetch activities and datasets only if user is available
@@ -72,24 +68,20 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Header Section */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl lg:text-4xl font-headline font-bold text-slate-900 dark:text-slate-100">
-            Welcome Back, {userName}!
-          </h1>
-          <p className="text-lg text-slate-600 dark:text-slate-400">
-            Here's your Synthara analytics overview and recent activity.
-          </p>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Welcome back, {userName}</h1>
+          <p className="text-sm text-muted-foreground">Overview and recent activity</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-          <Button size="lg" asChild className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all">
+          <Button size="sm" variant="outline" asChild>
             <Link href="/dashboard/generate">
-              <PlusCircle className="mr-2 h-5 w-5" /> Create Dataset
+              <PlusCircle className="mr-2 h-4 w-4" /> Create Dataset
             </Link>
           </Button>
-          <Button size="lg" variant="outline" asChild className="border-slate-300 dark:border-slate-600">
+          <Button size="sm" variant="outline" asChild>
             <Link href="/dashboard/analysis">
-              <BarChart className="mr-2 h-5 w-5" /> View Analytics
+              <BarChart className="mr-2 h-4 w-4" /> View Analytics
             </Link>
           </Button>
         </div>
@@ -144,18 +136,19 @@ export default async function DashboardPage() {
 
         {/* Last Generated Dataset */}
         <section>
-          <h2 className="text-2xl font-headline font-bold text-slate-900 dark:text-slate-100 mb-6">Latest Dataset</h2>
-          <Card className="modern-card h-full">
-            <CardHeader className="border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-xl font-semibold text-foreground mb-4">Latest Dataset</h2>
+          <Card className="border rounded-lg bg-background">
+            <CardHeader className="border-b">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl">
-                  <FileText className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                <div className="p-2 rounded-md bg-muted">
+                  <FileText className="h-5 w-5 text-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <CardTitle className="text-lg font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  <CardTitle className="text-base font-semibold text-foreground truncate">
                     {lastSavedDataset ? lastSavedDataset.dataset_name : "No Dataset Yet"}
                   </CardTitle>
-                  <CardDescription className="text-slate-600 dark:text-slate-400">
+                  <CardDescription className="text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
                     {lastSavedDataset ? `Created ${formatDistanceToNow(new Date(lastSavedDataset.created_at), { addSuffix: true })}` : "Your latest dataset will appear here"}
                   </CardDescription>
                 </div>
@@ -188,8 +181,8 @@ export default async function DashboardPage() {
                 <Progress value={lastSavedDataset ? 100 : 0} className="h-2" />
               </div>
             </CardContent>
-            <CardFooter className="border-t border-slate-200 dark:border-slate-700">
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" disabled={!lastSavedDataset} asChild>
+            <CardFooter className="border-t">
+              <Button className="w-full" variant="outline" disabled={!lastSavedDataset} asChild>
                 <Link href={lastSavedDataset ? `/dashboard/preview?datasetId=${lastSavedDataset.id}` : "#"}>
                   View Dataset <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>

@@ -1,20 +1,28 @@
 'use client';
 
-import React, { useState, forwardRef } from 'react';
-import { ScatterChart as MuiScatterChart } from '@mui/x-charts/ScatterChart';
+import React, { useMemo, forwardRef } from 'react';
+import {
+  ScatterChart as RechartsScatterChart,
+  Scatter,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer,
+  ZAxis,
+} from 'recharts';
 import { ChartWrapper, ChartWrapperRef } from './ChartWrapper';
 import { ScatterAdvancedProps } from '@/types/charts';
-import { getChartColor } from '@/lib/mui-theme-adapter';
-import { CHART_GRADIENTS, GradientDef, HIGHLIGHT_CONFIG, CHART_SPACING } from '@/lib/chart-gradients';
+import { CHART_SPACING, getPaletteColor } from '@/lib/chart-gradients';
 
-export const ScatterPlotAdvanced = forwardRef<ChartWrapperRef, ScatterAdvancedProps>(({
+export const ScatterPlotAdvanced = forwardRef<ChartWrapperRef, ScatterAdvancedProps>(({ 
   data,
   config = {},
   className = '',
   loading = false,
   error = null,
   onDataPointClick,
-  onDataPointHover,
   ...props
 }, ref) => {
   const {
@@ -25,44 +33,20 @@ export const ScatterPlotAdvanced = forwardRef<ChartWrapperRef, ScatterAdvancedPr
     colors,
   } = config;
 
-  // State for highlighting
-  const [highlightedItem, setHighlightedItem] = useState<{ seriesId: string; dataIndex: number } | null>(null);
-
-  // Transform data for MUI X Charts with gradients
-  const chartData = React.useMemo(() => {
-    if (!data?.series || data.series.length === 0) return null;
-
-    return data.series.map((series, index) => {
-      const baseColor = series.color || colors?.[index] || getChartColor(index, 'blueberryTwilight');
-      
-      return {
-        data: Array.isArray(series.data) ? series.data.map(point => ({
-          x: typeof point.x === 'number' ? point.x : 0,
-          y: typeof point.y === 'number' ? point.y : 0,
-          id: point.label || `${point.x}-${point.y}`,
-        })) : [],
-        label: series.label || `Series ${index + 1}`,
-        color: baseColor,
-        id: `series-${index}`,
-      };
-    });
+  const resolvedSeries = useMemo(() => {
+    if (!data?.series || data.series.length === 0) return [];
+    return data.series.map((series, index) => ({
+      data: Array.isArray(series.data) ? series.data.map(point => ({
+        x: typeof point.x === 'number' ? point.x : 0,
+        y: typeof point.y === 'number' ? point.y : 0,
+        id: point.label || `${point.x}-${point.y}`,
+      })) : [],
+      label: series.label || `Series ${index + 1}`,
+      color: series.color || colors?.[index] || getPaletteColor(index, 'blueberryTwilight'),
+    }));
   }, [data, colors]);
 
-  // Generate gradient definitions for scatter points
-  const gradientDefs = React.useMemo(() => {
-    if (!chartData) return null;
-    
-    return (
-      <defs>
-        {chartData.map((series, index) => {
-          const gradient = CHART_GRADIENTS.scatterRadial(series.color, 0.7, index);
-          return <GradientDef key={gradient.id} gradient={gradient} />;
-        })}
-      </defs>
-    );
-  }, [chartData]);
-
-  if (!chartData || chartData.length === 0) {
+  if (!resolvedSeries.length) {
     return (
       <ChartWrapper
         config={config}
@@ -84,94 +68,57 @@ export const ScatterPlotAdvanced = forwardRef<ChartWrapperRef, ScatterAdvancedPr
       error={error}
       title={config.title}
       description={config.description}
-      chartType="scatter"
       {...props}
     >
-      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-        {gradientDefs}
-      </svg>
-      <MuiScatterChart
-        series={chartData.map(series => ({
-          data: series.data,
-          label: series.label,
-          color: series.color,
-          id: series.id,
-        }))}
-        xAxis={[{
-          label: data.xAxis?.label || 'X Axis',
-          scaleType: data.xAxis?.scaleType || 'linear',
-          labelStyle: {
-            fontSize: '0.875rem',
-            fontWeight: 500,
-          },
-          tickLabelStyle: {
-            fontSize: '0.75rem',
-          },
-        }]}
-        yAxis={[{
-          label: data.yAxis?.label || 'Y Axis',
-          scaleType: data.yAxis?.scaleType || 'linear',
-          labelStyle: {
-            fontSize: '0.875rem',
-            fontWeight: 500,
-          },
-          tickLabelStyle: {
-            fontSize: '0.75rem',
-          },
-        }]}
-        height={config.height || CHART_SPACING.heights.standard}
-        grid={{ 
-          vertical: showGrid, 
-          horizontal: showGrid,
-          verticalSubGrid: false,
-          horizontalSubGrid: false,
-        }}
-        tooltip={{ 
-          trigger: showTooltip ? 'item' : 'none',
-          placement: 'top',
-          slotProps: {
-            popper: {
-              sx: {
-                '& .MuiChartsTooltip-root': {
-                  backgroundColor: 'background.paper',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: CHART_SPACING.borderRadius.element,
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                },
-              },
-            },
-          },
-        }}
-        legend={showLegend ? { 
-          hidden: false,
-          direction: 'row',
-          position: { vertical: 'bottom', horizontal: 'middle' },
-          padding: 16,
-        } : { hidden: true }}
-        axisHighlight={{ 
-          x: 'line', 
-          y: 'line',
-        }}
-        highlight={{ 
-          highlightScope: {
-            highlighted: 'item',
-            faded: 'global',
-          },
-        }}
-        highlightedItem={highlightedItem}
-        onHighlightChange={(item) => setHighlightedItem(item)}
-        onItemClick={onDataPointClick}
-        slotProps={{
-          scatter: {
-            style: {
-              transition: 'all 0.2s ease-in-out',
-              cursor: 'pointer',
-            },
-          },
-        }}
-        colors={colors || undefined}
-      />
+      <ResponsiveContainer width="100%" height={config.height || CHART_SPACING.heights.standard}>
+        <RechartsScatterChart margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
+          {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />}
+
+          <XAxis
+            dataKey="x"
+            type="number"
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.xAxisLabel || data.xAxis?.label}
+          />
+          <YAxis
+            dataKey="y"
+            type="number"
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.yAxisLabel || data.yAxis?.label}
+          />
+          <ZAxis range={[60, 60]} />
+
+          {showTooltip && (
+            <RechartsTooltip
+              cursor={{ strokeDasharray: '3 3' }}
+              contentStyle={{
+                borderRadius: CHART_SPACING.borderRadius.element,
+                border: '1px solid hsl(var(--border))',
+                background: 'hsl(var(--card))',
+              }}
+            />
+          )}
+
+          {showLegend && (
+            <RechartsLegend verticalAlign="bottom" height={36} wrapperStyle={{ paddingTop: 16 }} />
+          )}
+
+          {resolvedSeries.map((series, index) => (
+            <Scatter
+              key={`scatter-adv-${index}`}
+              name={series.label}
+              data={series.data}
+              fill={series.color}
+              isAnimationActive={false}
+              onClick={(payload: unknown) => onDataPointClick?.(payload)}
+            />
+          ))}
+        </RechartsScatterChart>
+      </ResponsiveContainer>
     </ChartWrapper>
   );
 });

@@ -48,6 +48,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const fetchUser = async () => {
+      if (!supabase) return;
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setCurrentUser(user);
@@ -79,11 +80,20 @@ export default function ProfilePage() {
       toast({ title: "Error", description: "User not found.", variant: "destructive" });
       return;
     }
+    if (!supabase) {
+      toast({ title: "Service Unavailable", description: "Authentication service is not configured.", variant: "destructive" });
+      return;
+    }
     setIsSavingProfile(true);
 
     let newAvatarUrl = currentUser.user_metadata?.avatar_url;
 
     if (avatarFile) {
+      if (!supabase) {
+        toast({ title: "Service Unavailable", description: "Storage service is not available.", variant: "destructive" });
+        setIsSavingProfile(false);
+        return;
+      }
       const filePath = `public/${currentUser.id}-${Date.now()}-${avatarFile.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('avatars') // Ensure this bucket exists and is public or has RLS for reads
@@ -153,10 +163,15 @@ export default function ProfilePage() {
 
 
   return (
-    <div className="space-y-6 sm:space-y-8 lg:space-y-10 xl:space-y-12">
-      <div>
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-headline font-bold text-foreground">Profile &amp; Settings</h1>
-        <p className="text-sm sm:text-base lg:text-lg text-muted-foreground mt-1">Manage your account information, preferences, and security settings.</p>
+    <div className="space-y-6 sm:space-y-8">
+      <div className="space-y-1">
+        <h1 className="text-2xl lg:text-3xl font-semibold text-foreground flex items-center gap-2">
+          <User className="h-6 w-6" />
+          Profile &amp; Settings
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Manage your account information, preferences, and security settings.
+        </p>
       </div>
 
       <Tabs defaultValue="profile" className="w-full">

@@ -387,7 +387,16 @@ export function DataGenerationClient() {
                   }
                 }
               } else if (parsedData.type === 'error') {
-                throw new Error(parsedData.message || parsedData.error || 'Unknown error occurred');
+                // Treat as non-fatal to avoid aborting the entire stream on recoverable errors
+                const msg = parsedData.message || parsedData.error || 'An issue occurred during generation';
+                console.warn('[Client] Non-fatal error event:', msg);
+                toast({
+                  title: 'Generation warning',
+                  description: msg,
+                  variant: 'destructive',
+                });
+                // Continue processing subsequent events
+                continue;
               }
             } catch (parseError) {
               console.error('Error parsing SSE data:', parseError, 'Line:', line);

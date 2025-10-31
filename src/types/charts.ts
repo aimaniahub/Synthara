@@ -61,6 +61,8 @@ export interface ChartConfig {
   showTooltip?: boolean;
   showGrid?: boolean;
   showAxis?: boolean;
+  xAxisLabel?: string;
+  yAxisLabel?: string;
   margin?: {
     top?: number;
     right?: number;
@@ -126,6 +128,8 @@ export interface ChartProps {
   loading?: boolean;
   error?: string | null;
   onDataPointClick?: (data: any) => void;
+  metrics?: string[];
+  onDataPointHover?: (data: any) => void;
 }
 
 // Chart component props

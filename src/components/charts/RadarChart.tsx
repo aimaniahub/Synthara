@@ -12,6 +12,7 @@ export function RadarChart({
   error = null,
   onDataPointClick,
   onDataPointHover,
+  ...props
 }: RadarProps) {
   const {
     showLegend = true,
@@ -77,6 +78,7 @@ export function RadarChart({
       error={error}
       title={config.title}
       description={config.description}
+      {...props}
     >
       <div className="w-full h-full relative">
         <svg viewBox="0 0 1 1" className="w-full h-full">

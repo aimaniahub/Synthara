@@ -3,7 +3,7 @@
 import React from 'react';
 import { ChartWrapper } from './ChartWrapper';
 import { TreemapProps } from '@/types/charts';
-import { getChartColor } from '@/lib/mui-theme-adapter';
+import { getPaletteColor } from '@/lib/chart-gradients';
 
 interface TreemapNode {
   id: string;
@@ -24,7 +24,7 @@ export function TreemapChart({
   loading = false,
   error = null,
   onDataPointClick,
-  onDataPointHover,
+  ...props
 }: TreemapProps) {
   const {
     showLegend = true,
@@ -105,7 +105,7 @@ export function TreemapChart({
 
     const nodes = data.data.map((item, index) => ({
       ...item,
-      color: item.color || colors?.[index] || getChartColor(index),
+      color: item.color || colors?.[index] || getPaletteColor(index, 'blueberryTwilight'),
     }));
 
     return calculateTreemapLayout(nodes, 1, 1); // Normalized coordinates
@@ -132,6 +132,7 @@ export function TreemapChart({
       error={error}
       title={config.title}
       description={config.description}
+      {...props}
     >
       <div className="w-full h-full relative">
         <svg viewBox="0 0 1 1" className="w-full h-full">
@@ -147,17 +148,16 @@ export function TreemapChart({
                 strokeWidth="0.002"
                 className="cursor-pointer hover:opacity-80 transition-opacity"
                 onClick={() => onDataPointClick?.(node)}
-                onMouseEnter={() => onDataPointHover?.(node)}
               />
               
               {/* Label */}
-              {node.width > 0.1 && node.height > 0.05 && (
+              {(node.width ?? 0) > 0.1 && (node.height ?? 0) > 0.05 && (
                 <text
                   x={node.x! + node.width! / 2}
                   y={node.y! + node.height! / 2}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={Math.min(node.width! * 20, node.height! * 20, 0.03)}
+                  fontSize={Math.min((node.width || 0) * 20, (node.height || 0) * 20, 0.03)}
                   fill="white"
                   className="pointer-events-none"
                   style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}
@@ -167,13 +167,13 @@ export function TreemapChart({
               )}
               
               {/* Value */}
-              {node.width > 0.15 && node.height > 0.08 && (
+              {(node.width ?? 0) > 0.15 && (node.height ?? 0) > 0.08 && (
                 <text
                   x={node.x! + node.width! / 2}
                   y={node.y! + node.height! / 2 + 0.02}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={Math.min(node.width! * 15, node.height! * 15, 0.02)}
+                  fontSize={Math.min((node.width || 0) * 15, (node.height || 0) * 15, 0.02)}
                   fill="white"
                   className="pointer-events-none"
                   style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}

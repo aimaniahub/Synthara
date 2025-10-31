@@ -10,11 +10,25 @@ export function createSupabaseBrowserClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || typeof supabaseUrl !== 'string' || supabaseUrl.trim() === '' || supabaseUrl === 'YOUR_SUPABASE_URL_HERE') {
+  const placeholderUrls = ['YOUR_SUPABASE_URL_HERE', 'your_supabase_project_url_here'];
+  const placeholderKeys = ['YOUR_SUPABASE_ANON_KEY_HERE', 'your_supabase_anon_key_here'];
+
+  if (
+    !supabaseUrl ||
+    typeof supabaseUrl !== 'string' ||
+    supabaseUrl.trim() === '' ||
+    placeholderUrls.includes(supabaseUrl) ||
+    !/^https?:\/\/[a-z0-9-]+\.supabase\.co/.test(supabaseUrl)
+  ) {
     console.warn('[Supabase Client] NEXT_PUBLIC_SUPABASE_URL is not properly configured');
     return null;
   }
-  if (!supabaseAnonKey || typeof supabaseAnonKey !== 'string' || supabaseAnonKey.trim() === '' || supabaseAnonKey === 'YOUR_SUPABASE_ANON_KEY_HERE') {
+  if (
+    !supabaseAnonKey ||
+    typeof supabaseAnonKey !== 'string' ||
+    supabaseAnonKey.trim() === '' ||
+    placeholderKeys.includes(supabaseAnonKey)
+  ) {
     console.warn('[Supabase Client] NEXT_PUBLIC_SUPABASE_ANON_KEY is not properly configured');
     return null;
   }

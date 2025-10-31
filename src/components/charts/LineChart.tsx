@@ -1,20 +1,27 @@
 'use client';
 
-import React, { useState, forwardRef } from 'react';
-import { LineChart as MuiLineChart } from '@mui/x-charts/LineChart';
+import React, { useMemo, forwardRef } from 'react';
+import {
+  LineChart as RechartsLineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer,
+} from 'recharts';
 import { ChartWrapper, ChartWrapperRef } from './ChartWrapper';
 import { LineChartProps } from '@/types/charts';
-import { getChartColor } from '@/lib/mui-theme-adapter';
-import { CHART_GRADIENTS, GradientDef, HIGHLIGHT_CONFIG, CHART_SPACING } from '@/lib/chart-gradients';
+import { CHART_SPACING, getPaletteColor } from '@/lib/chart-gradients';
 
-export const LineChart = forwardRef<ChartWrapperRef, LineChartProps>(({
+export const LineChart = forwardRef<ChartWrapperRef, LineChartProps>(({ 
   data,
   config = {},
   className = '',
   loading = false,
   error = null,
   onDataPointClick,
-  onDataPointHover,
   ...props
 }, ref) => {
   const {
@@ -25,57 +32,48 @@ export const LineChart = forwardRef<ChartWrapperRef, LineChartProps>(({
     colors,
   } = config;
 
-  // State for highlighting
-  const [highlightedItem, setHighlightedItem] = useState<{ seriesId: string; dataIndex: number } | null>(null);
-
-  // Transform data for MUI X Charts with gradients
-  const chartData = React.useMemo(() => {
-    if (!data?.series || data.series.length === 0) return null;
-
-    return data.series.map((series, index) => {
-      const baseColor = series.color || colors?.[index] || getChartColor(index, 'blueberryTwilight');
-      
-      return {
-        data: Array.isArray(series.data) ? series.data : [],
-        label: series.label || `Series ${index + 1}`,
-        color: baseColor,
-        curve: series.curve || 'linear',
-        id: `series-${index}`,
-        area: series.area || false,
-        areaOpacity: series.areaOpacity || 0.1,
-      };
-    });
-  }, [data, colors]);
-
-  // Generate gradient definitions for area fills
-  const gradientDefs = React.useMemo(() => {
-    if (!chartData) return null;
-    
-    return (
-      <defs>
-        {chartData.map((series, index) => {
-          if (series.area) {
-            const gradient = CHART_GRADIENTS.areaVertical(series.color, series.areaOpacity || 0.1, index);
-            return <GradientDef key={gradient.id} gradient={gradient} />;
-          }
-          return null;
-        }).filter(Boolean)}
-      </defs>
-    );
-  }, [chartData]);
-
-  const xAxisData = React.useMemo(() => {
+  const xValues = useMemo(() => {
     if (data?.xAxis?.data && Array.isArray(data.xAxis.data)) {
       return data.xAxis.data;
     }
-    // Generate default labels if not provided
-    if (chartData && chartData[0]?.data && Array.isArray(chartData[0].data)) {
-      return chartData[0].data.map((_, index) => index);
+    if (data?.series?.[0]?.data) {
+      return data.series[0].data.map((_, idx) => idx);
     }
     return [];
-  }, [data, chartData]);
+  }, [data]);
 
-  if (!chartData || chartData.length === 0) {
+  const chartData = useMemo(() => {
+    if (!xValues.length) return [];
+
+    return xValues.map((x, index) => {
+      const point: Record<string, number | string> = {
+        x,
+        label: typeof x === 'number' ? index : String(x),
+      };
+
+      data?.series?.forEach((series, sIndex) => {
+        const value = Array.isArray(series.data) ? series.data[index] : undefined;
+        if (value !== undefined) {
+          point[`series_${sIndex}`] = value;
+        }
+      });
+
+      return point;
+    });
+  }, [data, xValues]);
+
+  const resolvedSeries = useMemo(() => {
+    return data?.series?.map((series, index) => ({
+      key: `series_${index}`,
+      label: series.label || `Series ${index + 1}`,
+      color: series.color || colors?.[index] || getPaletteColor(index, 'blueberryTwilight'),
+      strokeWidth: 3,
+      dot: { r: 3 },
+      type: series.curve || 'linear',
+    })) ?? [];
+  }, [data, colors]);
+
+  if (!resolvedSeries.length || !chartData.length) {
     return (
       <ChartWrapper
         config={config}
@@ -97,105 +95,67 @@ export const LineChart = forwardRef<ChartWrapperRef, LineChartProps>(({
       error={error}
       title={config.title}
       description={config.description}
-      chartType="line"
       {...props}
     >
-      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-        {gradientDefs}
-      </svg>
-      <MuiLineChart
-        series={chartData.map(series => ({
-          data: series.data,
-          label: series.label,
-          color: series.color,
-          curve: series.curve,
-          id: series.id,
-          area: series.area,
-          areaOpacity: series.areaOpacity,
-        }))}
-        xAxis={[
-          {
-            data: xAxisData,
-            scaleType: data.xAxis?.scaleType || 'linear',
-            label: data.xAxis?.label,
-            labelStyle: {
-              fontSize: '0.875rem',
-              fontWeight: 500,
-            },
-            tickLabelStyle: {
-              fontSize: '0.75rem',
-            },
-          },
-        ]}
-        yAxis={[
-          {
-            label: data.yAxis?.label,
-            labelStyle: {
-              fontSize: '0.875rem',
-              fontWeight: 500,
-            },
-            tickLabelStyle: {
-              fontSize: '0.75rem',
-            },
-          },
-        ]}
-        height={config.height || CHART_SPACING.heights.standard}
-        grid={{ 
-          vertical: showGrid, 
-          horizontal: showGrid,
-          verticalSubGrid: false,
-          horizontalSubGrid: false,
-        }}
-        tooltip={{ 
-          trigger: showTooltip ? 'item' : 'none',
-          placement: 'top',
-          slotProps: {
-            popper: {
-              sx: {
-                '& .MuiChartsTooltip-root': {
-                  backgroundColor: 'background.paper',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: CHART_SPACING.borderRadius.element,
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                },
-              },
-            },
-          },
-        }}
-        legend={showLegend ? { 
-          hidden: false,
-          direction: 'row',
-          position: { vertical: 'bottom', horizontal: 'middle' },
-          padding: 16,
-        } : { hidden: true }}
-        axisHighlight={{ 
-          x: 'line', 
-          y: 'line',
-        }}
-        highlight={{ 
-          highlightScope: {
-            highlighted: 'item',
-            faded: 'global',
-          },
-        }}
-        highlightedItem={highlightedItem}
-        onHighlightChange={(item) => setHighlightedItem(item)}
-        onItemClick={onDataPointClick}
-        slotProps={{
-          line: {
-            style: {
-              transition: 'all 0.2s ease-in-out',
-            },
-          },
-          area: {
-            style: {
-              transition: 'all 0.2s ease-in-out',
-            },
-          },
-        }}
-        colors={colors || undefined}
-      />
+      <ResponsiveContainer width="100%" height={config.height || CHART_SPACING.heights.standard}>
+        <RechartsLineChart data={chartData} margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
+          {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />}
+
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.xAxisLabel}
+          />
+
+          <YAxis
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.yAxisLabel}
+          />
+
+          {showTooltip && (
+            <RechartsTooltip
+              cursor={{ stroke: 'hsl(var(--border))', strokeWidth: 1 }}
+              contentStyle={{
+                borderRadius: CHART_SPACING.borderRadius.element,
+                border: '1px solid hsl(var(--border))',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                background: 'hsl(var(--card))',
+              }}
+            />
+          )}
+
+          {showLegend && (
+            <RechartsLegend
+              verticalAlign="bottom"
+              height={36}
+              wrapperStyle={{ paddingTop: 16 }}
+            />
+          )}
+
+          {resolvedSeries.map(series => (
+            <Line
+              key={series.key}
+              type={series.type as any}
+              dataKey={series.key}
+              name={series.label}
+              stroke={series.color}
+              strokeWidth={series.strokeWidth}
+              dot={series.dot}
+              activeDot={{ r: 5 }}
+              isAnimationActive
+              onClick={(payload: unknown) => {
+                if (onDataPointClick) {
+                  onDataPointClick(payload);
+                }
+              }}
+            />
+          ))}
+        </RechartsLineChart>
+      </ResponsiveContainer>
     </ChartWrapper>
   );
 });

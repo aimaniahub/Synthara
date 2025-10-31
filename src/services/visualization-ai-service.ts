@@ -218,6 +218,7 @@ export class VisualizationAIService {
     const recommendations: AIVisualizationRecommendation[] = [];
     let chartId = 0;
 
+    const dateColumns = profile.columns.filter(col => col.type === 'date').map(c => c.name);
     // 1. Distribution charts for numeric columns
     const numericColumns = profile.columns.filter(col => col.type === 'numeric');
     for (const col of numericColumns.slice(0, 3)) {
@@ -240,6 +241,8 @@ export class VisualizationAIService {
           showLegend: false,
           showTooltip: true,
           showGrid: true,
+          xAxisLabel: col.name,
+          yAxisLabel: 'Count',
         }
       });
     }
@@ -250,6 +253,8 @@ export class VisualizationAIService {
       if (recommendations.length >= maxCharts) break;
       
       const uniqueCount = col.unique || 0;
+      // Skip overly granular categories
+      if (uniqueCount > 50) continue;
       const chartType: ChartType = uniqueCount <= 8 ? 'pie' : 'bar';
       
       recommendations.push({
@@ -268,8 +273,42 @@ export class VisualizationAIService {
           height: 300,
           showLegend: true,
           showTooltip: true,
+          xAxisLabel: chartType === 'bar' ? col.name : undefined,
+          yAxisLabel: chartType === 'bar' ? 'Count' : undefined,
         }
       });
+    }
+
+    // 2b. Time series if temporal data exists
+    if (characteristics.hasTemporalData && dateColumns.length > 0 && numericColumns.length > 0) {
+      // pick first date column and a numeric column with highest variance
+      const timeCol = dateColumns[0];
+      const numericWithStats = numericColumns
+        .map(c => ({ name: c.name, std: c.std ?? 0, mean: c.mean ?? 0 }))
+        .sort((a, b) => (b.std || 0) - (a.std || 0));
+      const valueCol = (numericWithStats[0]?.name) || numericColumns[0].name;
+      if (recommendations.length < maxCharts) {
+        recommendations.push({
+          id: `ts-${chartId++}`,
+          chartType: 'timeseries',
+          title: `${valueCol} over Time`,
+          description: `Trend of ${valueCol} by ${timeCol}`,
+          rationale: `Temporal data detected with numeric variable ${valueCol}`,
+          priority: 9,
+          confidence: 0.85,
+          dataColumns: [timeCol, valueCol],
+          colorScheme: SEQUENTIAL_PALETTES.green,
+          insightType: 'trend',
+          config: {
+            title: `${valueCol} over Time`,
+            height: 340,
+            showLegend: false,
+            showTooltip: true,
+            xAxisLabel: timeCol,
+            yAxisLabel: valueCol,
+          }
+        });
+      }
     }
 
     // 3. Correlation heatmap if multiple numeric columns
@@ -291,6 +330,8 @@ export class VisualizationAIService {
             height: 400,
             showLegend: true,
             showTooltip: true,
+            xAxisLabel: 'Variables',
+            yAxisLabel: 'Variables',
           }
         });
       }
@@ -317,6 +358,8 @@ export class VisualizationAIService {
             showLegend: false,
             showTooltip: true,
             showGrid: true,
+            xAxisLabel: strongestPair.x,
+            yAxisLabel: strongestPair.y,
           }
         });
       }
@@ -334,13 +377,15 @@ export class VisualizationAIService {
           priority: 6,
           confidence: 0.9,
           dataColumns: profile.missingDataPattern.map(item => item.column),
-          colorScheme: SEMANTIC_COLORS.quality,
+          colorScheme: SEQUENTIAL_PALETTES.blue,
           insightType: 'pattern',
           config: {
             title: 'Missing Data by Column',
             height: 300,
             showLegend: false,
             showTooltip: true,
+            xAxisLabel: 'Column',
+            yAxisLabel: 'Missing %',
           }
         });
       }
@@ -361,13 +406,15 @@ export class VisualizationAIService {
           priority: 7,
           confidence: 0.8,
           dataColumns: [col.name],
-          colorScheme: SEMANTIC_COLORS.quality,
+          colorScheme: SEQUENTIAL_PALETTES.red,
           insightType: 'anomaly',
           config: {
             title: `${col.name} Box Plot`,
             height: 300,
             showLegend: false,
             showTooltip: true,
+            xAxisLabel: col.name,
+            yAxisLabel: 'Value',
           }
         });
       }

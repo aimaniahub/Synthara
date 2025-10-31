@@ -16,31 +16,31 @@ const stageConfig = {
   structure: {
     icon: Database,
     label: 'Analyzing data structure',
-    color: 'bg-blue-500',
+    color: 'bg-muted',
     description: 'Detecting data types and column structure'
   },
   statistics: {
     icon: BarChart3,
     label: 'Computing statistics',
-    color: 'bg-green-500',
+    color: 'bg-muted',
     description: 'Calculating statistical measures and correlations'
   },
   visualizations: {
     icon: BarChart3,
     label: 'Generating visualizations',
-    color: 'bg-purple-500',
+    color: 'bg-muted',
     description: 'Creating charts and data visualizations'
   },
   'ai-insights': {
     icon: Brain,
     label: 'Creating AI insights',
-    color: 'bg-orange-500',
+    color: 'bg-muted',
     description: 'Generating AI-powered analysis and recommendations'
   },
   complete: {
     icon: CheckCircle,
     label: 'Analysis complete',
-    color: 'bg-green-600',
+    color: 'bg-muted',
     description: 'All analysis components have been generated'
   }
 };
@@ -56,7 +56,7 @@ export function AnalysisProgress({ progress, className }: AnalysisProgressProps)
         <div className="space-y-4">
           {/* Header */}
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${currentStage.color} text-white`}>
+            <div className={`p-2 rounded-lg ${currentStage.color}`}>
               {isComplete ? (
                 <IconComponent className="h-5 w-5" />
               ) : (
@@ -96,15 +96,12 @@ export function AnalysisProgress({ progress, className }: AnalysisProgressProps)
               return (
                 <div
                   key={stage}
-                  className={`flex flex-col items-center gap-2 ${
-                    isActive ? 'text-foreground' : 
-                    isCompleted ? 'text-green-600' : 'text-muted-foreground'
-                  }`}
+                  className={`flex flex-col items-center gap-2 ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}
                 >
                   <div className={`p-2 rounded-full ${
-                    isActive ? config.color + ' text-white' :
-                    isCompleted ? 'bg-green-100 text-green-600' :
-                    'bg-muted text-muted-foreground'
+                    isActive ? config.color :
+                    isCompleted ? 'bg-muted' :
+                    'bg-muted'
                   }`}>
                     {isCompleted ? (
                       <CheckCircle className="h-4 w-4" />

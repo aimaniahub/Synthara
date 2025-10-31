@@ -1,10 +1,19 @@
 'use client';
 
-import React from 'react';
-import { BarChart as MuiBarChart } from '@mui/x-charts/BarChart';
+import React, { useMemo } from 'react';
+import {
+  BarChart as RechartsBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer,
+} from 'recharts';
 import { ChartWrapper } from './ChartWrapper';
 import { MissingDataChartProps } from '@/types/charts';
-import { getChartColor, getChartColorByName } from '@/lib/mui-theme-adapter';
+import { CHART_SPACING, getPaletteColor } from '@/lib/chart-gradients';
 
 export function MissingDataChart({
   data,
@@ -13,7 +22,7 @@ export function MissingDataChart({
   loading = false,
   error = null,
   onDataPointClick,
-  onDataPointHover,
+  ...props
 }: MissingDataChartProps) {
   const {
     showLegend = true,
@@ -23,27 +32,16 @@ export function MissingDataChart({
     colors,
   } = config;
 
-  // Transform missing data for MUI X Charts
-  const chartData = React.useMemo(() => {
-    if (!data || data.length === 0) return null;
+  const chartData = useMemo(() => {
+    if (!data || data.length === 0) return [];
 
-    const columnNames = data.map(item => item.column);
-    const missingPercentages = data.map(item => item.missingPercentage);
-
-    return [
-      {
-        data: missingPercentages,
-        label: 'Missing Data %',
-      },
-    ];
-  }, [data, colors]);
-
-  const xAxisData = React.useMemo(() => {
-    if (!data) return [];
-    return data.map(item => item.column);
+    return data.map(item => ({
+      column: item.column,
+      percentage: item.missingPercentage,
+    }));
   }, [data]);
 
-  if (!chartData || chartData.length === 0) {
+  if (!chartData.length) {
     return (
       <ChartWrapper
         config={config}
@@ -56,6 +54,8 @@ export function MissingDataChart({
     );
   }
 
+  const barColor = colors?.[0] || getPaletteColor(0, 'blueberryTwilight');
+
   return (
     <ChartWrapper
       config={config}
@@ -64,28 +64,59 @@ export function MissingDataChart({
       error={error}
       title={config.title}
       description={config.description}
+      {...props}
     >
-      <MuiBarChart
-        series={chartData}
-        xAxis={[
-          {
-            data: xAxisData,
-            scaleType: 'band',
-          },
-        ]}
-        height={config.height || 300}
-        grid={{ vertical: showGrid, horizontal: showGrid }}
-        tooltip={{ 
-          trigger: showTooltip ? 'item' : 'none',
-          formatter: (value, name, props) => [
-            `${value?.toFixed(1)}%`,
-            'Missing Data'
-          ]
-        }}
-        legend={showLegend ? { hidden: false } : { hidden: true }}
-        axisHighlight={{ x: 'line', y: 'line' }}
-        onItemClick={onDataPointClick}
-      />
+      <ResponsiveContainer width="100%" height={config.height || CHART_SPACING.heights.standard}>
+        <RechartsBarChart data={chartData} margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
+          {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />}
+
+          <XAxis
+            dataKey="column"
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.xAxisLabel || 'Column'}
+          />
+
+          <YAxis
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.yAxisLabel || 'Missing %'}
+          />
+
+          {showTooltip && (
+            <RechartsTooltip
+              cursor={{ fill: 'hsl(var(--muted))', opacity: 0.1 }}
+              contentStyle={{
+                borderRadius: CHART_SPACING.borderRadius.element,
+                border: '1px solid hsl(var(--border))',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                background: 'hsl(var(--card))',
+              }}
+              formatter={(value: any) => [`${value.toFixed(1)}%`, 'Missing Data']}
+            />
+          )}
+
+          {showLegend && (
+            <RechartsLegend verticalAlign="bottom" height={36} wrapperStyle={{ paddingTop: 16 }} />
+          )}
+
+          <Bar
+            dataKey="percentage"
+            name="Missing Data %"
+            fill={barColor}
+            radius={[4, 4, 0, 0]}
+            maxBarSize={60}
+            isAnimationActive
+            onClick={(payload: unknown) => {
+              if (onDataPointClick) {
+                onDataPointClick(payload);
+              }
+            }}
+          />
+        </RechartsBarChart>
+      </ResponsiveContainer>
     </ChartWrapper>
   );
 }

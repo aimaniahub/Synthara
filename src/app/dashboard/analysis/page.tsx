@@ -123,14 +123,14 @@ export default function DataAnalysisPage() {
   const hasAnalysis = analysisResult !== null;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <BarChart3 className="h-8 w-8" />
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl lg:text-3xl font-semibold text-foreground flex items-center gap-2">
+          <BarChart3 className="h-6 w-6" />
           Data Analysis
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Analyze your datasets with AI-powered insights and interactive visualizations
         </p>
       </div>
@@ -227,25 +227,25 @@ export default function DataAnalysisPage() {
                       <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                           <div className="text-center p-4 border rounded-lg">
-                            <div className="text-2xl font-bold text-blue-600">
+                            <div className="text-2xl font-bold text-foreground">
                               {analysisResult.profile.numericColumns.length}
                             </div>
                             <div className="text-sm text-muted-foreground">Numeric Columns</div>
                           </div>
                           <div className="text-center p-4 border rounded-lg">
-                            <div className="text-2xl font-bold text-green-600">
+                            <div className="text-2xl font-bold text-foreground">
                               {analysisResult.profile.categoricalColumns.length}
                             </div>
                             <div className="text-sm text-muted-foreground">Categorical Columns</div>
                           </div>
                           <div className="text-center p-4 border rounded-lg">
-                            <div className="text-2xl font-bold text-purple-600">
+                            <div className="text-2xl font-bold text-foreground">
                               {analysisResult.profile.missingDataPattern.length}
                             </div>
                             <div className="text-sm text-muted-foreground">Missing Data Columns</div>
                           </div>
                           <div className="text-center p-4 border rounded-lg">
-                            <div className="text-2xl font-bold text-orange-600">
+                            <div className="text-2xl font-bold text-foreground">
                               {analysisResult.profile.overallQuality.toFixed(1)}%
                             </div>
                             <div className="text-sm text-muted-foreground">Data Quality</div>
@@ -271,18 +271,13 @@ export default function DataAnalysisPage() {
                                   <tr key={index} className="border-t">
                                     <td className="px-4 py-2 font-medium">{col.name}</td>
                                     <td className="px-4 py-2">
-                                      <span className={`px-2 py-1 rounded text-xs ${
-                                        col.type === 'numeric' ? 'bg-blue-100 text-blue-800' :
-                                        col.type === 'categorical' ? 'bg-green-100 text-green-800' :
-                                        col.type === 'date' ? 'bg-purple-100 text-purple-800' :
-                                        'bg-gray-100 text-gray-800'
-                                      }`}>
+                                      <span className={`px-2 py-1 rounded text-xs bg-muted text-foreground`}>
                                         {col.type}
                                       </span>
                                     </td>
                                     <td className="px-4 py-2">{col.count.toLocaleString()}</td>
                                     <td className="px-4 py-2">
-                                      <span className={col.missingPercentage > 20 ? 'text-red-600' : 'text-green-600'}>
+                                      <span className={'text-muted-foreground'}>
                                         {col.missingPercentage.toFixed(1)}%
                                       </span>
                                     </td>

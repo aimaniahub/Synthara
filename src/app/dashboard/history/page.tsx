@@ -80,9 +80,12 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <div>
-        <h1 className="text-xl sm:text-2xl lg:text-3xl font-headline font-bold text-foreground">History &amp; Activity Logs</h1>
-        <p className="text-sm sm:text-base text-muted-foreground">Review your past activities, generated datasets, and trained models.</p>
+      <div className="space-y-1">
+        <h1 className="text-2xl lg:text-3xl font-semibold text-foreground flex items-center gap-2">
+          <CalendarDays className="h-6 w-6" />
+          History &amp; Activity Logs
+        </h1>
+        <p className="text-sm text-muted-foreground">Review your past activities, generated datasets, and trained models.</p>
       </div>
 
       <Card className="shadow-xl">

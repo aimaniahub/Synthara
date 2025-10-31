@@ -1,10 +1,19 @@
 'use client';
 
-import React from 'react';
-import { BarChart as MuiBarChart } from '@mui/x-charts/BarChart';
+import React, { useMemo } from 'react';
+import {
+  BarChart as RechartsBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer,
+} from 'recharts';
 import { ChartWrapper } from './ChartWrapper';
 import { StackedBarProps } from '@/types/charts';
-import { getChartColor } from '@/lib/mui-theme-adapter';
+import { CHART_SPACING, getPaletteColor } from '@/lib/chart-gradients';
 
 export function StackedBarChart({
   data,
@@ -13,7 +22,7 @@ export function StackedBarChart({
   loading = false,
   error = null,
   onDataPointClick,
-  onDataPointHover,
+  ...props
 }: StackedBarProps) {
   const {
     showLegend = true,
@@ -23,25 +32,41 @@ export function StackedBarChart({
     colors,
   } = config;
 
-  // Transform data for MUI X Charts
-  const chartData = React.useMemo(() => {
-    if (!data?.series || data.series.length === 0) return null;
-
-    return data.series.map((series, index) => ({
-      data: series.data,
-      label: series.label || `Series ${index + 1}`,
-      color: series.color || colors?.[index] || getChartColor(index),
-    }));
-  }, [data, colors]);
-
-  const xAxisData = React.useMemo(() => {
-    if (data?.xAxis?.data) {
+  const xValues = useMemo(() => {
+    if (data?.xAxis?.data && Array.isArray(data.xAxis.data)) {
       return data.xAxis.data;
     }
     return [];
   }, [data]);
 
-  if (!chartData || chartData.length === 0) {
+  const chartData = useMemo(() => {
+    if (!xValues.length) return [];
+
+    return xValues.map((x, index) => {
+      const point: Record<string, number | string> = {
+        label: String(x),
+      };
+
+      data?.series?.forEach((series, sIndex) => {
+        const value = Array.isArray(series.data) ? series.data[index] : undefined;
+        if (value !== undefined) {
+          point[`series_${sIndex}`] = value;
+        }
+      });
+
+      return point;
+    });
+  }, [data, xValues]);
+
+  const resolvedSeries = useMemo(() => {
+    return data?.series?.map((series, index) => ({
+      key: `series_${index}`,
+      label: series.label || `Series ${index + 1}`,
+      color: series.color || colors?.[index] || getPaletteColor(index, 'blueberryTwilight'),
+    })) ?? [];
+  }, [data, colors]);
+
+  if (!resolvedSeries.length || !chartData.length) {
     return (
       <ChartWrapper
         config={config}
@@ -62,22 +87,61 @@ export function StackedBarChart({
       error={error}
       title={config.title}
       description={config.description}
+      {...props}
     >
-      <MuiBarChart
-        series={chartData}
-        xAxis={[{
-          data: xAxisData,
-          scaleType: data.xAxis?.scaleType || 'band',
-        }]}
-        height={config.height || 300}
-        grid={{ vertical: showGrid, horizontal: showGrid }}
-        tooltip={{ trigger: showTooltip ? 'item' : 'none' }}
-        legend={showLegend ? { hidden: false } : { hidden: true }}
-        axisHighlight={{ x: 'line', y: 'line' }}
-        onItemClick={onDataPointClick}
-        layout="horizontal"
-        stackOffset="expand" // This makes it a stacked bar chart
-      />
+      <ResponsiveContainer width="100%" height={config.height || CHART_SPACING.heights.standard}>
+        <RechartsBarChart data={chartData} margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
+          {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.6} />}
+
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.xAxisLabel}
+          />
+
+          <YAxis
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            tickLine={false}
+            axisLine={showAxis ? { stroke: 'hsl(var(--border))' } : false}
+            label={config.yAxisLabel}
+          />
+
+          {showTooltip && (
+            <RechartsTooltip
+              cursor={{ fill: 'hsl(var(--muted))', opacity: 0.1 }}
+              contentStyle={{
+                borderRadius: CHART_SPACING.borderRadius.element,
+                border: '1px solid hsl(var(--border))',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                background: 'hsl(var(--card))',
+              }}
+            />
+          )}
+
+          {showLegend && (
+            <RechartsLegend verticalAlign="bottom" height={36} wrapperStyle={{ paddingTop: 16 }} />
+          )}
+
+          {resolvedSeries.map(series => (
+            <Bar
+              key={series.key}
+              dataKey={series.key}
+              name={series.label}
+              fill={series.color}
+              stackId="a"
+              radius={[4, 4, 0, 0]}
+              isAnimationActive
+              onClick={(payload: unknown) => {
+                if (onDataPointClick) {
+                  onDataPointClick(payload);
+                }
+              }}
+            />
+          ))}
+        </RechartsBarChart>
+      </ResponsiveContainer>
     </ChartWrapper>
   );
 }

@@ -10,9 +10,12 @@ import { Settings as SettingsIcon } from 'lucide-react';
 export default function SettingsPage() {
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-headline font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground">General application settings and configurations.</p>
+      <div className="space-y-1">
+        <h1 className="text-2xl lg:text-3xl font-semibold text-foreground flex items-center gap-2">
+          <SettingsIcon className="h-6 w-6" />
+          Settings
+        </h1>
+        <p className="text-sm text-muted-foreground">General application settings and configurations.</p>
       </div>
       <Card>
         <CardHeader>

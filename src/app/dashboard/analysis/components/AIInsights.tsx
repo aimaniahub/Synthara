@@ -71,9 +71,7 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
   };
 
   const getQualityColor = (quality: number) => {
-    if (quality >= 80) return 'text-green-600';
-    if (quality >= 60) return 'text-yellow-600';
-    return 'text-red-600';
+    return 'text-foreground';
   };
 
   const getQualityBadgeVariant = (quality: number): "default" | "secondary" | "destructive" | "outline" => {
@@ -164,26 +162,13 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
               <div key={index} className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium">{insight.column}</h4>
-                  <Badge variant={getQualityBadgeVariant(insight.quality)}>
-                    {insight.quality}% quality
+                  <Badge variant={getQualityBadgeVariant(insight.dataQuality)}>
+                    {insight.dataQuality}% quality
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {insight.semanticMeaning}
                 </p>
-                {insight.suggestions.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs font-medium text-muted-foreground">Suggestions:</p>
-                    <ul className="text-xs space-y-1">
-                      {insight.suggestions.map((suggestion, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="text-muted-foreground">•</span>
-                          <span>{suggestion}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
                 {index < columnInsights.length - 1 && <Separator />}
               </div>
             ))}
@@ -228,7 +213,7 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
                 <ul className="space-y-2">
                   {deepInsights.correlations.map((correlation, index) => (
                     <li key={index} className="flex items-start gap-2 text-sm">
-                      <TrendingUp className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <TrendingUp className="h-4 w-4 mt-0.5 flex-shrink-0" />
                       <span>{correlation}</span>
                     </li>
                   ))}
@@ -253,7 +238,7 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
                 <ul className="space-y-2">
                   {deepInsights.recommendations.map((recommendation, index) => (
                     <li key={index} className="flex items-start gap-2 text-sm">
-                      <Lightbulb className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                      <Lightbulb className="h-4 w-4 mt-0.5 flex-shrink-0" />
                       <span>{recommendation}</span>
                     </li>
                   ))}

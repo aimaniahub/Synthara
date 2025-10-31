@@ -1,10 +1,8 @@
 'use client';
 
 import React from 'react';
-import { BarChart as MuiBarChart } from '@mui/x-charts/BarChart';
 import { ChartWrapper } from './ChartWrapper';
 import { BoxPlotProps } from '@/types/charts';
-import { getChartColor } from '@/lib/mui-theme-adapter';
 
 export function BoxPlotChart({
   data,
@@ -13,6 +11,7 @@ export function BoxPlotChart({
   loading = false,
   error = null,
   onDataPointClick,
+  ...props
 }: BoxPlotProps) {
   const {
     showLegend = true,
@@ -22,29 +21,7 @@ export function BoxPlotChart({
     colors,
   } = config;
 
-  // Transform box plot data for MUI X Charts
-  // Since MUI X Charts doesn't have native box plot, we'll create a custom visualization
-  const chartData = React.useMemo(() => {
-    if (!data) return null;
-
-    // Create a simplified representation using bar chart
-    // We'll show the median as the main bar and add error bars for quartiles
-    const medianValue = data.median;
-    const q1Value = data.q1;
-    const q3Value = data.q3;
-    const minValue = data.min;
-    const maxValue = data.max;
-
-    return [
-      {
-        data: [medianValue],
-        label: 'Median',
-        color: colors?.[0] || getChartColor(0),
-      },
-    ];
-  }, [data, colors]);
-
-  if (!chartData || chartData.length === 0) {
+  if (!data) {
     return (
       <ChartWrapper
         config={config}
@@ -65,6 +42,7 @@ export function BoxPlotChart({
       error={error}
       title={config.title}
       description={config.description}
+      {...props}
     >
       <div className="w-full h-full flex flex-col justify-center items-center space-y-4">
         {/* Custom box plot visualization */}
