@@ -30,7 +30,8 @@ import {
   FileText,
   CheckCircle,
   AlertCircle,
-  Loader2
+  Loader2,
+  Wand2
 } from 'lucide-react';
 
 // Form validation schema
@@ -66,6 +67,8 @@ export function DataGenerationClient() {
   const [progressLabel, setProgressLabel] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [enhancementInfo, setEnhancementInfo] = useState<{ enhancedPrompt: string; reasoning?: string } | null>(null);
   
   const terminalLoggerRef = useRef<any>(null);
 
@@ -79,7 +82,7 @@ export function DataGenerationClient() {
     },
   });
 
-  const { watch, setValue } = form;
+  const { watch, setValue, getValues, trigger } = form;
   const watchedValues = watch();
 
   // Cleanup effect
@@ -91,6 +94,12 @@ export function DataGenerationClient() {
       setProgressLabel('');
     };
   }, []);
+
+  useEffect(() => {
+    if (enhancementInfo && watchedValues.prompt !== enhancementInfo.enhancedPrompt) {
+      setEnhancementInfo(null);
+    }
+  }, [watchedValues.prompt, enhancementInfo]);
 
   // Robust JSON parsing with multiple fallback strategies
   const parseJsonSafely = useCallback((jsonString: string): any => {
@@ -239,6 +248,67 @@ export function DataGenerationClient() {
     
     return completed;
   }, []);
+
+  const handleEnhancePrompt = useCallback(async () => {
+    if (isEnhancing) return;
+
+    const currentPrompt = (getValues('prompt') || '').trim();
+
+    if (!currentPrompt || currentPrompt.length < 5) {
+      toast({
+        title: 'Enter more details',
+        description: 'Provide at least 5 characters so the AI can enhance your prompt.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsEnhancing(true);
+
+      const response = await fetch('/api/enhance-prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: currentPrompt }),
+      });
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.success || !payload.enhancedPrompt) {
+        const errorMessage = payload?.error || `Failed to enhance prompt (status ${response.status})`;
+        throw new Error(errorMessage);
+      }
+
+      setValue('prompt', payload.enhancedPrompt, {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+
+      await trigger('prompt');
+
+      setEnhancementInfo({
+        enhancedPrompt: payload.enhancedPrompt,
+        reasoning: payload.reasoning,
+      });
+
+      toast({
+        title: 'Prompt enhanced',
+        description: 'We refined your data description for better results.',
+      });
+    } catch (error: any) {
+      console.error('Enhance prompt error:', error);
+      toast({
+        title: 'Enhancement failed',
+        description: error?.message || 'Unable to enhance the prompt right now.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsEnhancing(false);
+    }
+  }, [getValues, isEnhancing, setValue, toast, trigger]);
 
   // Handle form submission - live AI generation
   const onSubmit = useCallback(async (data: DataGenerationFormData) => {
@@ -643,6 +713,7 @@ export function DataGenerationClient() {
     setShowTerminal(false);
     setIsGenerating(false);
     setIsSubmitting(false);
+    setEnhancementInfo(null);
   }, [form]);
 
   return (
@@ -675,7 +746,28 @@ export function DataGenerationClient() {
 
             {/* Prompt */}
             <div className="space-y-2">
-              <Label htmlFor="prompt">Data Description</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="prompt">Data Description</Label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleEnhancePrompt}
+                  disabled={isGenerating || isEnhancing || !watchedValues.prompt?.trim()}
+                >
+                  {isEnhancing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Enhancing...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="mr-2 h-4 w-4" />
+                      Enhance with AI
+                    </>
+                  )}
+                </Button>
+              </div>
               <Textarea
                 id="prompt"
                 placeholder="Describe the data you want to generate (e.g., 'Generate a dataset of 100 tech companies with their names, locations, employee counts, and revenue')"
@@ -687,6 +779,19 @@ export function DataGenerationClient() {
                 <p className="text-sm text-destructive">
                   {form.formState.errors.prompt.message}
                 </p>
+              )}
+              {enhancementInfo && (
+                <div className="rounded-md border bg-muted/40 p-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Wand2 className="h-4 w-4 text-primary" />
+                    AI enhancement applied
+                  </div>
+                  {enhancementInfo.reasoning && (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {enhancementInfo.reasoning}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
