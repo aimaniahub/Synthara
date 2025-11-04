@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatasetById } from '@/lib/supabase/actions';
 
+export const runtime = 'nodejs';
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id: datasetId } = await params;
+    const { id: datasetId } = params;
     
     if (!datasetId) {
       return NextResponse.json(
