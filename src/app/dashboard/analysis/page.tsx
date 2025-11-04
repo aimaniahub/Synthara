@@ -1,12 +1,10 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import dynamic from 'next/dynamic';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 
 import { 
   BarChart3, 
@@ -18,10 +16,6 @@ import {
 } from 'lucide-react';
 import { DatasetSelector } from './components/DatasetSelector';
 import { StatisticalSummary } from './components/StatisticalSummary';
-const VisualizationPanel = dynamic(() => import('./components/VisualizationPanel').then(m => m.VisualizationPanel), {
-  ssr: false,
-  loading: () => <Skeleton className="h-64 w-full" />,
-});
 
 import { AIInsights } from './components/AIInsights';
 import { ExportButton } from './components/ExportButton';
@@ -30,19 +24,58 @@ import { AnalysisProgress as AnalysisProgressComponent } from './components/Anal
 
 export default function DataAnalysisPage() {
   const [selectedData, setSelectedData] = useState<Record<string, any>[]>([]);
-  const [datasetMetadata, setDatasetMetadata] = useState<{ name: string; source: 'saved' | 'uploaded' } | null>(null);
+  const [datasetMetadata, setDatasetMetadata] = useState<{ id?: string; name: string; source: 'saved' | 'uploaded' } | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisProgress, setAnalysisProgress] = useState<AnalysisProgress | null>(null);
   const analysisSectionRef = useRef<HTMLDivElement>(null);
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [cleaningMessage, setCleaningMessage] = useState<string | null>(null);
+  const [cleaningError, setCleaningError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'profiling' | 'insights'>('overview');
+  const CACHE_KEY = 'analysis_state_v1';
 
-  const handleDatasetSelect = (data: Record<string, any>[], metadata: { name: string; source: 'saved' | 'uploaded' }) => {
+  useEffect(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? sessionStorage.getItem(CACHE_KEY) : null;
+      if (raw) {
+        const saved = JSON.parse(raw);
+        setSelectedData(saved.selectedData || []);
+        setDatasetMetadata(saved.datasetMetadata || null);
+        setAnalysisResult(saved.analysisResult || null);
+        setActiveTab(saved.activeTab || 'overview');
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try {
+      const payload = JSON.stringify({ selectedData, datasetMetadata, analysisResult, activeTab });
+      if (typeof window !== 'undefined') sessionStorage.setItem(CACHE_KEY, payload);
+    } catch {}
+  }, [selectedData, datasetMetadata, analysisResult, activeTab]);
+
+  const handleResetPage = () => {
+    try {
+      if (typeof window !== 'undefined') sessionStorage.removeItem(CACHE_KEY);
+    } catch {}
+    setSelectedData([]);
+    setDatasetMetadata(null);
+    setAnalysisResult(null);
+    setAnalysisError(null);
+    setAnalysisProgress(null);
+    setActiveTab('overview');
+  };
+
+  const handleDatasetSelect = (data: Record<string, any>[], metadata: { id?: string; name: string; source: 'saved' | 'uploaded' }) => {
     setSelectedData(data);
     setDatasetMetadata(metadata);
     setAnalysisResult(null);
     setAnalysisError(null);
     setAnalysisProgress(null);
+    setActiveTab('overview');
   };
 
   const handleAnalysisStart = async () => {
@@ -65,12 +98,11 @@ export default function DataAnalysisPage() {
     }, 100);
 
     try {
-      // Simulate progressive stages
+      // Simulate progressive stages (visualization stage removed)
       const stages = [
-        { stage: 'structure' as const, percentage: 20, message: 'Analyzing data structure and column types...' },
-        { stage: 'statistics' as const, percentage: 40, message: 'Computing statistical measures and correlations...' },
-        { stage: 'visualizations' as const, percentage: 60, message: 'Generating data visualizations...' },
-        { stage: 'ai-insights' as const, percentage: 80, message: 'Creating AI-powered insights and recommendations...' }
+        { stage: 'structure' as const, percentage: 25, message: 'Analyzing data structure and column types...' },
+        { stage: 'statistics' as const, percentage: 50, message: 'Computing statistical measures and correlations...' },
+        { stage: 'ai-insights' as const, percentage: 75, message: 'Creating AI-powered insights and recommendations...' }
       ];
 
       // Update progress through stages
@@ -122,16 +154,71 @@ export default function DataAnalysisPage() {
   const hasData = selectedData.length > 0;
   const hasAnalysis = analysisResult !== null;
 
+  async function handleCleanFromProfiling() {
+    if (!hasData || !analysisResult) return;
+    setIsCleaning(true);
+    setCleaningError(null);
+    setCleaningMessage('Preparing cleaning plan...');
+
+    try {
+      // Map analysis types to cleaning schema types
+      const schema = analysisResult.profile.columns.map(col => ({
+        name: col.name,
+        type: col.type === 'numeric' ? 'number' as const : 'string' as const,
+      }));
+
+      setCleaningMessage('Cleaning dataset with AI...');
+      const res = await fetch('/api/train/clean', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schema, rows: selectedData })
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok || !payload?.success || !Array.isArray(payload.cleanedRows)) {
+        throw new Error(payload?.error || 'Failed to clean dataset');
+      }
+
+      const cleanedRows: Record<string, any>[] = payload.cleanedRows;
+      const columnsInOrder = analysisResult.profile.columns.map(c => c.name);
+
+      // Update current view to cleaned rows
+      setSelectedData(cleanedRows);
+      setCleaningMessage('Appending cleaned rows to saved dataset...');
+
+      if (datasetMetadata?.source === 'saved' && datasetMetadata?.id) {
+        const appendRes = await fetch('/api/datasets/append-cleaned', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ datasetId: datasetMetadata.id, columns: columnsInOrder, rows: cleanedRows })
+        });
+        const appendPayload = await appendRes.json().catch(() => null);
+        if (!appendRes.ok || !appendPayload?.success) {
+          throw new Error(appendPayload?.error || 'Failed to append cleaned data');
+        }
+      }
+
+      setCleaningMessage('Cleaning completed. You can re-run analysis for updated insights.');
+    } catch (e: any) {
+      setCleaningError(e?.message || 'Cleaning failed');
+      setCleaningMessage(null);
+    } finally {
+      setIsCleaning(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl lg:text-3xl font-semibold text-foreground flex items-center gap-2">
-          <BarChart3 className="h-6 w-6" />
-          Data Analysis
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground flex items-center gap-2">
+            <BarChart3 className="h-6 w-6" />
+            Data Analysis
+          </h1>
+          <Button variant="outline" size="sm" onClick={handleResetPage}>Reset</Button>
+        </div>
         <p className="text-sm text-muted-foreground">
-          Analyze your datasets with AI-powered insights and interactive visualizations
+          Analyze your datasets with AI-powered insights
         </p>
       </div>
 
@@ -188,8 +275,8 @@ export default function DataAnalysisPage() {
               </div>
 
               {/* Tabs */}
-              <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+              <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="overview" className="flex items-center gap-2">
                     <Database className="h-4 w-4" />
                     Overview
@@ -197,10 +284,6 @@ export default function DataAnalysisPage() {
                   <TabsTrigger value="profiling" className="flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
                     Profiling
-                  </TabsTrigger>
-                  <TabsTrigger value="visualizations" className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
-                    Charts
                   </TabsTrigger>
                   <TabsTrigger value="insights" className="flex items-center gap-2">
                     <Brain className="h-4 w-4" />
@@ -225,6 +308,29 @@ export default function DataAnalysisPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
+                        {/* Cleaning recommendation */}
+                        {analysisResult.profile.overallQuality < 95 || analysisResult.profile.missingDataPattern.length > 0 ? (
+                          <Alert>
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              {isCleaning ? (
+                                <div className="flex items-center gap-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>{cleaningMessage || 'Cleaning in progress...'}</span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-3">
+                                  <div>
+                                    Data quality can be improved. We detected missing or inconsistent values.
+                                    {cleaningError ? (
+                                      <div className="text-destructive mt-1 text-sm">{cleaningError}</div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              )}
+                            </AlertDescription>
+                          </Alert>
+                        ) : null}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                           <div className="text-center p-4 border rounded-lg">
                             <div className="text-2xl font-bold text-foreground">
@@ -291,13 +397,6 @@ export default function DataAnalysisPage() {
                       </div>
                     </CardContent>
                   </Card>
-                </TabsContent>
-
-                <TabsContent value="visualizations" className="space-y-6">
-                  <VisualizationPanel 
-                    data={selectedData} 
-                    profile={analysisResult.profile} 
-                  />
                 </TabsContent>
 
                 <TabsContent value="insights" className="space-y-6">

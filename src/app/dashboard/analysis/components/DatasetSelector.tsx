@@ -24,7 +24,7 @@ import {
 import { getUserDatasets, type SavedDataset } from '@/lib/supabase/actions';
 
 interface DatasetSelectorProps {
-  onDatasetSelect: (data: Record<string, any>[], metadata: { name: string; source: 'saved' | 'uploaded' }) => void;
+  onDatasetSelect: (data: Record<string, any>[], metadata: { id?: string; name: string; source: 'saved' | 'uploaded' }) => void;
   onAnalysisStart: () => void;
 }
 
@@ -174,6 +174,7 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSel
     }
 
     const metadata = {
+      id: selectedDatasetId || undefined,
       name: selectedDatasetId 
         ? savedDatasets.find(ds => ds.id === selectedDatasetId)?.dataset_name || 'Unknown Dataset'
         : uploadedFile?.name || 'Uploaded Dataset',

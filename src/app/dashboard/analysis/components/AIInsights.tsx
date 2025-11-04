@@ -33,6 +33,18 @@ interface AIInsightsProps {
 export function AIInsights({ data, profile, aiInsights, className }: AIInsightsProps) {
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [showAllColumns, setShowAllColumns] = useState(false);
+  const [showAllCorr, setShowAllCorr] = useState(false);
+  const [showAllRecs, setShowAllRecs] = useState(false);
+
+  const MAX_LIST_ITEMS = 3;
+  const MAX_COLUMN_ITEMS = 6;
+  const TRUNCATE_CHARS = 180;
+
+  const truncate = (text: string, max = TRUNCATE_CHARS) => {
+    if (!text) return '';
+    return text.length > max ? text.slice(0, max - 1) + '…' : text;
+  };
 
   const handleRetry = async () => {
     setIsRetrying(true);
@@ -145,7 +157,51 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
 
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* Column Insights */}
+      {/* Quick Summary and Next Steps */}
+      {deepInsights && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                Summary
+              </CardTitle>
+              <CardDescription>Key takeaways</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">{truncate(deepInsights.summary || '')}</p>
+            </CardContent>
+          </Card>
+          {deepInsights.recommendations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5" />
+                  What to do next
+                </CardTitle>
+                <CardDescription>Top actions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {(showAllRecs ? deepInsights.recommendations : deepInsights.recommendations.slice(0, MAX_LIST_ITEMS)).map((recommendation, index) => (
+                    <li key={index} className="flex items-start gap-2 text-sm">
+                      <Lightbulb className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>{truncate(recommendation)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {deepInsights.recommendations.length > MAX_LIST_ITEMS && (
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowAllRecs(v => !v)}>
+                    {showAllRecs ? 'Show less' : 'Show more'}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Column Insights (concise) */}
       {columnInsights.length > 0 && (
         <Card>
           <CardHeader>
@@ -153,100 +209,54 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
               <Sparkles className="h-5 w-5" />
               Column Insights
             </CardTitle>
-            <CardDescription>
-              AI-powered analysis of each column's meaning and quality
-            </CardDescription>
+            <CardDescription>Short notes per column</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {columnInsights.map((insight, index) => (
-              <div key={index} className="space-y-3">
+            {(showAllColumns ? columnInsights : columnInsights.slice(0, MAX_COLUMN_ITEMS)).map((insight, index) => (
+              <div key={index} className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-medium">{insight.column}</h4>
-                  <Badge variant={getQualityBadgeVariant(insight.dataQuality)}>
-                    {insight.dataQuality}% quality
-                  </Badge>
+                  <h4 className="font-medium text-sm">{insight.column}</h4>
+                  <Badge variant={getQualityBadgeVariant(insight.dataQuality)}>{insight.dataQuality}% quality</Badge>
                 </div>
-                <p className="text-sm text-muted-foreground">
-                  {insight.semanticMeaning}
-                </p>
+                <p className="text-sm text-muted-foreground">{truncate(insight.semanticMeaning)}</p>
                 {index < columnInsights.length - 1 && <Separator />}
               </div>
             ))}
+            {columnInsights.length > MAX_COLUMN_ITEMS && (
+              <Button variant="outline" size="sm" onClick={() => setShowAllColumns(v => !v)}>
+                {showAllColumns ? 'Show less' : 'Show more'}
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
 
-      {/* Deep Insights */}
-      {deepInsights && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Summary */}
-          {deepInsights.summary && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5" />
-                  AI Summary
-                </CardTitle>
-                <CardDescription>
-                  Overall insights about your dataset
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-relaxed">{deepInsights.summary}</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Correlations */}
-          {deepInsights.correlations.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Key Correlations
-                </CardTitle>
-                <CardDescription>
-                  Important relationships between variables
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {deepInsights.correlations.map((correlation, index) => (
-                    <li key={index} className="flex items-start gap-2 text-sm">
-                      <TrendingUp className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                      <span>{correlation}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Recommendations */}
-          {deepInsights.recommendations.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Lightbulb className="h-5 w-5" />
-                  Recommendations
-                </CardTitle>
-                <CardDescription>
-                  AI suggestions for data improvement
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {deepInsights.recommendations.map((recommendation, index) => (
-                    <li key={index} className="flex items-start gap-2 text-sm">
-                      <Lightbulb className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                      <span>{recommendation}</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+      {/* Correlations (concise) */}
+      {deepInsights && deepInsights.correlations.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Key Correlations
+            </CardTitle>
+            <CardDescription>Important relationships</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {(showAllCorr ? deepInsights.correlations : deepInsights.correlations.slice(0, MAX_LIST_ITEMS)).map((correlation, index) => (
+                <li key={index} className="flex items-start gap-2 text-sm">
+                  <TrendingUp className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>{truncate(correlation)}</span>
+                </li>
+              ))}
+            </ul>
+            {deepInsights.correlations.length > MAX_LIST_ITEMS && (
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => setShowAllCorr(v => !v)}>
+                {showAllCorr ? 'Show less' : 'Show more'}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* No insights available */}
@@ -257,9 +267,7 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
               <Brain className="h-5 w-5" />
               AI Analysis
             </CardTitle>
-            <CardDescription>
-              AI-powered insights and recommendations
-            </CardDescription>
+            <CardDescription>AI-powered insights and recommendations</CardDescription>
           </CardHeader>
           <CardContent>
             <Alert>

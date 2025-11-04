@@ -3,19 +3,16 @@
 "use client";
 
 import { useEffect, useState, useTransition, Suspense } from 'react';
-import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, UploadCloud, BarChart2, FileText, Settings2, Filter, ChevronsUpDown, Info, Eye, Loader2 } from "lucide-react";
+import { Download, UploadCloud, FileText, Settings2, Filter, ChevronsUpDown, Info, Eye, Loader2 } from "lucide-react";
 import Link from 'next/link';
 import { getUserDatasets, type SavedDataset, getDatasetById } from '@/lib/supabase/actions';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-const BarChart = dynamic(() => import('@/components/charts/BarChart').then(m => m.BarChart), { ssr: false });
-const PieChart = dynamic(() => import('@/components/charts/PieChart').then(m => m.PieChart), { ssr: false });
 
 
 function DataPreviewContent() {
@@ -191,10 +188,9 @@ function DataPreviewContent() {
 
         <div className="lg:col-span-3 order-1 lg:order-2">
           <Tabs defaultValue="preview" className="w-full">
-            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 mb-4 sm:mb-6">
+            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 mb-4 sm:mb-6">
               <TabsTrigger value="preview" className="py-2 sm:py-2.5 text-sm sm:text-base"><FileText className="mr-1 sm:mr-2 h-4 w-4" />Preview</TabsTrigger>
-              <TabsTrigger value="statistics" className="py-2 sm:py-2.5 text-sm sm:text-base"><BarChart2 className="mr-1 sm:mr-2 h-4 w-4" />Statistics</TabsTrigger>
-              <TabsTrigger value="visualizations" className="py-2 sm:py-2.5 text-sm sm:text-base"><BarChart2 className="mr-1 sm:mr-2 h-4 w-4" />Visualizations</TabsTrigger>
+              <TabsTrigger value="statistics" className="py-2 sm:py-2.5 text-sm sm:text-base"><FileText className="mr-1 sm:mr-2 h-4 w-4" />Statistics</TabsTrigger>
             </TabsList>
 
             <TabsContent value="preview">
@@ -309,59 +305,6 @@ function DataPreviewContent() {
                 </div>
             </TabsContent>
             
-            <TabsContent value="visualizations">
-            {isLoadingDataset && datasetIdToLoad ? <div className="flex justify-center items-center py-10"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>
-            : loadedDataset ? (
-                <div className="grid md:grid-cols-2 gap-6">
-                <Card className="shadow-xl">
-                    <CardHeader><CardTitle className="font-headline">Data Distribution (Placeholder)</CardTitle></CardHeader>
-                    <CardContent className="h-[300px] w-full">
-                    <BarChart
-                      data={{
-                        series: [{
-                          data: [100, 80, 60, 40, 20],
-                          label: 'Sample Data',
-                        }],
-                        xAxis: {
-                          data: ['Category A', 'Category B', 'Category C', 'Category D', 'Category E'],
-                          scaleType: 'band',
-                        }
-                      }}
-                      config={{
-                        height: 300,
-                        showLegend: false,
-                        showTooltip: true,
-                        showGrid: true,
-                      }}
-                      className="w-full h-full"
-                    />
-                    <p className="text-center text-sm text-muted-foreground mt-2">Dynamic visualizations based on your data will appear here (Feature coming soon).</p>
-                    </CardContent>
-                </Card>
-                <Card className="shadow-xl">
-                    <CardHeader><CardTitle className="font-headline">Category Breakdown (Placeholder)</CardTitle></CardHeader>
-                    <CardContent className="h-[300px] w-full">
-                    <PieChart
-                      data={{
-                        data: [
-                          { id: 0, label: 'Group A', value: 60 },
-                          { id: 1, label: 'Group B', value: 40 },
-                        ]
-                      }}
-                      config={{
-                        height: 300,
-                        showLegend: true,
-                        showTooltip: true,
-                      }}
-                      className="w-full h-full"
-                    />
-                    <p className="text-center text-sm text-muted-foreground mt-2">Dynamic visualizations based on your data will appear here (Feature coming soon).</p>
-                    </CardContent>
-                </Card>
-                </div>
-                ) : renderEmptyState("Visualizations will appear here once a dataset is selected and analyzed.")
-            }
-            </TabsContent>
           </Tabs>
         </div>
       </div>
