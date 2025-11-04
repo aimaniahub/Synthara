@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ArrowRight, FileText, PlusCircle, BarChart, Brain, Clock, AlertCircle, DatabaseZap, Wand2, BarChartBig, Save, Eye, TrendingUp } from "lucide-react";
+import { ArrowRight, FileText, PlusCircle, BarChart, Brain, Clock, AlertCircle, DatabaseZap, Wand2, BarChartBig, Save, Eye, TrendingUp, Globe } from "lucide-react";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { QuickActions } from "@/components/dashboard/QuickActions";
@@ -17,6 +17,7 @@ const quickActions = [
   { title: "View Activity History", Icon: Clock, href: "/dashboard/history", description: "Review your past activities and logs.", cta: "View History"},
   { title: "Train New Model", Icon: Brain, href: "/dashboard/train", description: "Train a machine learning model with your data.", cta: "Train Model" },
   { title: "Analyze Dataset", Icon: BarChart, href: "/dashboard/analysis", description: "Explore insights from your datasets with AI.", cta: "Analyze Data"},
+  { title: "Browse Dataset Market", Icon: Globe, href: "/dashboard/market", description: "Discover public datasets shared by the community.", cta: "Open Market"},
 ];
 
 function getActivityIcon(activityType: string) {
@@ -82,6 +83,11 @@ export default async function DashboardPage() {
           <Button size="sm" variant="outline" asChild>
             <Link href="/dashboard/analysis">
               <BarChart className="mr-2 h-4 w-4" /> View Analytics
+            </Link>
+          </Button>
+          <Button size="sm" variant="default" asChild>
+            <Link href="/dashboard/market">
+              <Globe className="mr-2 h-4 w-4" /> Dataset Market
             </Link>
           </Button>
         </div>

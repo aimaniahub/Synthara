@@ -69,6 +69,7 @@ export function DataGenerationClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [enhancementInfo, setEnhancementInfo] = useState<{ enhancedPrompt: string; reasoning?: string } | null>(null);
+  const [isPublic, setIsPublic] = useState(false);
   
   const terminalLoggerRef = useRef<any>(null);
 
@@ -626,6 +627,7 @@ export function DataGenerationClient() {
           generationResult: generationResult,
           prompt: watchedValues.prompt,
           numRows: watchedValues.numRows,
+          isPublic,
         }),
       });
 
@@ -665,7 +667,7 @@ export function DataGenerationClient() {
     } finally {
       setIsSaving(false);
     }
-  }, [generationResult, watchedValues, toast]);
+  }, [generationResult, watchedValues, toast, isPublic]);
 
   // Handle CSV download
   const handleDownloadCSV = useCallback(() => {
@@ -941,7 +943,7 @@ export function DataGenerationClient() {
                 <TabsTrigger value="schema">Schema</TabsTrigger>
                 <TabsTrigger value="raw">Raw Data</TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="preview" className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -952,20 +954,16 @@ export function DataGenerationClient() {
                       {generationResult.schema?.length || 0} columns
                     </Badge>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDownloadCSV}
-                    >
+                  <div className="flex gap-3 items-center">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="publicToggle" className="text-sm">Public</Label>
+                      <Switch id="publicToggle" checked={isPublic} onCheckedChange={setIsPublic} />
+                    </div>
+                    <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
                       <Download className="mr-2 h-4 w-4" />
                       Download CSV
                     </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleSaveDataset}
-                      disabled={isSaving}
-                    >
+                    <Button size="sm" onClick={handleSaveDataset} disabled={isSaving}>
                       {isSaving ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
@@ -975,7 +973,7 @@ export function DataGenerationClient() {
                     </Button>
                   </div>
                 </div>
-                
+
                 <ScrollArea className="h-[400px] w-full border rounded-md">
                   {generationResult.data && generationResult.data.length > 0 ? (
                     <div className="overflow-x-auto">
@@ -1025,14 +1023,13 @@ export function DataGenerationClient() {
                     </div>
                   )}
                 </ScrollArea>
-                
                 {generationResult.data && generationResult.data.length > 50 && (
                   <p className="text-sm text-muted-foreground text-center">
                     Showing first 50 rows of {generationResult.data.length} total rows
                   </p>
                 )}
               </TabsContent>
-              
+
               <TabsContent value="schema" className="space-y-4">
                 <div className="space-y-2">
                   {generationResult.schema && generationResult.schema.length > 0 ? (

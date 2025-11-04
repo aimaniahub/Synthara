@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 // Removed eager Papa import to reduce bundle size
 // Papa Parse will be dynamically imported when needed
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,6 +51,8 @@ const parseCSV = async (csvText: string): Promise<Record<string, any>[]> => {
 export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSelectorProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchParams = useSearchParams();
+  const autoLoadedRef = useRef(false);
   
   const [savedDatasets, setSavedDatasets] = useState<SavedDataset[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
@@ -63,6 +66,14 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSel
   useEffect(() => {
     loadSavedDatasets();
   }, []);
+
+  useEffect(() => {
+    const pid = searchParams?.get('datasetId');
+    if (pid && !autoLoadedRef.current) {
+      autoLoadedRef.current = true;
+      handleSavedDatasetSelect(pid);
+    }
+  }, [searchParams]);
 
   const loadSavedDatasets = async () => {
     try {

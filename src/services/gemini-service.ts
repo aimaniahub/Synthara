@@ -524,9 +524,18 @@ Make sure the data is clean, consistent, and directly relevant to the user query
       }
     }
     
-    // If no JSON found, return the text as-is
-    console.log(`[Gemini] No valid JSON found, returning text as-is: ${text.substring(0, 200)}...`);
-    return this.cleanJsonString(text.trim());
+    // Strategy 5: Try all candidates and pick the first parseable
+    const candidates = this.extractAllJsonCandidates(text);
+    for (const c of candidates) {
+      const parsed = this.safeParseJson(c);
+      if (parsed !== null) {
+        try { return JSON.stringify(parsed); } catch {}
+      }
+    }
+    
+    // Guaranteed safe minimal JSON to prevent parse errors upstream
+    console.log(`[Gemini] No valid JSON found. Returning empty JSON object.`);
+    return '{}';
   }
 
   /**
@@ -619,6 +628,143 @@ Make sure the data is clean, consistent, and directly relevant to the user query
     cleaned = cleaned.replace(/\s+/g, ' ');
     
     return cleaned;
+  }
+
+  private extractAllJsonCandidates(text: string): string[] {
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+    const push = (s: string) => {
+      const t = this.cleanJsonString(s.trim());
+      if (t && !seen.has(t)) {
+        seen.add(t);
+        candidates.push(t);
+      }
+    };
+    const codeBlockPatterns = [
+      /```(?:json)?\s*(\{[\s\S]*?\})\s*```/g,
+      /```(?:json)?\s*(\[[\s\S]*?\])\s*```/g,
+      /```json\s*([\s\S]*?)\s*```/g
+    ];
+    for (const pattern of codeBlockPatterns) {
+      const matches = [...text.matchAll(pattern)];
+      for (const m of matches) {
+        if (m[1]) push(m[1]);
+      }
+    }
+    const jsonPatterns = [
+      /\{[\s\S]*?\}/g,
+      /\[[\s\S]*?\]/g
+    ];
+    for (const pattern of jsonPatterns) {
+      const matches = [...text.matchAll(pattern)];
+      for (const m of matches) {
+        if (m[0]) push(m[0]);
+      }
+    }
+    return candidates;
+  }
+
+  private safeParseJson(jsonText: string): any | null {
+    try {
+      return JSON.parse(jsonText);
+    } catch {}
+    try {
+      const fixed = this.cleanJsonString(jsonText);
+      return JSON.parse(fixed);
+    } catch {}
+    try {
+      const completed = this.completeTruncatedJson(jsonText);
+      const fixedCompleted = this.cleanJsonString(completed);
+      return JSON.parse(fixedCompleted);
+    } catch {}
+    return null;
+  }
+
+  private inferType(values: any[]): string {
+    const nonNull = values.filter(v => v !== null && v !== undefined);
+    if (nonNull.length === 0) return 'string';
+    const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
+    if (boolCount === nonNull.length) return 'boolean';
+    const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
+    if (numCount === nonNull.length) return 'number';
+    const dateCount = nonNull.filter(v => {
+      const d = new Date(v as any);
+      return !isNaN(d.getTime());
+    }).length;
+    if (dateCount === nonNull.length) return 'date';
+    return 'string';
+  }
+
+  private inferSchemaFromData(data: Array<Record<string, any>>): Array<{ name: string; type: string; description?: string }> {
+    const keys = Array.from(new Set(data.flatMap(row => Object.keys(row || {}))));
+    return keys.map(k => {
+      const values = data.map(row => row ? row[k] : undefined);
+      return { name: k, type: this.inferType(values) };
+    });
+  }
+
+  private normalizeStructuredResult(candidate: any): { schema: any[]; data: any[]; reasoning: string } | null {
+    if (!candidate) return null;
+    if (Array.isArray(candidate)) {
+      if (candidate.length === 0) {
+        return { schema: [], data: [], reasoning: 'Empty array candidate' };
+      }
+      const looksLikeSchema = candidate.every((c: any) => c && typeof c === 'object' && ('name' in c));
+      if (looksLikeSchema) {
+        const schema = candidate.map((c: any) => ({ name: String(c.name), type: c.type ? String(c.type).toLowerCase() : 'string', description: c.description ? String(c.description) : undefined }));
+        return { schema, data: [], reasoning: 'Schema array detected' };
+      }
+      if (candidate.every((c: any) => c && typeof c === 'object' && !('name' in c && 'type' in c))) {
+        const data = candidate as Array<Record<string, any>>;
+        const schema = this.inferSchemaFromData(data);
+        return { schema, data, reasoning: 'Data array detected with inferred schema' };
+      }
+      return null;
+    }
+    if (typeof candidate === 'object') {
+      if ('columns' in candidate && 'rows' in candidate) {
+        const cols = Array.isArray((candidate as any).columns) ? (candidate as any).columns : [];
+        const rows = Array.isArray((candidate as any).rows) ? (candidate as any).rows : [];
+        let data: any[] = [];
+        if (rows.every((r: any) => Array.isArray(r))) {
+          data = rows.map((r: any[]) => Object.fromEntries(cols.map((c: any, i: number) => [String(c), r[i]])));
+        } else if (rows.every((r: any) => typeof r === 'object')) {
+          data = rows;
+        }
+        const schema = cols.length > 0 ? cols.map((c: any) => ({ name: String(c), type: 'string' })) : this.inferSchemaFromData(data);
+        return { schema, data, reasoning: 'columns/rows structure normalized' };
+      }
+      const hasSchema = Array.isArray((candidate as any).schema);
+      const hasData = Array.isArray((candidate as any).data);
+      if (hasSchema || hasData) {
+        const schema = hasSchema ? (candidate as any).schema.map((c: any) => ({ name: String(c.name || c.column || c.key), type: c.type ? String(c.type).toLowerCase() : 'string', description: c.description })) : this.inferSchemaFromData(((candidate as any).data || []) as any);
+        const data = hasData ? (candidate as any).data : [];
+        return { schema, data, reasoning: 'schema/data object normalized' };
+      }
+    }
+    return null;
+  }
+
+  private pickBestStructuredResult(parsedCandidates: any[]): { schema: any[]; data: any[]; reasoning: string } | null {
+    for (const c of parsedCandidates) {
+      const n = this.normalizeStructuredResult(c);
+      if (n && n.schema && Array.isArray(n.schema)) {
+        return n;
+      }
+    }
+    const schemaOnly = parsedCandidates.find(c => Array.isArray(c) && c.every((x: any) => x && typeof x === 'object' && 'name' in x));
+    const dataOnly = parsedCandidates.find(c => Array.isArray(c) && c.every((x: any) => x && typeof x === 'object' && !('name' in x && 'type' in x)));
+    if (schemaOnly) {
+      const schema = (schemaOnly as any[]).map((c: any) => ({ name: String(c.name), type: c.type ? String(c.type).toLowerCase() : 'string', description: c.description }));
+      const data = Array.isArray(dataOnly) ? (dataOnly as any[]) : [];
+      return { schema, data, reasoning: 'Combined schema array with data array (if any)' };
+    }
+    if (dataOnly) {
+      const data = dataOnly as any[];
+      const schema = this.inferSchemaFromData(data as any);
+      return { schema, data, reasoning: 'Only data array present; inferred schema' };
+    }
+    return null;
   }
 
   /**
@@ -810,117 +956,35 @@ IMPORTANT: Return ONLY the JSON object above. No markdown formatting, no additio
       console.log(`[Gemini] Received markdown analysis response (${response.text.length} characters)`);
 
       try {
-        const jsonText = this.extractJsonFromResponse(response.text);
-        console.log(`[Gemini] Extracted JSON text (${jsonText.length} characters): ${jsonText.substring(0, 500)}...`);
-        
-        // Try multiple parsing strategies with better error handling
-        let result = null;
-        let parseSuccess = false;
-        let lastError = null;
-
-        // Strategy 1: Direct parsing
-        try {
-          result = JSON.parse(jsonText);
-          parseSuccess = true;
-          console.log('[Gemini] Direct JSON parsing successful');
-        } catch (error: any) {
-          lastError = error;
-          console.log('[Gemini] Direct parsing failed:', error.message);
+        const candidates = this.extractAllJsonCandidates(response.text);
+        const parsedCandidates = candidates.map(c => this.safeParseJson(c)).filter(Boolean) as any[];
+        let best = this.pickBestStructuredResult(parsedCandidates);
+        if (!best) {
+          const direct = this.safeParseJson(response.text);
+          best = this.normalizeStructuredResult(direct || {}) || { schema: [], data: [], reasoning: 'No structured JSON found' };
         }
-
-        // Strategy 2: Try to fix and parse
-        if (!parseSuccess) {
-          try {
-            const fixedJson = this.cleanJsonString(jsonText);
-            result = JSON.parse(fixedJson);
-            parseSuccess = true;
-            console.log('[Gemini] Fixed JSON parsing successful');
-          } catch (error: any) {
-            lastError = error;
-            console.log('[Gemini] Fixed parsing failed:', error.message);
-          }
-        }
-
-        // Strategy 3: Try to handle truncated JSON
-        if (!parseSuccess) {
-          try {
-            const completedJson = this.completeTruncatedJson(jsonText);
-            const fixedCompletedJson = this.cleanJsonString(completedJson);
-            result = JSON.parse(fixedCompletedJson);
-            parseSuccess = true;
-            console.log('[Gemini] Truncated JSON completion and parsing successful');
-          } catch (error: any) {
-            lastError = error;
-            console.log('[Gemini] Truncation handling failed:', error.message);
-          }
-        }
-
-        // Strategy 4: Try to extract partial JSON and create valid structure
-        if (!parseSuccess) {
-          try {
-            const partialResult = this.extractPartialJson(jsonText, userQuery);
-            if (partialResult) {
-              result = partialResult;
-              parseSuccess = true;
-              console.log('[Gemini] Partial JSON extraction successful');
-            }
-          } catch (error: any) {
-            lastError = error;
-            console.log('[Gemini] Partial JSON extraction failed:', error.message);
-          }
-        }
-
-        // Strategy 5: Fallback - create minimal valid structure based on user query
-        if (!parseSuccess) {
-          console.log('[Gemini] All parsing strategies failed, creating fallback structure');
-          result = this.createFallbackStructure(userQuery);
-          parseSuccess = true;
-        }
-
-        if (!parseSuccess || !result) {
-          throw new Error(`All JSON parsing strategies failed. Last error: ${lastError?.message || 'Unknown error'}`);
-        }
-        
-        // Validate the response structure
-        if (!result.schema || !Array.isArray(result.schema) || !result.data || !Array.isArray(result.data)) {
-          console.error('[Gemini] Invalid response structure:', {
-            hasSchema: !!result.schema,
-            schemaIsArray: Array.isArray(result.schema),
-            hasData: !!result.data,
-            dataIsArray: Array.isArray(result.data),
-            resultKeys: Object.keys(result)
-          });
-          
-          // Create a fallback structure if validation fails
-          result = this.createFallbackStructure(userQuery);
-        }
-
-        console.log(`[Gemini] Markdown analysis: ${result.data.length} rows, ${result.schema.length} columns`);
-
+        console.log(`[Gemini] Markdown analysis: ${best.data.length} rows, ${best.schema.length} columns`);
         return {
           success: true,
           structuredData: {
-            schema: result.schema,
-            data: result.data,
-            reasoning: result.reasoning || 'Data generated from markdown content analysis'
+            schema: best.schema,
+            data: best.data,
+            reasoning: best.reasoning || 'Data generated from markdown content analysis'
           }
         };
 
       } catch (parseError: any) {
-        console.error('[Gemini] All parsing strategies failed:', parseError);
+        console.error('[Gemini] Parsing failed, attempting retry with stricter instructions');
         console.error('[Gemini] Original response text:', response.text.substring(0, 1000));
         
-        // Retry with a more explicit prompt if we haven't exceeded max retries
         if (retryCount < maxRetries) {
           console.log(`[Gemini] Retrying with more explicit JSON instructions (retry ${retryCount + 1}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
           return this.analyzeMarkdownContent(markdownContent, userQuery, numRows, retryCount + 1);
         }
-        
-        // Return a fallback structure instead of failing completely
         return {
           success: true,
-          structuredData: this.createFallbackStructure(userQuery)
+          structuredData: { schema: [], data: [], reasoning: 'Unable to parse structured JSON' }
         };
       }
 

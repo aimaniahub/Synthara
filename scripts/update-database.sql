@@ -198,3 +198,10 @@ CREATE POLICY IF NOT EXISTS "Users can update their own model artifacts" ON stor
 
 CREATE POLICY IF NOT EXISTS "Users can delete their own model artifacts" ON storage.objects
     FOR DELETE USING (bucket_id = 'models' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Public datasets support
+ALTER TABLE public.generated_datasets ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Allow anyone (including unauthenticated) to select rows that are marked public
+CREATE POLICY IF NOT EXISTS "Anyone can view public datasets" ON public.generated_datasets
+    FOR SELECT USING (is_public = true);

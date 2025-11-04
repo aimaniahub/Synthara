@@ -6,7 +6,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { datasetName, generationResult, prompt, numRows } = body;
+    const { datasetName, generationResult, prompt, numRows, isPublic } = body;
 
     // Validate required fields
     if (!datasetName || !generationResult) {
@@ -86,13 +86,19 @@ export async function POST(request: NextRequest) {
 
     try {
       const supabase = await createSupabaseServerClient();
+      if (!supabase) {
+        console.log('[Save Dataset] Supabase not configured, skipping Supabase save');
+        supabaseSuccess = false;
+        supabaseError = 'Supabase not configured';
+      } else {
       
       // Get current user (if authenticated)
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
         console.log('[Save Dataset] No authenticated user, skipping Supabase save');
-        supabaseSuccess = true; // Not an error, just no user
+        supabaseSuccess = false;
+        supabaseError = 'No authenticated user';
       } else {
         // Save to Supabase
         const { data: insertData, error: insertError } = await supabase
@@ -104,7 +110,8 @@ export async function POST(request: NextRequest) {
             num_rows: generationResult.data.length,
             schema_json: generationResult.schema || [],
             data_csv: csvData,
-            feedback: generationResult.feedback || null
+            feedback: generationResult.feedback || null,
+            is_public: !!isPublic
           })
           .select()
           .single();
@@ -116,6 +123,7 @@ export async function POST(request: NextRequest) {
           console.log('[Save Dataset] Saved to Supabase:', insertData.id);
           supabaseSuccess = true;
         }
+      }
       }
     } catch (supabaseErr: any) {
       console.error('[Save Dataset] Supabase error:', supabaseErr);

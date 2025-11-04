@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Home, DatabaseZap, BarChartBig, History, UserCircle, Settings, HelpCircle, FileText, LogIn, LogOut } from 'lucide-react';
+import { Home, DatabaseZap, BarChartBig, History, UserCircle, Settings, HelpCircle, FileText, LogIn, LogOut, Globe } from 'lucide-react';
 
 export interface NavItem {
   title: string;
@@ -17,6 +17,7 @@ export const mainNavItems: NavItem[] = [
   { title: 'Data Generation', href: '/dashboard/generate', icon: DatabaseZap },
   { title: 'Data Preview', href: '/dashboard/preview', icon: FileText, label: 'New' },
   { title: 'Data Analysis', href: '/dashboard/analysis', icon: BarChartBig },
+  { title: 'Dataset Market', href: '/dashboard/market', icon: Globe },
 ];
 
 export const userNavItems: NavItem[] = [
