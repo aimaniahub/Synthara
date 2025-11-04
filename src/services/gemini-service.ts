@@ -336,6 +336,17 @@ Make sure the data is clean, consistent, and directly relevant to the user query
   }
 
   /**
+   * Generate free-form content and return raw text
+   */
+  async generateContent(prompt: string): Promise<{ text: string }> {
+    const response = await this.callGeminiAPI(prompt);
+    if (!response.success) {
+      throw new Error(response.error || 'Gemini API call failed');
+    }
+    return { text: response.text };
+  }
+
+  /**
    * Call Gemini API with retry logic and rate limiting
    */
   private async callGeminiAPI(prompt: string, maxRetries: number = 3): Promise<{success: boolean, text: string, error?: string}> {

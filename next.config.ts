@@ -27,9 +27,6 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: [
       'lucide-react',
-      '@mui/material',
-      '@mui/system',
-      '@mui/x-charts',
       'date-fns',
       'react-hook-form',
     ],

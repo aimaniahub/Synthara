@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -324,10 +324,12 @@ export default function DataAnalysisPage() {
       </div>
 
       {/* Dataset Selection */}
-      <DatasetSelector
-        onDatasetSelect={handleDatasetSelect}
-        onAnalysisStart={handleAnalysisStart}
-      />
+      <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading dataset selector...</div>}>
+        <DatasetSelector
+          onDatasetSelect={handleDatasetSelect}
+          onAnalysisStart={handleAnalysisStart}
+        />
+      </Suspense>
 
       {/* Analysis Results */}
       {hasData && (
