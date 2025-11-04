@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { DatasetSelector } from "@/app/dashboard/analysis/components/DatasetSelector";
-import { Download, Play, Pause, Database, Loader2, Sparkles } from "lucide-react";
+import { Download, Play, Pause, Database, Loader2, Sparkles, SlidersHorizontal, Info, BookOpen } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -836,142 +836,217 @@ export function ModelTrainingClient() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5"/> Select Dataset</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DatasetSelector onDatasetSelect={onDatasetSelect} onAnalysisStart={onAnalysisStart} />
-        </CardContent>
-      </Card>
-
-      {rows.length > 0 && (
-        <Card>
-        <CardHeader>
-          <CardTitle>Configure Training</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <Label className="flex items-center gap-2"><Sparkles className="h-4 w-4"/> AI Auto-Configure</Label>
-                <div className="text-xs text-muted-foreground">Automatically selects target, features, and training params based on the dataset.</div>
-              </div>
-              <Switch checked={autoConfigure} onCheckedChange={setAutoConfigure} />
+      {/* Header with steps */}
+      <div className="rounded-xl border bg-card p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-semibold">Train a Model</h1>
+            <p className="text-muted-foreground mt-1 text-sm">Choose a dataset, configure parameters, and run training with transparent feedback and artifacts.</p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="flex items-center gap-3 rounded-lg border p-3">
+            <Database className="h-4 w-4"/>
+            <div className="text-sm">
+              <div className="font-medium">Step 1</div>
+              <div className="text-muted-foreground">Select Dataset</div>
             </div>
-
-            {isAutoConfigRunning && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> {autoConfigMsg || "Model is selecting best params for this dataset..."}
-              </div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Target Column</Label>
-                <Select value={target} onValueChange={(v) => {
-                  setTarget(v);
-                  const uniq = new Set(rows.map((r) => r[v])).size;
-                  setLabelCardinality(uniq);
-                  setModelType(uniq > 0 && uniq <= 20 ? "classification" : "regression");
-                  setFeatures(columns.filter((c) => c !== v));
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select target" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {columns.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="text-xs text-muted-foreground">Unique values: {labelCardinality}</div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Model Type</Label>
-                <Select value={modelType} onValueChange={(v: ModelType) => setModelType(v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="classification">Classification</SelectItem>
-                    <SelectItem value="regression">Regression</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Test Split (0.05 - 0.5)</Label>
-                <Input type="number" min={0.05} max={0.5} step={0.05} value={testSplit}
-                  onChange={(e) => setTestSplit(Math.min(0.5, Math.max(0.05, Number(e.target.value) || 0.2)))} />
-              </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border p-3">
+            <SlidersHorizontal className="h-4 w-4"/>
+            <div className="text-sm">
+              <div className="font-medium">Step 2</div>
+              <div className="text-muted-foreground">Configure Training</div>
             </div>
-
-            <div className="space-y-2">
-              <Label>Feature Columns</Label>
-              <div className="flex flex-wrap gap-2">
-                {columns.filter((c) => c !== target).map((c) => {
-                  const active = featureColumns.includes(c);
-                  return (
-                    <Button key={c} variant={active ? "default" : "secondary"} size="sm" onClick={() => {
-                      setFeatures((prev) => active ? prev.filter((x) => x !== c) : [...prev, c]);
-                    }}>
-                      {c}
-                    </Button>
-                  );
-                })}
-              </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border p-3">
+            <Play className="h-4 w-4"/>
+            <div className="text-sm">
+              <div className="font-medium">Step 3</div>
+              <div className="text-muted-foreground">Run & Monitor</div>
             </div>
+          </div>
+        </div>
+      </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Epochs</Label>
-                <Input type="number" min={1} max={100} value={epochs} onChange={(e) => setEpochs(Math.min(100, Math.max(1, Number(e.target.value) || 20)))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Batch Size</Label>
-                <Input type="number" min={8} max={256} step={8} value={batchSize} onChange={(e) => setBatchSize(Math.min(256, Math.max(8, Number(e.target.value) || 32)))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Rows Used</Label>
-                <div className="h-10 flex items-center"><Badge variant="outline">{rows.length}</Badge></div>
-              </div>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Main column */}
+        <div className="lg:col-span-8 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5"/> Select Dataset</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DatasetSelector onDatasetSelect={onDatasetSelect} onAnalysisStart={onAnalysisStart} />
+            </CardContent>
+          </Card>
 
-            <div className="flex flex-col md:flex-row gap-3 pt-2">
-              <Button className="flex-1" onClick={onRunPipeline} disabled={disableTrain || isTraining || isGeneratingPlan || isCleaning || isPipeline}>
-                {isPipeline ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Run Full Pipeline
-              </Button>
-              <Button variant="secondary" onClick={onCleanDataset} disabled={disableTrain || isTraining || isGeneratingPlan || isCleaning}>
-                {isCleaning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />} Clean Dataset (AI)
-              </Button>
-              <Button variant="outline" onClick={onGeneratePlan} disabled={disableTrain || isTraining || isGeneratingPlan}>
-                {isGeneratingPlan ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Generate Training Plan
-              </Button>
-              <Button variant="outline" disabled={disableTrain || isTraining} onClick={async () => {
-                await doBackendTrain();
-              }}>
-                {isTraining ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Start Training
-              </Button>
-            </div>
-
-            {isTraining && (
-              <div className="space-y-2">
-                <Label>Training Progress</Label>
-                <div className="text-sm font-medium">Metrics</div>
-                <div className="flex flex-wrap gap-2">
-                  {metrics ? (
-                    Object.entries(metrics).map(([k, v]) => (
-                      <Badge key={k} variant="secondary">{k}: {v}</Badge>
-                    ))
-                  ) : (
-                    <span className="text-muted-foreground">Waiting for first metrics...</span>
-                  )}
+          {rows.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><SlidersHorizontal className="h-5 w-5"/> Configure Training</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label className="flex items-center gap-2"><Sparkles className="h-4 w-4"/> AI Auto-Configure</Label>
+                    <div className="text-xs text-muted-foreground">Automatically selects target, features, and training params based on the dataset.</div>
+                  </div>
+                  <Switch checked={autoConfigure} onCheckedChange={setAutoConfigure} />
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+
+                {isAutoConfigRunning && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> {autoConfigMsg || "Model is selecting best params for this dataset..."}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Target Column</Label>
+                    <Select value={target} onValueChange={(v) => {
+                      setTarget(v);
+                      const uniq = new Set(rows.map((r) => r[v])).size;
+                      setLabelCardinality(uniq);
+                      setModelType(uniq > 0 && uniq <= 20 ? "classification" : "regression");
+                      setFeatures(columns.filter((c) => c !== v));
+                    }}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select target" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {columns.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="text-xs text-muted-foreground">Unique values: {labelCardinality}</div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Model Type</Label>
+                    <Select value={modelType} onValueChange={(v: ModelType) => setModelType(v)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="classification">Classification</SelectItem>
+                        <SelectItem value="regression">Regression</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Test Split (0.05 - 0.5)</Label>
+                    <Input type="number" min={0.05} max={0.5} step={0.05} value={testSplit}
+                      onChange={(e) => setTestSplit(Math.min(0.5, Math.max(0.05, Number(e.target.value) || 0.2)))} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Feature Columns</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {columns.filter((c) => c !== target).map((c) => {
+                      const active = featureColumns.includes(c);
+                      return (
+                        <Button key={c} variant={active ? "default" : "secondary"} size="sm" onClick={() => {
+                          setFeatures((prev) => active ? prev.filter((x) => x !== c) : [...prev, c]);
+                        }}>
+                          {c}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Epochs</Label>
+                    <Input type="number" min={1} max={100} value={epochs} onChange={(e) => setEpochs(Math.min(100, Math.max(1, Number(e.target.value) || 20)))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Batch Size</Label>
+                    <Input type="number" min={8} max={256} step={8} value={batchSize} onChange={(e) => setBatchSize(Math.min(256, Math.max(8, Number(e.target.value) || 32)))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Rows Used</Label>
+                    <div className="h-10 flex items-center"><Badge variant="outline">{rows.length}</Badge></div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col md:flex-row gap-3 pt-2">
+                  <Button className="flex-1" onClick={onRunPipeline} disabled={disableTrain || isTraining || isGeneratingPlan || isCleaning || isPipeline}>
+                    {isPipeline ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Run Full Pipeline
+                  </Button>
+                  <Button variant="secondary" onClick={onCleanDataset} disabled={disableTrain || isTraining || isGeneratingPlan || isCleaning}>
+                    {isCleaning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />} Clean Dataset (AI)
+                  </Button>
+                  <Button variant="outline" onClick={onGeneratePlan} disabled={disableTrain || isTraining || isGeneratingPlan}>
+                    {isGeneratingPlan ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Generate Training Plan
+                  </Button>
+                  <Button variant="outline" disabled={disableTrain || isTraining} onClick={async () => {
+                    await doBackendTrain();
+                  }}>
+                    {isTraining ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Start Training
+                  </Button>
+                </div>
+
+                {isTraining && (
+                  <div className="space-y-2">
+                    <Label>Training Progress</Label>
+                    <div className="text-sm font-medium">Metrics</div>
+                    <div className="flex flex-wrap gap-2">
+                      {metrics ? (
+                        Object.entries(metrics).map(([k, v]) => (
+                          <Badge key={k} variant="secondary">{k}: {v}</Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">Waiting for first metrics...</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Sidebar column */}
+        <div className="lg:col-span-4 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2"><BookOpen className="h-5 w-5"/> Training Basics</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Target</span> — the column you want to predict.</div></div>
+              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Features</span> — input columns used to learn patterns.</div></div>
+              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Model Type</span> — classification for labels, regression for numbers.</div></div>
+              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Test Split</span> — portion of data held out for evaluation.</div></div>
+              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Epochs</span> — passes over the training data.</div></div>
+              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Batch Size</span> — samples per optimization step.</div></div>
+            </CardContent>
+          </Card>
+
+          {rows.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Current Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Dataset</span><span>{datasetMeta?.name || '-'}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Target</span><span>{target || '-'}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Model</span><span className="capitalize">{modelType}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Features</span><Badge variant="secondary">{featureColumns.length}</Badge></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Rows</span><Badge variant="outline">{rows.length}</Badge></div>
+                <Separator className="my-2" />
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Epochs</span><span>{epochs}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Batch</span><span>{batchSize}</span></div>
+                <div className="flex items-center justify-between"><span className="text-muted-foreground">Test Split</span><span>{testSplit}</span></div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
 
       <Dialog open={showTrainDialog} onOpenChange={setShowTrainDialog}>
         <DialogContent className="max-w-2xl">
