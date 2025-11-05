@@ -33,10 +33,12 @@ function getActivityIcon(activityType: string) {
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
   async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
-    return Promise.race([
-      p,
-      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-    ]) as Promise<T>;
+    let timeout: any;
+    const timeoutPromise = new Promise<T>((resolve) => {
+      timeout = setTimeout(() => resolve(fallback), ms);
+    });
+    p.catch(() => null);
+    return Promise.race([p, timeoutPromise]).finally(() => clearTimeout(timeout)) as Promise<T>;
   }
 
   const { data: { user } = { user: null } } = supabase
