@@ -46,13 +46,18 @@ export class SerpAPIService {
 
       console.log(`[SerpAPI] Searching for: "${query}" (max ${maxResults} results)`);
 
+      // Detect geography preference from query (prefer India for NSE/BSE/India mentions)
+      const qLower = (query || '').toLowerCase();
+      const preferIN = /(\b|\s)(nse|bse|india|nifty|banknifty|mumbai|delhi|bengaluru|bangalore|chennai|hyderabad|pune|kolkata)(\b|\s)/i.test(qLower);
+      const glParam = preferIN ? 'in' : (process.env.SERPAPI_GL || 'us');
+
       const params = new URLSearchParams({
         q: query,
         api_key: this.apiKey,
         engine: 'google',
         num: Math.min(maxResults, 15).toString(), // Increase from 10 to 15
         safe: 'active',
-        gl: 'us', // Country
+        gl: glParam, // Country
         hl: 'en' // Language
         // Removed tbm: 'nws' to get all organic results, not just news
       });

@@ -33,7 +33,7 @@ const StructureDataInputSchema = z.object({
     confidence: z.number(),
   })),
   userQuery: z.string().min(1, 'User query is required'),
-  numRows: z.number().min(1).max(100).default(25),
+  numRows: z.number().min(1).max(300).default(300),
 });
 
 // Output validation schema

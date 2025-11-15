@@ -284,7 +284,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
             const result = await intelligentWebScraping({
               userQuery: prompt,
               numRows: numRows || 25,
-              maxUrls: 4, // Maximum URLs to search and scrape - LIMITED TO 4
+              maxUrls: 10, // Maximum URLs to search and scrape - LIMITED TO 4
               useAI: true, // Use AI for all processing steps
             }, logger);
 

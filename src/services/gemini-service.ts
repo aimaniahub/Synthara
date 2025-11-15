@@ -56,13 +56,38 @@ export interface GeminiCompleteDatasetAnalysisResponse {
 
 export class GeminiService {
   private apiKey: string;
+  private apiKeys: string[] = [];
+  private keyIndex: number = 0;
   private baseUrl: string = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
 
-  constructor(apiKey?: string) {
-    this.apiKey = apiKey || process.env.GOOGLE_GEMINI_API_KEY || '';
-    
+  constructor(apiKeyOrKeys?: string | string[]) {
+    let keys: string[] = [];
+    if (Array.isArray(apiKeyOrKeys)) {
+      keys = apiKeyOrKeys;
+    } else if (apiKeyOrKeys) {
+      keys = [apiKeyOrKeys];
+    } else if (process.env.GOOGLE_GEMINI_API_KEYS) {
+      const multi = String(process.env.GOOGLE_GEMINI_API_KEYS);
+      keys = multi.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+    } else if (process.env.GOOGLE_GEMINI_API_KEY) {
+      keys = [String(process.env.GOOGLE_GEMINI_API_KEY)];
+    }
+    this.apiKeys = Array.from(new Set(keys));
+    this.apiKey = this.apiKeys[0] || '';
     if (!this.apiKey) {
       console.warn('[Gemini] No API key provided. Gemini functionality will be limited.');
+    }
+  }
+
+  private getCurrentApiKey(): string {
+    return this.apiKeys.length > 0 ? this.apiKeys[this.keyIndex] : this.apiKey;
+  }
+
+  private rotateApiKey(): void {
+    if (this.apiKeys.length > 0) {
+      this.keyIndex = (this.keyIndex + 1) % this.apiKeys.length;
+      this.apiKey = this.apiKeys[this.keyIndex];
+      console.warn(`[Gemini] Switched API key (index ${this.keyIndex + 1}/${this.apiKeys.length})`);
     }
   }
 
@@ -350,88 +375,153 @@ Make sure the data is clean, consistent, and directly relevant to the user query
    * Call Gemini API with retry logic and rate limiting
    */
   private async callGeminiAPI(prompt: string, maxRetries: number = 3): Promise<{success: boolean, text: string, error?: string}> {
+    const totalKeys = this.apiKeys.length > 0 ? this.apiKeys.length : (this.apiKey ? 1 : 0);
+    if (totalKeys === 0) {
+      return { success: false, text: '', error: 'Gemini API key not configured' };
+    }
+    let triedKeys = 0;
+    let lastError = '';
+    while (triedKeys < totalKeys) {
+      const currentKey = this.getCurrentApiKey();
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await fetch(`${this.baseUrl}?key=${currentKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.4,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 8192,
+                responseMimeType: 'application/json'
+              }
+            })
+          });
+
+          if (!response.ok) {
+            if (response.status === 429) {
+              const retryAfter = response.headers.get('retry-after');
+              const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
+              console.warn(`[Gemini] Rate limited (429). Waiting ${waitTime}ms before retry ${attempt}/${maxRetries}`);
+              if (attempt < maxRetries) {
+                await new Promise(r => setTimeout(r, waitTime));
+                continue;
+              } else {
+                lastError = `Rate limited with current key after ${maxRetries} retries`;
+                break;
+              }
+            }
+            if (response.status === 401 || response.status === 403 || response.status === 400) {
+              lastError = `Auth/quota error: ${response.status} ${response.statusText}`;
+              break;
+            }
+            throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          if (data?.error) {
+            lastError = String(data.error.message || 'Unknown API error');
+            if (/key|auth|permission|quota/i.test(lastError)) {
+              break;
+            }
+            throw new Error(`Gemini API error: ${lastError}`);
+          }
+
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) {
+            throw new Error('No response text from Gemini API');
+          }
+          return { success: true, text };
+        } catch (error: any) {
+          console.warn(`[Gemini] Attempt ${attempt} with current key failed:`, error.message);
+          if (attempt < maxRetries) {
+            const baseDelay = Math.pow(2, attempt) * 1000;
+            const jitter = Math.random() * 1000;
+            const waitTime = baseDelay + jitter;
+            console.log(`[Gemini] Waiting ${Math.round(waitTime)}ms before retry ${attempt + 1}/${maxRetries}`);
+            await new Promise(r => setTimeout(r, waitTime));
+            continue;
+          }
+          lastError = error.message;
+        }
+      }
+      this.rotateApiKey();
+      triedKeys++;
+    }
+    return { success: false, text: '', error: lastError || 'All API keys exhausted' };
+  }
+
+  /**
+   * Determine if OpenRouter (DeepSeek) should be used for analysis
+   */
+  private shouldUseOpenRouter(): boolean {
+    return !!process.env.OPENROUTER_API_KEY;
+  }
+
+  /**
+   * Call OpenRouter Chat Completions API with retry logic
+   */
+  private async callOpenRouterAPI(
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+    model?: string,
+    maxRetries: number = 2
+  ): Promise<{ success: boolean; text: string; error?: string }> {
+    const apiKey = process.env.OPENROUTER_API_KEY ? String(process.env.OPENROUTER_API_KEY) : '';
+    if (!apiKey) {
+      return { success: false, text: '', error: 'OpenRouter API key not configured' };
+    }
+
+    const targetModel = model || String(process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat');
+    let lastError = '';
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const response = await fetch(`${this.baseUrl}?key=${this.apiKey}`, {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
           },
           body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: prompt
-              }]
-            }],
-            generationConfig: {
-              temperature: 0.4,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 8192,
-              responseMimeType: "application/json"
-            }
+            model: targetModel,
+            messages,
+            temperature: 0.3,
+            top_p: 0.95,
+            max_tokens: 4000
           })
         });
 
         if (!response.ok) {
-          // Handle rate limiting specifically
           if (response.status === 429) {
             const retryAfter = response.headers.get('retry-after');
-            const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
-            
-            console.warn(`[Gemini] Rate limited (429). Waiting ${waitTime}ms before retry ${attempt}/${maxRetries}`);
-            
+            const wait = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
             if (attempt < maxRetries) {
-              await new Promise(resolve => setTimeout(resolve, waitTime));
+              await new Promise(r => setTimeout(r, wait));
               continue;
             }
           }
-          
-          throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+          if (response.status === 401 || response.status === 403) {
+            lastError = `OpenRouter auth error: ${response.status} ${response.statusText}`;
+            break;
+          }
+          throw new Error(`OpenRouter error: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
-        
-        if (data.error) {
-          throw new Error(`Gemini API error: ${data.error.message}`);
+        const text = data?.choices?.[0]?.message?.content || '';
+        if (!text) throw new Error('No response text from OpenRouter');
+        return { success: true, text };
+      } catch (err: any) {
+        lastError = err.message;
+        if (attempt < maxRetries) {
+          const wait = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+          await new Promise(r => setTimeout(r, wait));
+          continue;
         }
-
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) {
-          throw new Error('No response text from Gemini API');
-        }
-
-        return {
-          success: true,
-          text
-        };
-
-      } catch (error: any) {
-        console.warn(`[Gemini] Attempt ${attempt} failed:`, error.message);
-        
-        if (attempt === maxRetries) {
-          return {
-            success: false,
-            text: '',
-            error: error.message
-          };
-        }
-
-        // Exponential backoff with jitter for rate limiting
-        const baseDelay = Math.pow(2, attempt) * 1000;
-        const jitter = Math.random() * 1000;
-        const waitTime = baseDelay + jitter;
-        
-        console.log(`[Gemini] Waiting ${Math.round(waitTime)}ms before retry ${attempt + 1}/${maxRetries}`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
-
-    return {
-      success: false,
-      text: '',
-      error: 'Max retries exceeded'
-    };
+    return { success: false, text: '', error: lastError || 'OpenRouter call failed' };
   }
 
   /**
@@ -722,7 +812,7 @@ Make sure the data is clean, consistent, and directly relevant to the user query
       }
       const looksLikeSchema = candidate.every((c: any) => c && typeof c === 'object' && ('name' in c));
       if (looksLikeSchema) {
-        const schema = candidate.map((c: any) => ({ name: String(c.name), type: c.type ? String(c.type).toLowerCase() : 'string', description: c.description ? String(c.description) : undefined }));
+        const schema = candidate.map((c: any) => ({ name: String(c.name), type: c.type ? String(c.type).toLowerCase() : 'string', description: c.description }));
         return { schema, data: [], reasoning: 'Schema array detected' };
       }
       if (candidate.every((c: any) => c && typeof c === 'object' && !('name' in c && 'type' in c))) {
@@ -791,12 +881,12 @@ Make sure the data is clean, consistent, and directly relevant to the user query
     targetRows: number;
   }): Promise<GeminiCompleteDatasetAnalysisResponse> {
     try {
-      if (!this.apiKey) {
+      if (!this.apiKey && !this.shouldUseOpenRouter()) {
         return {
           success: false,
           data: [],
           schema: [],
-          error: 'Gemini API key not configured'
+          error: 'No AI provider configured (Gemini or OpenRouter)'
         };
       }
 
@@ -848,8 +938,19 @@ RESPONSE FORMAT (JSON):
   "feedback": "Brief explanation of what data was found and how it was structured"
 }`;
 
-      console.log(`[Gemini] Sending prompt to Gemini API (${prompt.length} characters)...`);
-      const response = await this.callGeminiAPI(prompt);
+      const useOpenRouter = this.shouldUseOpenRouter();
+      let response: { success: boolean; text: string; error?: string };
+      if (useOpenRouter) {
+        console.log(`[Gemini] Routing analysis to OpenRouter (DeepSeek)`);
+        const messages = [
+          { role: 'system' as const, content: 'You are a meticulous data analyst. Return ONLY valid JSON with schema and data. Do not include markdown or explanations outside JSON.' },
+          { role: 'user' as const, content: prompt }
+        ];
+        response = await this.callOpenRouterAPI(messages, String(process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat'));
+      } else {
+        console.log(`[Gemini] Sending prompt to Gemini API (${prompt.length} characters)...`);
+        response = await this.callGeminiAPI(prompt);
+      }
       
       if (!response.success) {
         console.error(`[Gemini] API call failed:`, response.error);
@@ -861,7 +962,7 @@ RESPONSE FORMAT (JSON):
         };
       }
 
-      console.log(`[Gemini] Received response from API (${response.text.length} characters)`);
+      console.log(`[Gemini] Received response from ${this.shouldUseOpenRouter() ? 'OpenRouter' : 'Gemini'} API (${response.text.length} characters)`);
 
       try {
         const jsonText = this.extractJsonFromResponse(response.text);
@@ -949,7 +1050,18 @@ REQUIRED JSON STRUCTURE:
 
 IMPORTANT: Return ONLY the JSON object above. No markdown formatting, no additional text, no code blocks.`;
 
-      const response = await this.callGeminiAPI(prompt);
+      const useOpenRouter = this.shouldUseOpenRouter();
+      let response: { success: boolean; text: string; error?: string };
+      if (useOpenRouter) {
+        console.log(`[Gemini] Routing markdown analysis to OpenRouter (DeepSeek)`);
+        const messages = [
+          { role: 'system' as const, content: 'You are a meticulous data analyst. Return ONLY valid JSON with schema, data and reasoning. No markdown. No extra text.' },
+          { role: 'user' as const, content: prompt }
+        ];
+        response = await this.callOpenRouterAPI(messages, String(process.env.OPENROUTER_MODEL || 'deepseek/deepseek-chat'));
+      } else {
+        response = await this.callGeminiAPI(prompt);
+      }
       
       if (!response.success) {
         console.error(`[Gemini] Markdown analysis API call failed:`, response.error);
@@ -964,7 +1076,7 @@ IMPORTANT: Return ONLY the JSON object above. No markdown formatting, no additio
         };
       }
 
-      console.log(`[Gemini] Received markdown analysis response (${response.text.length} characters)`);
+      console.log(`[Gemini] Received markdown analysis response from ${this.shouldUseOpenRouter() ? 'OpenRouter' : 'Gemini'} (${response.text.length} characters)`);
 
       try {
         const candidates = this.extractAllJsonCandidates(response.text);

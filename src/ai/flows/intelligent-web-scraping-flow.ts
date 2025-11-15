@@ -4,12 +4,13 @@ import { z } from 'zod';
 import { generateSearchUrls } from './generate-search-urls-flow';
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { crawl4aiService } from '@/services/crawl4ai-service';
 
 // Input validation schema
 const IntelligentWebScrapingInputSchema = z.object({
   userQuery: z.string().min(1, 'User query is required'),
-  numRows: z.number().min(1).max(100).default(50),
-  maxUrls: z.number().min(1).max(4).default(4), // LIMITED TO 4 URLs MAX
+  numRows: z.number().min(1).max(300).default(300),
+  maxUrls: z.number().min(1).max(15).default(15), // LIMITED TO 4 URLs MAX
   useAI: z.boolean().default(true),
 });
 
@@ -105,11 +106,14 @@ export async function intelligentWebScraping(
 
     // Filter out URLs that are known to be hard to scrape or not useful (Google SERP, social, Wikipedia Main Page, etc.)
     const candidateUrls = searchResult.urls.map(url => url.url);
-    const filteredUrls = candidateUrls.filter(isScrapableUrl);
+    let filteredUrls = candidateUrls.filter(isScrapableUrl);
     const filteredOut = candidateUrls.length - filteredUrls.length;
     if (filteredOut > 0) {
       logger?.log(`Filtered out ${filteredOut} non-scrapable/low-signal URLs`);
     }
+    // Prepare initial and backfill URL sets
+    const initialUrls = filteredUrls.slice(0, validatedInput.maxUrls);
+    const backfillQueue = filteredUrls.slice(validatedInput.maxUrls);
 
     if (filteredUrls.length === 0) {
       const errorMsg = 'No scrapable URLs after filtering (Google SERP/Wikipedia Main Page/social links removed)';
@@ -128,7 +132,7 @@ export async function intelligentWebScraping(
     logger?.progress('Web Scraping', 2, 6, 'Extracting content from URLs');
 
     const scrapedContent = await scrapeUrlsWithCrawl4AI(
-      filteredUrls,
+      initialUrls,
       logger
     );
 
@@ -153,15 +157,140 @@ export async function intelligentWebScraping(
       }
     }
 
-    logger?.success(`Successfully scraped content from ${scrapedContent.content.length} pages`);
+    // Backfill if we didn't reach the target count and we have extra candidates
+    let scrapedResults = Array.isArray(scrapedContent.content) ? [...scrapedContent.content] : [];
+    if (scrapedResults.length < validatedInput.maxUrls && backfillQueue.length > 0) {
+      logger?.log(`🔄 Backfilling: ${scrapedResults.length}/${validatedInput.maxUrls} scraped. Trying ${backfillQueue.length} extra candidates...`);
+      // Process backfill in chunks to avoid overwhelming the service
+      for (let i = 0; i < backfillQueue.length && scrapedResults.length < validatedInput.maxUrls; i += 5) {
+        const backfillBatch = backfillQueue.slice(i, i + 5);
+        logger?.log(`Backfill batch ${Math.floor(i / 5) + 1}/${Math.ceil(backfillQueue.length / 5)}: ${backfillBatch.length} URLs`);
+        const backfillResp = await scrapeUrlsWithCrawl4AI(backfillBatch, logger);
+        if (backfillResp.success && Array.isArray(backfillResp.content)) {
+          const existing = new Set(scrapedResults.map(r => r.url));
+          const uniqueNew = backfillResp.content.filter(r => !existing.has(r.url));
+          scrapedResults.push(...uniqueNew);
+          logger?.log(`Backfill added ${uniqueNew.length} pages (total ${scrapedResults.length})`);
+        } else {
+          logger?.log(`Backfill batch produced no additional content`);
+        }
+      }
+    }
 
-    // Step 3: Dump ALL scraped data to markdown file for AI analysis
-    logger?.log('Step 3: Creating markdown dataset...');
-    logger?.progress('Data Preparation', 3, 6, 'Preparing data for AI analysis');
+    logger?.success(`Successfully scraped content from ${scrapedResults.length} pages`);
+
+    // Step 3: Try Crawl4AI structured extraction first (chunked, JSON-mode)
+    logger?.log('Step 3: Extracting structured rows with Crawl4AI...');
+    logger?.progress('Crawl4AI Extraction', 3, 6, 'Chunked LLM extraction to avoid token limits');
+
+    const extraction = await crawl4aiService.extractStructuredBulk(
+      scrapedResults.map(r => r.url),
+      {
+        query: validatedInput.userQuery,
+        targetRows: validatedInput.numRows,
+        chunking: { window_size: 600, overlap: 60 },
+        llm: {
+          provider: process.env.CRAWL4AI_LLM_PROVIDER || 'openai',
+          model: process.env.CRAWL4AI_LLM_MODEL || 'gpt-4o-mini',
+          temperature: 0.1,
+          json_mode: true,
+        },
+        filters: undefined,
+      }
+    );
+
+    let extractedRows: any[] = [];
+    if (extraction.success && Array.isArray(extraction.results) && extraction.results.length > 0) {
+      const seen = new Set<string>();
+      for (const res of extraction.results) {
+        const rows = Array.isArray(res.rows) ? res.rows : [];
+        for (const row of rows) {
+          const key = JSON.stringify(row || {});
+          if (!seen.has(key)) {
+            extractedRows.push(row);
+            seen.add(key);
+          }
+        }
+      }
+      logger?.success(`✅ Crawl4AI extracted ${extractedRows.length} rows across ${extraction.results.length} pages`);
+    } else {
+      logger?.log(`⚠️ Crawl4AI structured extraction returned no rows (${extraction.error || 'no error message'})`);
+    }
+
+    if (extractedRows.length > 0) {
+      const allKeys = Array.from(new Set(extractedRows.flatMap(r => Object.keys(r || {}))));
+      function infer(values: any[]): string {
+        const nonNull = values.filter(v => v !== null && v !== undefined);
+        if (nonNull.length === 0) return 'string';
+        const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
+        if (boolCount === nonNull.length) return 'boolean';
+        const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
+        if (numCount === nonNull.length) return 'number';
+        const dateCount = nonNull.filter(v => !isNaN(new Date(v as any).getTime())).length;
+        if (dateCount === nonNull.length) return 'date';
+        return 'string';
+      }
+      const unifiedSchema = allKeys.map(k => ({ name: k, type: infer(extractedRows.map(r => r ? r[k] : undefined)) }));
+      const normalized = extractedRows.map(r => {
+        const obj: Record<string, any> = {};
+        for (const k of allKeys) obj[k] = r && k in r ? r[k] : '';
+        return obj;
+      });
+      const limitedRows = normalized.slice(0, validatedInput.numRows);
+
+      logger?.log('Step 5: Generating CSV format...');
+      logger?.progress('CSV Generation', 5, 6, 'Creating downloadable CSV');
+      const csv = generateCSV(limitedRows, unifiedSchema);
+
+      logger?.log('Step 6: Saving CSV to output folder...');
+      logger?.log(`Creating CSV file with ${limitedRows.length} rows`);
+      logger?.progress('Complete', 6, 6, 'Saving CSV file and finalizing');
+
+      const outputDir = join(process.cwd(), 'output');
+      if (!existsSync(outputDir)) {
+        mkdirSync(outputDir, { recursive: true });
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const csvFileName = `dataset-${timestamp}.csv`;
+      const csvFilePath = join(outputDir, csvFileName);
+      try {
+        writeFileSync(csvFilePath, csv, 'utf8');
+        logger?.success(`✅ SINGLE CSV saved to: ${csvFilePath}`);
+        logger?.log(`📊 Final dataset: ${limitedRows.length} rows, ${unifiedSchema.length} columns`);
+      } catch (error) {
+        logger?.error(`Failed to save CSV: ${error}`);
+      }
+
+      const result: IntelligentWebScrapingOutput = {
+        success: true,
+        data: limitedRows,
+        csv,
+        schema: unifiedSchema,
+        urls: searchResult.urls.map(url => url.url),
+        searchQueries: searchResult.searchQueries.map(q => q.query),
+        feedback: 'Crawl4AI structured extraction',
+        metadata: {
+          totalUrls: searchResult.urls.length,
+          scrapedPages: scrapedResults.length,
+          refinedSources: scrapedResults.length,
+          generatedRows: limitedRows.length,
+          timestamp: new Date().toISOString(),
+          csvFilePath: csvFilePath,
+        },
+      };
+
+      logger?.success(`🎉 Web scraping completed via Crawl4AI! Generated ${limitedRows.length} rows from ${searchResult.urls.length} URLs`);
+      logger?.success(`📁 CSV saved to: ${csvFilePath}`);
+      return result;
+    }
+
+    // Fallback: previous markdown + AI analysis path
+    logger?.log('Step 3: Creating markdown dataset file...');
+    logger?.progress('Data Preparation', 3, 6, 'Preparing markdown for AI analysis');
 
     const markdownFilePath = await dumpScrapedDataToMarkdown(
-      scrapedContent.content, 
-      validatedInput.userQuery, 
+      scrapedResults,
+      validatedInput.userQuery,
       logger
     );
     
@@ -171,6 +300,7 @@ export async function intelligentWebScraping(
       return {
         success: false,
         error: errorMsg,
+        fallbackToAI: true,
         urls: searchResult.urls.map(url => url.url),
         searchQueries: searchResult.searchQueries.map(q => q.query),
       };
@@ -178,11 +308,9 @@ export async function intelligentWebScraping(
 
     logger?.success(`All scraped data saved to markdown file: ${markdownFilePath}`);
 
-    // Step 4: Let AI analyze the complete markdown dataset and create structured output
-    // CRITICAL: This should only happen ONCE after ALL scraping is complete
-    logger?.log('Step 4: AI analyzing dataset...');
-    logger?.log(`Dataset contains ${scrapedContent.content.length} scraped sources`);
-    logger?.progress('AI Analysis', 4, 6, 'Processing data with AI');
+    logger?.log('Step 4: AI analyzing markdown dataset...');
+    logger?.log(`Dataset contains ${scrapedResults.length} scraped sources`);
+    logger?.progress('AI Analysis', 4, 6, 'Processing markdown with AI');
 
     const structuredData = await analyzeCompleteMarkdownDataset({
       markdownFilePath,
@@ -197,6 +325,7 @@ export async function intelligentWebScraping(
       return {
         success: false,
         error: errorMsg,
+        fallbackToAI: true,
         urls: searchResult.urls.map(url => url.url),
         searchQueries: searchResult.searchQueries.map(q => q.query),
       };
@@ -204,19 +333,15 @@ export async function intelligentWebScraping(
 
     logger?.success(`AI generated ${structuredData.data.length} rows from complete dataset analysis`);
 
-    // Step 5: Generate CSV
     logger?.log('Step 5: Generating CSV format...');
     logger?.progress('CSV Generation', 5, 6, 'Creating downloadable CSV');
 
     const csv = generateCSV(structuredData.data, structuredData.schema || []);
 
-    // Step 6: Save CSV to output folder and finalize
-    // CRITICAL: Only create ONE CSV file after all processing is complete
     logger?.log('Step 6: Saving CSV to output folder...');
     logger?.log(`Creating CSV file with ${structuredData.data.length} rows`);
     logger?.progress('Complete', 6, 6, 'Saving CSV file and finalizing');
 
-    // Save CSV to output folder
     const outputDir = join(process.cwd(), 'output');
     if (!existsSync(outputDir)) {
       mkdirSync(outputDir, { recursive: true });
@@ -234,7 +359,6 @@ export async function intelligentWebScraping(
       logger?.error(`Failed to save CSV: ${error}`);
     }
 
-    // Clean up markdown file
     try {
       if (existsSync(markdownFilePath)) {
         require('fs').unlinkSync(markdownFilePath);
@@ -254,8 +378,8 @@ export async function intelligentWebScraping(
       feedback: structuredData.feedback,
       metadata: {
         totalUrls: searchResult.urls.length,
-        scrapedPages: scrapedContent.content.length,
-        refinedSources: scrapedContent.content.length, // All sources were used
+        scrapedPages: scrapedResults.length,
+        refinedSources: scrapedResults.length, // All sources were used
         generatedRows: structuredData.data.length,
         timestamp: new Date().toISOString(),
         csvFilePath: csvFilePath, // Include the saved CSV path
@@ -325,7 +449,7 @@ async function scrapeUrlsWithCrawl4AI(
 
     // Process URLs in batches to avoid overwhelming the service
     // IMPORTANT: Wait for ALL URLs to be scraped before proceeding
-    const batchSize = 3;
+    const batchSize = 5;
     logger?.log(`Starting batch processing of ${urls.length} URLs in batches of ${batchSize}`);
     
     for (let i = 0; i < urls.length; i += batchSize) {
@@ -339,7 +463,7 @@ async function scrapeUrlsWithCrawl4AI(
           // Add retry logic for failed requests
           let response;
           let lastError;
-          const maxRetries = 2;
+          const maxRetries = 3;
           
           for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
@@ -694,28 +818,163 @@ async function analyzeCompleteDatasetAndStructure({
 
     // Use Gemini to analyze the complete dataset and create structured output
     const { geminiService } = await import('@/services/gemini-service');
-    
-    logger?.log('🤖 Sending complete dataset to AI for analysis...');
-    
-    const analysisResult = await geminiService.analyzeCompleteDataset({
-      userQuery,
-      comprehensiveData,
-      targetRows: numRows,
-    });
-
-    if (!analysisResult.success) {
-      throw new Error(analysisResult.error || 'AI analysis failed');
+    const combinedLen = String(comprehensiveData.combinedContent || '').length;
+    const shouldChunk = combinedLen > 140000 || comprehensiveData.sources.length > 10;
+    if (!shouldChunk) {
+      logger?.log('🤖 Sending complete dataset to AI for analysis...');
+      const analysisResult = await geminiService.analyzeCompleteDataset({
+        userQuery,
+        comprehensiveData,
+        targetRows: numRows,
+      });
+      if (analysisResult.success && analysisResult.data.length > 0) {
+        // If fewer rows than requested, perform a top-up pass over the full dataset
+        let directRows = Array.isArray(analysisResult.data) ? [...analysisResult.data] : [];
+        if (directRows.length < numRows) {
+          logger?.log(`🔄 Direct analysis returned ${directRows.length}/${numRows} rows; attempting top-up extraction`);
+          const sources = Array.isArray(comprehensiveData.sources) ? comprehensiveData.sources : [];
+          const fullMd = sources.map((item: any) => `=== SOURCE ${item.id}: ${item.title} (${item.url}) ===\n${item.content}\n`).join('\n');
+          const seen = new Set<string>(directRows.map(r => JSON.stringify(r)));
+          let attempts = 0;
+          while (directRows.length < numRows && attempts < 2) {
+            const remaining = numRows - directRows.length;
+            logger?.log(`🧪 Direct-path top-up attempt ${attempts + 1}: requesting up to ${remaining} more rows`);
+            const resp = await geminiService.analyzeMarkdownContent(fullMd, userQuery, remaining);
+            if (resp.success && resp.structuredData.data.length > 0) {
+              let added = 0;
+              for (const row of resp.structuredData.data) {
+                const key = JSON.stringify(row || {});
+                if (!seen.has(key)) {
+                  directRows.push(row);
+                  seen.add(key);
+                  added++;
+                  if (directRows.length >= numRows) break;
+                }
+              }
+              logger?.log(`✅ Direct-path top-up attempt ${attempts + 1}: added ${added} rows (total ${directRows.length})`);
+            } else {
+              logger?.log(`⚠️ Direct-path top-up attempt ${attempts + 1} produced no rows`);
+            }
+            attempts++;
+          }
+          // Recompute schema over combined rows
+          const allKeys = Array.from(new Set(directRows.flatMap(r => Object.keys(r || {}))));
+          function infer(values: any[]): string {
+            const nonNull = values.filter(v => v !== null && v !== undefined);
+            if (nonNull.length === 0) return 'string';
+            const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
+            if (boolCount === nonNull.length) return 'boolean';
+            const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
+            if (numCount === nonNull.length) return 'number';
+            const dateCount = nonNull.filter(v => !isNaN(new Date(v as any).getTime())).length;
+            if (dateCount === nonNull.length) return 'date';
+            return 'string';
+          }
+          const unifiedSchema = allKeys.map(k => ({ name: k, type: infer(directRows.map(r => r ? r[k] : undefined)) }));
+          const normalized = directRows.map(r => {
+            const obj: Record<string, any> = {};
+            for (const k of allKeys) obj[k] = r && k in r ? r[k] : '';
+            return obj;
+          });
+          const limited = normalized.slice(0, numRows);
+          logger?.success(`✅ AI analysis complete after top-up: ${limited.length} rows generated`);
+          return {
+            success: true,
+            data: limited,
+            schema: unifiedSchema,
+            feedback: analysisResult.feedback,
+          };
+        }
+        logger?.success(`✅ AI analysis complete: ${analysisResult.data.length} rows generated`);
+        return {
+          success: true,
+          data: analysisResult.data,
+          schema: analysisResult.schema,
+          feedback: analysisResult.feedback,
+        };
+      }
+      logger?.log(`⚠️ Direct analysis returned ${analysisResult.success ? '0 rows' : 'an error'} - falling back to chunked map-reduce`);
+      // Fall through to chunked path
     }
 
-    logger?.success(`✅ AI analysis complete: ${analysisResult.data.length} rows generated`);
+    logger?.log('⚠️ Dataset is large. Using chunked map-reduce analysis to respect token limits...');
+    const sources = Array.isArray(comprehensiveData.sources) ? comprehensiveData.sources : [];
+    const chunkSize = Math.max(3, Math.ceil(sources.length / 4));
+    const chunks: typeof sources[] = [];
+    for (let i = 0; i < sources.length; i += chunkSize) {
+      chunks.push(sources.slice(i, i + chunkSize));
+    }
+    const partialDatasets: { data: any[]; schema: Array<{ name: string; type: string }>; feedback?: string }[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const group = chunks[i];
+      const md = group.map((item: any) => `=== SOURCE ${item.id}: ${item.title} (${item.url}) ===\n${item.content}\n`).join('\n');
+      const target = Math.max(1, Math.round((group.length / Math.max(1, sources.length)) * numRows));
+      logger?.log(`🧩 Analyzing chunk ${i + 1}/${chunks.length} with target ${target} rows...`);
+      const resp = await geminiService.analyzeMarkdownContent(md, userQuery, target);
+      if (resp.success && resp.structuredData.data.length > 0) {
+        partialDatasets.push({ data: resp.structuredData.data, schema: (resp.structuredData.schema || []).map((c: any) => ({ name: String(c.name), type: String(c.type || 'string') })), feedback: resp.structuredData.reasoning });
+        logger?.success(`✅ Chunk ${i + 1}: ${resp.structuredData.data.length} rows`);
+      } else {
+        logger?.log(`⚠️ Chunk ${i + 1} produced no rows`);
+      }
+    }
+    const rows = partialDatasets.flatMap(p => p.data);
 
+    // Top-up pass: if we have fewer rows than requested, try one or two more targeted analyses over the full dataset
+    if (rows.length < numRows) {
+      logger?.log(`🔄 Top-up analysis: have ${rows.length}/${numRows} rows; attempting to extract additional rows`);
+      const sources = Array.isArray(comprehensiveData.sources) ? comprehensiveData.sources : [];
+      const fullMd = sources.map((item: any) => `=== SOURCE ${item.id}: ${item.title} (${item.url}) ===\n${item.content}\n`).join('\n');
+      const seen = new Set<string>(rows.map(r => JSON.stringify(r)));
+      let attempts = 0;
+      while (rows.length < numRows && attempts < 2) {
+        const remaining = numRows - rows.length;
+        logger?.log(`🧪 Top-up attempt ${attempts + 1}: requesting up to ${remaining} more rows`);
+        const resp = await geminiService.analyzeMarkdownContent(fullMd, userQuery, remaining);
+        if (resp.success && resp.structuredData.data.length > 0) {
+          let added = 0;
+          for (const row of resp.structuredData.data) {
+            const key = JSON.stringify(row || {});
+            if (!seen.has(key)) {
+              rows.push(row);
+              seen.add(key);
+              added++;
+              if (rows.length >= numRows) break;
+            }
+          }
+          logger?.log(`✅ Top-up attempt ${attempts + 1}: added ${added} new rows (total ${rows.length})`);
+        } else {
+          logger?.log(`⚠️ Top-up attempt ${attempts + 1} produced no additional rows`);
+        }
+        attempts++;
+      }
+    }
+    const allKeys = Array.from(new Set(rows.flatMap(r => Object.keys(r || {}))));
+    function infer(values: any[]): string {
+      const nonNull = values.filter(v => v !== null && v !== undefined);
+      if (nonNull.length === 0) return 'string';
+      const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
+      if (boolCount === nonNull.length) return 'boolean';
+      const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
+      if (numCount === nonNull.length) return 'number';
+      const dateCount = nonNull.filter(v => !isNaN(new Date(v as any).getTime())).length;
+      if (dateCount === nonNull.length) return 'date';
+      return 'string';
+    }
+    const unifiedSchema = allKeys.map(k => ({ name: k, type: infer(rows.map(r => r ? r[k] : undefined)) }));
+    const normalizedRows = rows.map(r => {
+      const obj: Record<string, any> = {};
+      for (const k of allKeys) obj[k] = r && k in r ? r[k] : '';
+      return obj;
+    });
+    const limited = normalizedRows.slice(0, numRows);
+    logger?.success(`✅ Chunked analysis complete: ${limited.length} rows (from ${rows.length}) across ${unifiedSchema.length} columns`);
     return {
       success: true,
-      data: analysisResult.data,
-      schema: analysisResult.schema,
-      feedback: analysisResult.feedback,
+      data: limited,
+      schema: unifiedSchema,
+      feedback: partialDatasets.map(p => p.feedback).filter(Boolean).join(' | '),
     };
-
   } catch (error: any) {
     logger?.error(`Failed to analyze complete dataset: ${error.message}`);
     return {
@@ -860,26 +1119,86 @@ async function analyzeCompleteMarkdownDataset({
     // Use Gemini to analyze the markdown content and generate structured data
     const geminiService = (await import('@/services/gemini-service')).geminiService;
     
-    logger?.log('🤖 Sending markdown content to AI for analysis...');
-    
-    const analysisResult = await geminiService.analyzeMarkdownContent(
-      markdownContent,
-      userQuery,
-      numRows
-    );
+    // Compute an effective target based on available content capacity
+    const approxTokens = Math.ceil(markdownContent.length / 4);
+    const capacityRows = Math.max(5, Math.floor(approxTokens / 400));
+    const effectiveTarget = Math.max(5, Math.min(numRows, capacityRows));
+    logger?.log(`🎯 Effective target rows: ${effectiveTarget} (requested ${numRows}, capacity ≈ ${capacityRows})`);
 
-    if (!analysisResult.success) {
-      throw new Error(`AI analysis failed: ${analysisResult.error}`);
+    logger?.log('🤖 Sending markdown content to AI for analysis...');
+    const collected: any[] = [];
+    const seen = new Set<string>();
+    let feedback: string = '';
+
+    // First attempt
+    const first = await geminiService.analyzeMarkdownContent(markdownContent, userQuery, effectiveTarget);
+    if (first.success && Array.isArray(first.structuredData.data)) {
+      for (const row of first.structuredData.data) {
+        const key = JSON.stringify(row || {});
+        if (!seen.has(key)) {
+          collected.push(row);
+          seen.add(key);
+        }
+      }
+      feedback = first.structuredData.reasoning || '';
+      logger?.success(`✅ Markdown analysis: ${collected.length} rows`);
+    } else {
+      logger?.log(`⚠️ Markdown analysis returned no rows (${first.error || 'unknown error'})`);
     }
 
-    logger?.success(`AI generated ${analysisResult.structuredData.data.length} rows from markdown analysis`);
-    logger?.log(`Schema: ${analysisResult.structuredData.schema.map(s => s.name).join(', ')}`);
+    // Top-up attempts if under target
+    let attempts = 0;
+    while (collected.length < effectiveTarget && attempts < 2) {
+      const remaining = effectiveTarget - collected.length;
+      logger?.log(`🔄 Markdown top-up attempt ${attempts + 1}: requesting up to ${remaining} more rows`);
+      const resp = await geminiService.analyzeMarkdownContent(markdownContent, userQuery, remaining);
+      if (resp.success && Array.isArray(resp.structuredData.data) && resp.structuredData.data.length > 0) {
+        let added = 0;
+        for (const row of resp.structuredData.data) {
+          const key = JSON.stringify(row || {});
+          if (!seen.has(key)) {
+            collected.push(row);
+            seen.add(key);
+            added++;
+            if (collected.length >= effectiveTarget) break;
+          }
+        }
+        logger?.success(`✅ Top-up attempt ${attempts + 1}: added ${added} rows (total ${collected.length})`);
+      } else {
+        logger?.log(`⚠️ Top-up attempt ${attempts + 1} produced no rows`);
+      }
+      attempts++;
+    }
+
+    if (collected.length === 0) {
+      throw new Error('No structured data generated from markdown');
+    }
+
+    // Unify schema across collected rows and normalize
+    const allKeys = Array.from(new Set(collected.flatMap(r => Object.keys(r || {}))));
+    function infer(values: any[]): string {
+      const nonNull = values.filter(v => v !== null && v !== undefined);
+      if (nonNull.length === 0) return 'string';
+      const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
+      if (boolCount === nonNull.length) return 'boolean';
+      const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
+      if (numCount === nonNull.length) return 'number';
+      const dateCount = nonNull.filter(v => !isNaN(new Date(v as any).getTime())).length;
+      if (dateCount === nonNull.length) return 'date';
+      return 'string';
+    }
+    const unifiedSchema = allKeys.map(k => ({ name: k, type: infer(collected.map(r => r ? r[k] : undefined)) }));
+    const normalized = collected.map(r => {
+      const obj: Record<string, any> = {};
+      for (const k of allKeys) obj[k] = r && k in r ? r[k] : '';
+      return obj;
+    });
 
     return {
       success: true,
-      data: analysisResult.structuredData.data,
-      schema: analysisResult.structuredData.schema,
-      feedback: analysisResult.structuredData.reasoning,
+      data: normalized,
+      schema: unifiedSchema,
+      feedback,
     };
   } catch (error: any) {
     logger?.error(`Markdown analysis failed: ${error.message}`);

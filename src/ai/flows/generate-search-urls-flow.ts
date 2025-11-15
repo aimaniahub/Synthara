@@ -7,7 +7,7 @@ import { serpapiService, type SerpAPIResult } from '@/services/serpapi-service';
 // Input validation schema
 const GenerateSearchUrlsInputSchema = z.object({
   userQuery: z.string().min(1, 'User query is required'),
-  maxUrls: z.number().min(1).max(15).default(10),
+  maxUrls: z.number().min(1).max(15).default(15),
 });
 
 // Output validation schema
@@ -97,6 +97,8 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
     
     // Validate input
     const validatedInput = GenerateSearchUrlsInputSchema.parse(input);
+    // Over-fetch to survive filtering and scraping failures
+    const overfetchLimit = Math.min(validatedInput.maxUrls * 3, 30);
     
     // Check cache first
     const cacheKey = validatedInput.userQuery.toLowerCase().trim();
@@ -124,7 +126,7 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
       // Continue with fallback queries
       const searchResponse = await serpapiService.searchMultipleQueries(
         searchQueries.map(q => q.query),
-        Math.ceil(validatedInput.maxUrls / searchQueries.length)
+        Math.ceil(overfetchLimit / Math.max(1, searchQueries.length))
       );
 
       if (!searchResponse.success) {
@@ -147,7 +149,7 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
       const rankedUrls = await rankUrlsByRelevance(
         searchResponse.results,
         validatedInput.userQuery,
-        validatedInput.maxUrls
+        overfetchLimit
       );
 
       console.log(`[GenerateSearchUrls] Selected ${rankedUrls.length} most relevant URLs`);
@@ -171,7 +173,7 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
     console.log('[GenerateSearchUrls] Search queries:', searchQueries.map(q => q.query));
     const searchResponse = await serpapiService.searchMultipleQueries(
       searchQueries.map(q => q.query),
-      Math.ceil(validatedInput.maxUrls / searchQueries.length)
+      Math.ceil(overfetchLimit / Math.max(1, searchQueries.length))
     );
 
     console.log('[GenerateSearchUrls] SerpAPI response:', {
@@ -188,7 +190,7 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
       console.log('[GenerateSearchUrls] Trying simplified fallback queries...');
       const simpleSearch = await serpapiService.searchMultipleQueries(
         simpleQueries,
-        Math.ceil(validatedInput.maxUrls / simpleQueries.length)
+        Math.ceil(overfetchLimit / Math.max(1, simpleQueries.length))
       );
       
       if (simpleSearch.success && simpleSearch.results.length > 0) {
@@ -226,7 +228,7 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
     const rankedUrls = await rankUrlsByRelevance(
       searchResponse.results,
       validatedInput.userQuery,
-      validatedInput.maxUrls
+      overfetchLimit
     );
 
     console.log(`[GenerateSearchUrls] Selected ${rankedUrls.length} most relevant URLs`);
@@ -270,11 +272,25 @@ async function rankUrlsByRelevance(
   source: string;
 }>> {
   try {
-    // Simple relevance scoring based on title and snippet matching
+    // Category detection from query
+    const qLower = userQuery.toLowerCase();
+    const isFinance = /(\b|\s)(nse|stock|stocks|equity|fno|f&o|breakout|rsi|volume|sector|nifty|banknifty|share)(\b|\s)/i.test(qLower);
+    const financeDomainBoost = new Set([
+      'nseindia.com','moneycontrol.com','investing.com','tradingview.com','economictimes.indiatimes.com',
+      'bseindia.com','zerodha.com','tickertape.in','screener.in','livemint.com','finance.yahoo.com'
+    ]);
+
+    // Simple relevance scoring based on title and snippet matching with optional domain boost
     const scoredUrls = searchResults.map(result => {
       const titleScore = calculateRelevanceScore(result.title, userQuery);
       const snippetScore = calculateRelevanceScore(result.snippet, userQuery);
-      const combinedScore = (titleScore * 0.7) + (snippetScore * 0.3);
+      let combinedScore = (titleScore * 0.7) + (snippetScore * 0.3);
+      if (isFinance) {
+        const src = (result.source || '').toLowerCase();
+        if (financeDomainBoost.has(src)) {
+          combinedScore = Math.min(1, combinedScore + 0.2);
+        }
+      }
       
       return {
         url: result.link,
@@ -377,8 +393,37 @@ function generateFallbackSearchQueries(userQuery: string): Array<{
   priority: number;
 }> {
   const queryLower = userQuery.toLowerCase();
-  
-  if (queryLower.includes('ev') || queryLower.includes('charging') || queryLower.includes('electric vehicle')) {
+  const tokens = new Set(queryLower.split(/[^a-z0-9+\.]+/i).filter(Boolean));
+  const hasWord = (w: string) => tokens.has(w);
+  const hasPhrase = (p: string) => queryLower.includes(p);
+
+  // Finance/stocks-specific fallback (avoid misclassifying 'level' as 'ev')
+  const financeWords = ['nse','stock','stocks','equity','fno','f&o','breakout','rsi','volume','sector','nifty','banknifty','share'];
+  const isFinance = financeWords.some(w => hasWord(w) || hasPhrase(w));
+  if (isFinance) {
+    const base = queryLower.replace(/\s+/g, ' ').trim();
+    return [
+      {
+        query: `${base} nse f&o breakout stocks`,
+        reasoning: 'Targets NSE F&O breakout contexts with original intent',
+        priority: 1
+      },
+      {
+        query: `nse f&o stocks breakout high volume rsi`,
+        reasoning: 'Generic breakout + volume + RSI keywords',
+        priority: 2
+      },
+      {
+        query: `nse stocks technical breakout list`,
+        reasoning: 'Looks for curated lists of technical breakouts',
+        priority: 3
+      }
+    ];
+  }
+
+  // EV detection with word boundaries and phrases only
+  const isEV = hasWord('ev') || hasPhrase('electric vehicle') || hasPhrase('ev charging') || hasWord('charging');
+  if (isEV) {
     return [
       {
         query: `"electric vehicle charging stations" ${queryLower.includes('bengaluru') ? 'Bengaluru Karnataka' : 'India'}`,
@@ -448,6 +493,37 @@ function generateFallbackUrls(userQuery: string, maxUrls: number): Array<{
   }> = [];
 
   // Generate URLs based on query content
+  if (/(\b|\s)(nse|stock|stocks|equity|fno|f&o|breakout|rsi|volume|sector|nifty|banknifty)(\b|\s)/i.test(queryLower)) {
+    urls.push({
+      url: 'https://www.moneycontrol.com/markets/fno-market-snapshot',
+      title: 'Moneycontrol F&O Market Snapshot',
+      snippet: 'F&O stocks, derivatives, and market data',
+      relevanceScore: 0.9,
+      source: 'moneycontrol.com'
+    });
+    urls.push({
+      url: 'https://www.investing.com/equities/india',
+      title: 'Investing.com India Stocks',
+      snippet: 'Indian equities quotes and technicals',
+      relevanceScore: 0.85,
+      source: 'investing.com'
+    });
+    urls.push({
+      url: 'https://www.nseindia.com/market-data/live-equity-market',
+      title: 'NSE Live Equity Market',
+      snippet: 'NSE live market data and equity lists',
+      relevanceScore: 0.8,
+      source: 'nseindia.com'
+    });
+    urls.push({
+      url: 'https://in.tradingview.com/markets/stocks-india/sectorandindustry-sector/',
+      title: 'TradingView India Sectors',
+      snippet: 'Sector performance and stocks lists',
+      relevanceScore: 0.75,
+      source: 'tradingview.com'
+    });
+  }
+
   if (queryLower.includes('restaurant') || queryLower.includes('food') || queryLower.includes('dining')) {
     urls.push({
       url: 'https://www.yelp.com/search?find_desc=restaurants',
