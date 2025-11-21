@@ -2,8 +2,10 @@
 
 import { z } from 'zod';
 import { generateSearchUrls } from './generate-search-urls-flow';
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { SimpleAI } from '@/ai/simple-ai';
+import { GoogleGenAI } from '@google/genai';
 import { crawl4aiService } from '@/services/crawl4ai-service';
 
 // Input validation schema
@@ -12,6 +14,7 @@ const IntelligentWebScrapingInputSchema = z.object({
   numRows: z.number().min(1).max(300).default(300),
   maxUrls: z.number().min(1).max(15).default(15), // LIMITED TO 4 URLs MAX
   useAI: z.boolean().default(true),
+  sessionId: z.string().optional(),
 });
 
 // Output validation schema
@@ -41,6 +44,105 @@ export interface WebScrapingLogger {
   error: (message: string) => void;
   info: (message: string) => void;
   progress: (step: string, current: number, total: number, details?: string) => void;
+}
+
+/**
+ * Best-effort extraction of rows from saved analyzed file
+ */
+function extractRowsFromAnalyzedFile(sessionId: string | undefined, logger?: WebScrapingLogger): Array<Record<string, any>> {
+  try {
+    if (!sessionId) return [];
+    const analyzedPath = join(process.cwd(), 'temp', 'analyzed', `${sessionId}-ai-analysis.json`);
+    if (!existsSync(analyzedPath)) return [];
+    const raw = readFileSync(analyzedPath, { encoding: 'utf8' }).trim();
+
+    // Strategy 1: parse full JSON
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.data)) return parsed.data as Array<Record<string, any>>;
+    } catch {}
+
+    // Strategy 2: strip code fences
+    let cleaned = raw;
+    if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    else if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    cleaned = cleaned.trim();
+    try {
+      const parsed = JSON.parse(cleaned);
+      if (parsed && Array.isArray(parsed.data)) return parsed.data as Array<Record<string, any>>;
+    } catch {}
+
+    // Strategy 3: extract data array substring
+    try {
+      const m = cleaned.match(/"data"\s*:\s*(\[[\s\S]*\])/);
+      if (m && m[1]) {
+        let dataSeg = m[1];
+        dataSeg = dataSeg.replace(/,(\s*[\]}])/g, '$1');
+        const wrapped = `{ "data": ${dataSeg} }`;
+        const parsed = JSON.parse(wrapped);
+        if (parsed && Array.isArray(parsed.data)) return parsed.data as Array<Record<string, any>>;
+      }
+    } catch {}
+
+    // Strategy 4: first object/array
+    try {
+      const obj = cleaned.match(/\{[\s\S]*\}/);
+      if (obj) {
+        const parsed = JSON.parse(obj[0]);
+        if (parsed && Array.isArray(parsed.data)) return parsed.data as Array<Record<string, any>>;
+      }
+      const arr = cleaned.match(/\[[\s\S]*\]/);
+      if (arr) {
+        const parsed = JSON.parse(arr[0]);
+        if (Array.isArray(parsed)) return parsed as Array<Record<string, any>>;
+      }
+    } catch {}
+
+    logger?.log(`No rows could be extracted from analyzed file for session ${sessionId}`);
+    return [];
+  } catch (e: any) {
+    logger?.error(`Failed to read analyzed file: ${e.message}`);
+    return [];
+  }
+}
+
+/**
+ * Write rows into chunk files under temp/chunks for resumable streaming
+ */
+function writeRowChunksToTemp(
+  rows: Array<Record<string, any>>,
+  schema: Array<{ name: string; type: string }>,
+  sessionId: string | undefined,
+  logger?: WebScrapingLogger
+): { dir: string; count: number; size: number } | null {
+  try {
+    const tempBase = join(process.cwd(), 'temp');
+    const chunksDir = join(tempBase, 'chunks');
+    if (!existsSync(chunksDir)) {
+      mkdirSync(chunksDir, { recursive: true });
+    }
+    const sid = sessionId || new Date().getTime().toString();
+    const chunkSize = 25;
+    let count = 0;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunkRows = rows.slice(i, i + chunkSize);
+      const payload = {
+        schema,
+        rows: chunkRows,
+        offset: i,
+        totalRows: rows.length,
+        chunkIndex: count,
+      };
+      const filePath = join(chunksDir, `${sid}-chunk-${count}.json`);
+      writeFileSync(filePath, JSON.stringify(payload), 'utf8');
+      count += 1;
+    }
+    logger?.log(`Chunked ${rows.length} rows into ${count} files @ ${chunksDir}`);
+    return { dir: chunksDir, count, size: 25 };
+  } catch (e: any) {
+    logger?.error(`Failed writing row chunks: ${e.message}`);
+    return null;
+  }
 }
 
 /**
@@ -121,7 +223,6 @@ export async function intelligentWebScraping(
       return {
         success: false,
         error: errorMsg,
-        fallbackToAI: true,
         urls: candidateUrls,
         searchQueries: searchResult.searchQueries.map(q => q.query),
       };
@@ -146,11 +247,10 @@ export async function intelligentWebScraping(
         logger?.log(`✅ Proceeding with ${scrapedContent.content.length} successfully scraped sources`);
         // Continue with the partial data we have
       } else {
-        logger?.log('🔄 No content could be scraped, falling back to AI-only data generation...');
+        logger?.log('🔄 No content could be scraped from any URL');
         return {
           success: false,
           error: errorMsg,
-          fallbackToAI: true, // Signal that we should fall back to AI generation
           urls: searchResult.urls.map(url => url.url),
           searchQueries: searchResult.searchQueries.map(q => q.query),
         };
@@ -178,218 +278,630 @@ export async function intelligentWebScraping(
     }
 
     logger?.success(`Successfully scraped content from ${scrapedResults.length} pages`);
+    const tempFilePath = await dumpScrapedDataToTempFile(
+      scrapedResults,
+      validatedInput.userQuery,
+      logger,
+      validatedInput.sessionId
+    );
+    if (tempFilePath) {
+      logger?.log(`Scraped snapshot saved for reference at: ${tempFilePath}`);
+    }
 
-    // Step 3: Try Crawl4AI structured extraction first (chunked, JSON-mode)
-    logger?.log('Step 3: Extracting structured rows with Crawl4AI...');
-    logger?.progress('Crawl4AI Extraction', 3, 6, 'Chunked LLM extraction to avoid token limits');
+    if (!validatedInput.useAI) {
+      const errorMsg = 'AI processing is disabled (useAI=false)';
+      logger?.error(errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
+        urls: searchResult.urls.map(url => url.url),
+        searchQueries: searchResult.searchQueries.map(q => q.query),
+      };
+    }
+
+    logger?.log('Step 3: Extracting structured rows via Crawl4AI + Gemini...');
+    logger?.progress('AI Structuring', 3, 6, 'Extracting structured rows via Crawl4AI service');
 
     const extraction = await crawl4aiService.extractStructuredBulk(
-      scrapedResults.map(r => r.url),
+      scrapedResults.map(item => item.url),
       {
         query: validatedInput.userQuery,
         targetRows: validatedInput.numRows,
         chunking: { window_size: 600, overlap: 60 },
         llm: {
-          provider: process.env.CRAWL4AI_LLM_PROVIDER || 'openai',
-          model: process.env.CRAWL4AI_LLM_MODEL || 'gpt-4o-mini',
+          provider: 'gemini',
+          model: process.env.CRAWL4AI_GEMINI_MODEL || process.env.GEMINI_MODEL_ID || 'gemini-2.5-pro',
           temperature: 0.1,
           json_mode: true,
         },
-        filters: undefined,
       }
     );
 
-    let extractedRows: any[] = [];
-    if (extraction.success && Array.isArray(extraction.results) && extraction.results.length > 0) {
-      const seen = new Set<string>();
-      for (const res of extraction.results) {
-        const rows = Array.isArray(res.rows) ? res.rows : [];
-        for (const row of rows) {
-          const key = JSON.stringify(row || {});
-          if (!seen.has(key)) {
-            extractedRows.push(row);
-            seen.add(key);
-          }
-        }
-      }
-      logger?.success(`✅ Crawl4AI extracted ${extractedRows.length} rows across ${extraction.results.length} pages`);
-    } else {
-      logger?.log(`⚠️ Crawl4AI structured extraction returned no rows (${extraction.error || 'no error message'})`);
-    }
-
-    if (extractedRows.length > 0) {
-      const allKeys = Array.from(new Set(extractedRows.flatMap(r => Object.keys(r || {}))));
-      function infer(values: any[]): string {
-        const nonNull = values.filter(v => v !== null && v !== undefined);
-        if (nonNull.length === 0) return 'string';
-        const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
-        if (boolCount === nonNull.length) return 'boolean';
-        const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
-        if (numCount === nonNull.length) return 'number';
-        const dateCount = nonNull.filter(v => !isNaN(new Date(v as any).getTime())).length;
-        if (dateCount === nonNull.length) return 'date';
-        return 'string';
-      }
-      const unifiedSchema = allKeys.map(k => ({ name: k, type: infer(extractedRows.map(r => r ? r[k] : undefined)) }));
-      const normalized = extractedRows.map(r => {
-        const obj: Record<string, any> = {};
-        for (const k of allKeys) obj[k] = r && k in r ? r[k] : '';
-        return obj;
-      });
-      const limitedRows = normalized.slice(0, validatedInput.numRows);
-
-      logger?.log('Step 5: Generating CSV format...');
-      logger?.progress('CSV Generation', 5, 6, 'Creating downloadable CSV');
-      const csv = generateCSV(limitedRows, unifiedSchema);
-
-      logger?.log('Step 6: Saving CSV to output folder...');
-      logger?.log(`Creating CSV file with ${limitedRows.length} rows`);
-      logger?.progress('Complete', 6, 6, 'Saving CSV file and finalizing');
-
-      const outputDir = join(process.cwd(), 'output');
-      if (!existsSync(outputDir)) {
-        mkdirSync(outputDir, { recursive: true });
-      }
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const csvFileName = `dataset-${timestamp}.csv`;
-      const csvFilePath = join(outputDir, csvFileName);
-      try {
-        writeFileSync(csvFilePath, csv, 'utf8');
-        logger?.success(`✅ SINGLE CSV saved to: ${csvFilePath}`);
-        logger?.log(`📊 Final dataset: ${limitedRows.length} rows, ${unifiedSchema.length} columns`);
-      } catch (error) {
-        logger?.error(`Failed to save CSV: ${error}`);
-      }
-
-      const result: IntelligentWebScrapingOutput = {
-        success: true,
-        data: limitedRows,
-        csv,
-        schema: unifiedSchema,
-        urls: searchResult.urls.map(url => url.url),
-        searchQueries: searchResult.searchQueries.map(q => q.query),
-        feedback: 'Crawl4AI structured extraction',
-        metadata: {
-          totalUrls: searchResult.urls.length,
-          scrapedPages: scrapedResults.length,
-          refinedSources: scrapedResults.length,
-          generatedRows: limitedRows.length,
-          timestamp: new Date().toISOString(),
-          csvFilePath: csvFilePath,
-        },
-      };
-
-      logger?.success(`🎉 Web scraping completed via Crawl4AI! Generated ${limitedRows.length} rows from ${searchResult.urls.length} URLs`);
-      logger?.success(`📁 CSV saved to: ${csvFilePath}`);
-      return result;
-    }
-
-    // Fallback: previous markdown + AI analysis path
-    logger?.log('Step 3: Creating markdown dataset file...');
-    logger?.progress('Data Preparation', 3, 6, 'Preparing markdown for AI analysis');
-
-    const markdownFilePath = await dumpScrapedDataToMarkdown(
-      scrapedResults,
-      validatedInput.userQuery,
-      logger
-    );
-    
-    if (!markdownFilePath) {
-      const errorMsg = 'Failed to create markdown dataset file';
+    if (!extraction.success || !Array.isArray(extraction.results) || extraction.results.length === 0) {
+      const errorMsg = extraction.error || 'Crawl4AI+Gemini extraction produced no results';
       logger?.error(errorMsg);
       return {
         success: false,
         error: errorMsg,
-        fallbackToAI: true,
         urls: searchResult.urls.map(url => url.url),
         searchQueries: searchResult.searchQueries.map(q => q.query),
       };
     }
 
-    logger?.success(`All scraped data saved to markdown file: ${markdownFilePath}`);
+    const allRows = extraction.results.flatMap(result =>
+      Array.isArray(result.rows) ? result.rows : []
+    );
 
-    logger?.log('Step 4: AI analyzing markdown dataset...');
-    logger?.log(`Dataset contains ${scrapedResults.length} scraped sources`);
-    logger?.progress('AI Analysis', 4, 6, 'Processing markdown with AI');
+    if (!allRows.length) {
+      const errorMsg = 'Crawl4AI+Gemini extraction returned 0 rows';
+      logger?.error(errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
+        urls: searchResult.urls.map(url => url.url),
+        searchQueries: searchResult.searchQueries.map(q => q.query),
+      };
+    }
 
-    const structuredData = await analyzeCompleteMarkdownDataset({
-      markdownFilePath,
-      userQuery: validatedInput.userQuery,
-      numRows: validatedInput.numRows,
-      logger
+    const keys: string[] = Array.from(new Set(allRows.flatMap(row => Object.keys(row || {}))));
+    function inferTypeLocal(values: any[]): string {
+      const nonNull = values.filter((v: any) => v !== null && v !== undefined);
+      if (nonNull.length === 0) return 'string';
+      const boolCount = nonNull.filter(
+        (v: any) => typeof v === 'boolean' || v === 'true' || v === 'false'
+      ).length;
+      if (boolCount === nonNull.length) return 'boolean';
+      const numCount = nonNull.filter(
+        (v: any) =>
+          typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))
+      ).length;
+      if (numCount === nonNull.length) return 'number';
+      const dateCount = nonNull.filter((v: any) => !isNaN(new Date(v as any).getTime())).length;
+      if (dateCount === nonNull.length) return 'date';
+      return 'string';
+    }
+
+    const schema = keys.map(k => ({ name: k, type: inferTypeLocal(allRows.map(r => (r ? r[k] : undefined))) }));
+
+    const normalizedRows = allRows.map((row: Record<string, any>) => {
+      const obj: Record<string, any> = {};
+      for (const col of schema) {
+        obj[col.name] = row && col.name in row ? row[col.name] : '';
+      }
+      return obj;
     });
 
-    if (!structuredData.success || !structuredData.data || structuredData.data.length === 0) {
-      const errorMsg = `Failed to analyze and structure data: ${structuredData.error || 'No structured data generated'}`;
-      logger?.error(errorMsg);
-      return {
-        success: false,
-        error: errorMsg,
-        fallbackToAI: true,
-        urls: searchResult.urls.map(url => url.url),
-        searchQueries: searchResult.searchQueries.map(q => q.query),
-      };
-    }
+    const limitedRows = normalizedRows.slice(0, validatedInput.numRows);
+    const csv = generateCSV(limitedRows, schema);
 
-    logger?.success(`AI generated ${structuredData.data.length} rows from complete dataset analysis`);
-
-    logger?.log('Step 5: Generating CSV format...');
-    logger?.progress('CSV Generation', 5, 6, 'Creating downloadable CSV');
-
-    const csv = generateCSV(structuredData.data, structuredData.schema || []);
-
-    logger?.log('Step 6: Saving CSV to output folder...');
-    logger?.log(`Creating CSV file with ${structuredData.data.length} rows`);
-    logger?.progress('Complete', 6, 6, 'Saving CSV file and finalizing');
+    logger?.log('Step 4: Saving CSV to output folder...');
+    logger?.progress('Complete', 4, 6, 'Saving CSV file and finalizing');
 
     const outputDir = join(process.cwd(), 'output');
     if (!existsSync(outputDir)) {
       mkdirSync(outputDir, { recursive: true });
     }
-
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const csvFileName = `dataset-${timestamp}.csv`;
     const csvFilePath = join(outputDir, csvFileName);
-    
     try {
       writeFileSync(csvFilePath, csv, 'utf8');
       logger?.success(`✅ SINGLE CSV saved to: ${csvFilePath}`);
-      logger?.log(`📊 Final dataset: ${structuredData.data.length} rows, ${structuredData.schema?.length || 0} columns`);
+      logger?.log(`📊 Final dataset: ${limitedRows.length} rows, ${schema.length} columns`);
     } catch (error) {
       logger?.error(`Failed to save CSV: ${error}`);
     }
 
-    try {
-      if (existsSync(markdownFilePath)) {
-        require('fs').unlinkSync(markdownFilePath);
-        logger?.log(`Cleaned up markdown file: ${markdownFilePath}`);
-      }
-    } catch (error) {
-      logger?.log(`Warning: Could not clean up markdown file: ${error}`);
-    }
-
-    const result: IntelligentWebScrapingOutput = {
+    const resultSummary: IntelligentWebScrapingOutput = {
       success: true,
-      data: structuredData.data,
+      data: limitedRows,
       csv,
-      schema: structuredData.schema,
+      schema,
       urls: searchResult.urls.map(url => url.url),
       searchQueries: searchResult.searchQueries.map(q => q.query),
-      feedback: structuredData.feedback,
+      feedback: 'Crawl4AI+Gemini structuring of scraped corpus',
       metadata: {
         totalUrls: searchResult.urls.length,
         scrapedPages: scrapedResults.length,
-        refinedSources: scrapedResults.length, // All sources were used
-        generatedRows: structuredData.data.length,
+        refinedSources: scrapedResults.length,
+        generatedRows: limitedRows.length,
         timestamp: new Date().toISOString(),
-        csvFilePath: csvFilePath, // Include the saved CSV path
+        csvFilePath: csvFilePath,
+        sessionId: validatedInput.sessionId,
+        rawAiFilePath: undefined,
+        scrapedRawFilePath: tempFilePath,
       },
     };
 
-    logger?.success(`🎉 Web scraping completed! Generated ${structuredData.data.length} rows from ${searchResult.urls.length} URLs`);
+    logger?.success(
+      `🎉 Web scraping completed via Crawl4AI+Gemini! Generated ${limitedRows.length} rows from ${searchResult.urls.length} URLs`
+    );
     logger?.success(`📁 CSV saved to: ${csvFilePath}`);
+    return resultSummary;
 
-    return result;
+    // Legacy chunk-based AI structuring path below (no longer used when Gemini 3 Pro path succeeds)
+    logger?.log('Step 3: Building relevant text chunks for AI structuring...');
+    logger?.progress('Chunk Selection', 3, 6, 'Selecting most relevant content chunks');
+
+    type ContentChunk = {
+      url: string;
+      title: string;
+      chunkIndex: number;
+      content: string;
+    };
+
+    function buildContentChunksForRetrieval(
+      scrapedContent: Array<{ url: string; title: string; content: string }>,
+      maxChunkSize: number = 1500,
+      overlap: number = 200
+    ): ContentChunk[] {
+      const chunks: ContentChunk[] = [];
+
+      for (const item of scrapedContent) {
+        const text = item.content || '';
+        if (!text) continue;
+
+        const cleanText = text.replace(/\s+/g, ' ').trim();
+        if (!cleanText) continue;
+
+        let start = 0;
+        let index = 0;
+        while (start < cleanText.length) {
+          const end = Math.min(cleanText.length, start + maxChunkSize);
+          const slice = cleanText.slice(start, end);
+          chunks.push({
+            url: item.url,
+            title: item.title,
+            chunkIndex: index,
+            content: slice,
+          });
+          if (end === cleanText.length) {
+            break;
+          }
+          start = end - overlap;
+          if (start < 0) start = 0;
+          index += 1;
+        }
+      }
+
+      return chunks;
+    }
+
+    function selectRelevantChunks(
+      chunks: ContentChunk[],
+      userQuery: string,
+      maxChunks: number = 80
+    ): ContentChunk[] {
+      if (!chunks.length) return [];
+
+      const terms = userQuery
+        .toLowerCase()
+        .split(/[^a-z0-9]+/i)
+        .map(t => t.trim())
+        .filter(t => t.length > 2);
+
+      if (!terms.length) {
+        return chunks.slice(0, Math.min(maxChunks, chunks.length));
+      }
+
+      const scored = chunks.map(chunk => {
+        const text = chunk.content.toLowerCase();
+        let score = 0;
+        for (const term of terms) {
+          if (!term) continue;
+          if (text.includes(term)) {
+            score += 1;
+          }
+        }
+        const len = text.length;
+        const lengthBoost = len > 300 && len < 2500 ? 0.5 : 0;
+        return { chunk, score: score + lengthBoost };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      const limited = scored.slice(0, Math.min(maxChunks, scored.length));
+      return limited
+        .filter(item => item.score > 0)
+        .map(item => item.chunk);
+    }
+
+    const allChunks = buildContentChunksForRetrieval(scrapedResults);
+    let relevantChunks: ContentChunk[] = selectRelevantChunks(allChunks, validatedInput.userQuery, 80);
+    let usingCombinedReadme = false;
+
+    // Prefer analyzing the combined readme directly when available.
+    // Instead of picking a single 170k slice, split the full text into sequential slices
+    // so the AI can see as much of the corpus as possible across multiple calls.
+    if (tempFilePath) {
+      const combinedPath = tempFilePath as string;
+      if (existsSync(combinedPath)) {
+        try {
+          const md = readFileSync(combinedPath, 'utf8');
+          const totalLength = md.length;
+          const SLICE_SIZE = 150000; // keep each slice safely under SimpleAI's 170k per-call budget
+          const slices: ContentChunk[] = [];
+          let index = 0;
+
+          for (let start = 0; start < totalLength; start += SLICE_SIZE) {
+            const chunkText = md.slice(start, start + SLICE_SIZE);
+            if (!chunkText.trim()) continue;
+            slices.push({
+              url: combinedPath,
+              title: 'Combined Readme',
+              chunkIndex: index,
+              content: chunkText,
+            });
+            index += 1;
+          }
+
+          if (slices.length > 0) {
+            relevantChunks = slices;
+            usingCombinedReadme = true;
+            logger?.log(
+              `Using combined readme split into ${slices.length} sequential slices for AI analysis (total ${totalLength} chars)`
+            );
+          }
+        } catch {}
+      }
+    }
+
+    if (relevantChunks.length === 0) {
+      const errorMsg = 'No relevant text chunks found for AI structuring';
+      logger?.error(errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
+        urls: searchResult.urls.map(url => url.url),
+        searchQueries: searchResult.searchQueries.map(q => q.query),
+      };
+    }
+
+    logger?.log(`Selected ${relevantChunks.length} relevant chunks out of ${allChunks.length} total chunks`);
+
+    if (!validatedInput.useAI) {
+      const errorMsg = 'AI processing is disabled (useAI=false) and Crawl4AI returned no structured rows';
+      logger?.error(errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
+        urls: searchResult.urls.map(url => url.url),
+        searchQueries: searchResult.searchQueries.map(q => q.query),
+      };
+    }
+
+    logger?.log('Step 4: AI structuring of relevant chunks (OpenRouter)...');
+    logger?.progress('AI Structuring', 4, 6, 'Converting relevant chunks into structured rows');
+
+    let aiRows: Array<Record<string, any>> = [];
+    let aiSchema: Array<{ name: string; type: string }> = [];
+    let rawAiFilePath: string | undefined;
+
+    try {
+      // Build groups of chunks for AI calls.
+      // When using the combined readme, we send exactly one sequential slice per AI call
+      // so each call sees a different part of the corpus without internal truncation overlap.
+      const groups: ContentChunk[][] = [];
+
+      if (usingCombinedReadme) {
+        for (const chunk of relevantChunks) {
+          groups.push([chunk]);
+        }
+      } else {
+        const maxAiCalls = 4;
+        const chunksPerGroup = Math.max(1, Math.ceil(relevantChunks.length / maxAiCalls));
+        for (let i = 0; i < relevantChunks.length; i += chunksPerGroup) {
+          groups.push(relevantChunks.slice(i, i + chunksPerGroup));
+        }
+      }
+
+      logger?.log(`Dispatching AI structuring over ${groups.length} chunk groups`);
+
+      for (let gIndex = 0; gIndex < groups.length; gIndex++) {
+        const group = groups[gIndex];
+        if (!group.length) continue;
+
+        logger?.log(`AI call ${gIndex + 1}/${groups.length}: processing ${group.length} chunks`);
+
+        // Keep-alive progress while the AI call is running
+        const keepAlive = setInterval(() => {
+          logger?.progress('AI Structuring', 4, 6, `Working on group ${gIndex + 1}/${groups.length}`);
+        }, 10000);
+        const dataset = await SimpleAI.structureRelevantChunksToDataset({
+          chunks: group.map((chunk: ContentChunk) => ({
+            url: chunk.url,
+            title: chunk.title,
+            content: chunk.content,
+          })),
+          userQuery: validatedInput.userQuery,
+          numRows: validatedInput.numRows,
+          sessionId: validatedInput.sessionId,
+        });
+        clearInterval(keepAlive);
+
+        const groupRows = Array.isArray(dataset.data) ? dataset.data : [];
+        const groupSchema = Array.isArray(dataset.schema)
+          ? dataset.schema.map((col: { name: string; type?: string }) => ({
+              name: String(col.name),
+              type: String(col.type || 'string'),
+            }))
+          : [];
+
+        if (groupRows.length) {
+          aiRows.push(...groupRows);
+
+          if (!aiSchema.length && groupSchema.length) {
+            aiSchema = [...groupSchema];
+          } else if (groupSchema.length) {
+            const existingNames = new Set(aiSchema.map(col => col.name));
+            for (const col of groupSchema) {
+              if (!existingNames.has(col.name)) {
+                aiSchema.push(col);
+                existingNames.add(col.name);
+              }
+            }
+          }
+
+          rawAiFilePath = (dataset as any)?.rawFilePath as string | undefined;
+
+          logger?.log(
+            `AI call ${gIndex + 1} produced ${groupRows.length} rows (total so far: ${aiRows.length})`
+          );
+
+          if (aiRows.length >= validatedInput.numRows) {
+            logger?.log(
+              `Reached requested row target (${validatedInput.numRows}) after ${gIndex + 1} AI calls; stopping further calls`
+            );
+            break;
+          }
+        } else {
+          logger?.log(`AI call ${gIndex + 1} returned 0 rows for its chunk group`);
+        }
+      }
+
+      if (!aiRows.length) {
+        const errorMsg = 'AI structuring produced no rows from scraped content';
+        logger?.error(errorMsg);
+        return {
+          success: false,
+          error: errorMsg,
+          urls: searchResult.urls.map(url => url.url),
+          searchQueries: searchResult.searchQueries.map(q => q.query),
+        };
+      }
+    } catch (err: any) {
+      const errorMsg = `AI structuring from scraped content failed: ${err?.message || 'No structured data generated'}`;
+      logger?.error(errorMsg);
+      return {
+        success: false,
+        error: errorMsg,
+        urls: searchResult.urls.map(url => url.url),
+        searchQueries: searchResult.searchQueries.map(q => q.query),
+      };
+    }
+
+    if (!aiSchema.length) {
+      const keys: string[] = Array.from(new Set(aiRows.flatMap(r => Object.keys(r || {}))));
+      function infer(values: any[]): string {
+        const nonNull = values.filter((v: any) => v !== null && v !== undefined);
+        if (nonNull.length === 0) return 'string';
+        const boolCount = nonNull.filter((v: any) => typeof v === 'boolean' || v === 'true' || v === 'false').length;
+        if (boolCount === nonNull.length) return 'boolean';
+        const numCount = nonNull.filter(
+          (v: any) => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))
+        ).length;
+        if (numCount === nonNull.length) return 'number';
+        const dateCount = nonNull.filter((v: any) => !isNaN(new Date(v as any).getTime())).length;
+        if (dateCount === nonNull.length) return 'date';
+        return 'string';
+      }
+      aiSchema = keys.map(k => ({ name: k, type: infer(aiRows.map(r => (r ? r[k] : undefined))) }));
+    }
+
+    let normalizedAiRows = aiRows.map((row: Record<string, any>) => {
+      const obj: Record<string, any> = {};
+      for (const col of aiSchema) {
+        obj[col.name] = row && col.name in row ? row[col.name] : '';
+      }
+      return obj;
+    });
+
+    let limitedAiRows = normalizedAiRows.slice(0, validatedInput.numRows);
+    if (limitedAiRows.length < validatedInput.numRows) {
+      logger?.log(`AI returned ${limitedAiRows.length}/${validatedInput.numRows}. Attempting expansion rounds to fetch more sources and re-analyze...`);
+
+      // Iterative expansion: fetch more URLs, scrape, update readme, and re-run AI to accumulate rows
+      const knownUrls = new Set(scrapedResults.map(r => r.url));
+      const maxExpansionRounds = 3;
+
+      for (let round = 1; round <= maxExpansionRounds && aiRows.length < validatedInput.numRows; round++) {
+        logger?.progress('Expansion', 4, 6, `Round ${round}: discovering more sources`);
+
+        // Request more URLs (increasing maxUrls per round) and dedupe
+        const extraSearch = await generateSearchUrls({
+          userQuery: validatedInput.userQuery,
+          maxUrls: Math.min(validatedInput.maxUrls * (round + 1), 80),
+        });
+
+        if (!extraSearch.success || extraSearch.urls.length === 0) {
+          logger?.log(`Expansion round ${round}: no additional URLs found`);
+          continue;
+        }
+
+        const extraCandidates = extraSearch.urls.map(u => u.url).filter(isScrapableUrl);
+        const newUrls = extraCandidates.filter(u => !knownUrls.has(u)).slice(0, 15);
+
+        if (newUrls.length === 0) {
+          logger?.log(`Expansion round ${round}: no new unique URLs available`);
+          continue;
+        }
+
+        logger?.log(`Expansion round ${round}: scraping ${newUrls.length} new URLs`);
+        const extraScrape = await scrapeUrlsWithCrawl4AI(newUrls, logger);
+        if (extraScrape.success && Array.isArray(extraScrape.content) && extraScrape.content.length > 0) {
+          const uniqueNew = extraScrape.content.filter(item => !knownUrls.has(item.url));
+          uniqueNew.forEach(item => knownUrls.add(item.url));
+          scrapedResults.push(...uniqueNew);
+          logger?.log(`Expansion round ${round}: added ${uniqueNew.length} new pages (total scraped: ${scrapedResults.length})`);
+
+          // Rebuild combined readme and prefer it for AI analysis
+          await dumpScrapedDataToTempFile(scrapedResults, validatedInput.userQuery, logger, validatedInput.sessionId);
+
+          let rerunChunks: ContentChunk[];
+          if (tempFilePath) {
+            const combinedPath = tempFilePath as string;
+            if (existsSync(combinedPath)) {
+              try {
+                const md = readFileSync(combinedPath, 'utf8');
+                const limited = md.slice(0, 170000);
+                rerunChunks = [{ url: combinedPath, title: 'Combined Readme', chunkIndex: 0, content: limited }];
+              } catch {
+                const all = buildContentChunksForRetrieval(scrapedResults);
+                rerunChunks = selectRelevantChunks(all, validatedInput.userQuery, 80);
+              }
+            } else {
+              const all = buildContentChunksForRetrieval(scrapedResults);
+              rerunChunks = selectRelevantChunks(all, validatedInput.userQuery, 80);
+            }
+          } else {
+            const all = buildContentChunksForRetrieval(scrapedResults);
+            rerunChunks = selectRelevantChunks(all, validatedInput.userQuery, 80);
+          }
+
+          if (!rerunChunks.length) {
+            logger?.log(`Expansion round ${round}: no rerun chunks found, skipping`);
+            continue;
+          }
+
+          // Re-run AI over the updated chunks and append rows
+          logger?.log(`Expansion round ${round}: re-analyzing with AI over ${rerunChunks.length} chunk group(s)`);
+
+          try {
+            // Use the same multi-call aggregator over chunk groups
+            const maxAiCalls = 4;
+            const chunksPerGroup = Math.max(1, Math.ceil(rerunChunks.length / maxAiCalls));
+            const groups: ContentChunk[][] = [];
+            for (let i = 0; i < rerunChunks.length; i += chunksPerGroup) {
+              groups.push(rerunChunks.slice(i, i + chunksPerGroup));
+            }
+
+            for (let gIndex = 0; gIndex < groups.length && aiRows.length < validatedInput.numRows; gIndex++) {
+              const group = groups[gIndex];
+              if (!group.length) continue;
+
+              const keepAlive = setInterval(() => {
+                logger?.progress('AI Structuring', 4, 6, `Expansion ${round}, group ${gIndex + 1}/${groups.length}`);
+              }, 10000);
+
+              const dataset = await SimpleAI.structureRelevantChunksToDataset({
+                chunks: group.map((chunk: ContentChunk) => ({ url: chunk.url, title: chunk.title, content: chunk.content })),
+                userQuery: validatedInput.userQuery,
+                numRows: validatedInput.numRows,
+                sessionId: validatedInput.sessionId,
+              });
+              clearInterval(keepAlive);
+
+              const groupRows = Array.isArray(dataset.data) ? dataset.data : [];
+              const groupSchema = Array.isArray(dataset.schema)
+                ? dataset.schema.map((c: any) => ({ name: String(c.name), type: String(c.type || 'string') }))
+                : [];
+
+              if (groupRows.length) {
+                aiRows.push(...groupRows);
+                if (!aiSchema.length && groupSchema.length) aiSchema = [...groupSchema];
+                else if (groupSchema.length) {
+                  const have = new Set(aiSchema.map(x => x.name));
+                  for (const col of groupSchema) if (!have.has(col.name)) { aiSchema.push(col); have.add(col.name); }
+                }
+                logger?.log(`Expansion ${round} AI group ${gIndex + 1}: +${groupRows.length} rows (total: ${aiRows.length})`);
+              }
+            }
+          } catch (e: any) {
+            logger?.log(`Expansion round ${round}: AI re-analysis failed: ${e?.message || 'unknown error'}`);
+          }
+        } else {
+          logger?.log(`Expansion round ${round}: scraping produced no usable content`);
+        }
+      }
+
+      if (!aiSchema.length) {
+        const keys: string[] = Array.from(new Set(aiRows.flatMap(r => Object.keys(r || {}))));
+        function infer(values: any[]): string {
+          const nonNull = values.filter((v: any) => v !== null && v !== undefined);
+          if (nonNull.length === 0) return 'string';
+          const boolCount = nonNull.filter((v: any) => typeof v === 'boolean' || v === 'true' || v === 'false').length;
+          if (boolCount === nonNull.length) return 'boolean';
+          const numCount = nonNull.filter((v: any) => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
+          if (numCount === nonNull.length) return 'number';
+          const dateCount = nonNull.filter((v: any) => !isNaN(new Date(v as any).getTime())).length;
+          if (dateCount === nonNull.length) return 'date';
+          return 'string';
+        }
+        aiSchema = keys.map(k => ({ name: k, type: infer(aiRows.map(r => (r ? r[k] : undefined))) }));
+      }
+
+      normalizedAiRows = aiRows.map((row: Record<string, any>) => {
+        const obj: Record<string, any> = {};
+        for (const col of aiSchema) obj[col.name] = row && col.name in row ? row[col.name] : '';
+        return obj;
+      });
+      limitedAiRows = normalizedAiRows.slice(0, validatedInput.numRows);
+
+      logger?.log(`After expansion, rows available: ${limitedAiRows.length}/${validatedInput.numRows}`);
+    }
+
+    // Write chunk files to temp/chunks for resumable, file-based streaming
+    const chunkInfo = writeRowChunksToTemp(limitedAiRows, aiSchema, validatedInput.sessionId, logger);
+
+    logger?.log('Step 5: Generating CSV format from AI-structured rows...');
+    logger?.progress('CSV Generation', 5, 6, 'Creating downloadable CSV');
+    const aiCsv = generateCSV(limitedAiRows, aiSchema);
+
+    logger?.log('Step 6: Saving CSV to output folder...');
+    logger?.log(`Creating CSV file with ${limitedAiRows.length} rows`);
+    logger?.progress('Complete', 6, 6, 'Saving CSV file and finalizing');
+
+    const aiOutputDir = join(process.cwd(), 'output');
+    if (!existsSync(aiOutputDir)) {
+      mkdirSync(aiOutputDir, { recursive: true });
+    }
+    const aiTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const aiCsvFileName = `dataset-${aiTimestamp}.csv`;
+    const aiCsvFilePath = join(aiOutputDir, aiCsvFileName);
+    try {
+      writeFileSync(aiCsvFilePath, aiCsv, 'utf8');
+      logger?.success(`✅ SINGLE CSV saved to: ${aiCsvFilePath}`);
+      logger?.log(`📊 Final dataset: ${limitedAiRows.length} rows, ${aiSchema.length} columns`);
+    } catch (error) {
+      logger?.error(`Failed to save CSV: ${error}`);
+    }
+
+    const aiResult: IntelligentWebScrapingOutput = {
+      success: true,
+      data: limitedAiRows,
+      csv: aiCsv,
+      schema: aiSchema,
+      urls: searchResult.urls.map(url => url.url),
+      searchQueries: searchResult.searchQueries.map(q => q.query),
+      feedback: 'AI structuring of relevant chunks',
+      metadata: {
+        totalUrls: searchResult.urls.length,
+        scrapedPages: scrapedResults.length,
+        refinedSources: scrapedResults.length,
+        generatedRows: limitedAiRows.length,
+        timestamp: new Date().toISOString(),
+        csvFilePath: aiCsvFilePath,
+        sessionId: validatedInput.sessionId,
+        rawAiFilePath: rawAiFilePath || (validatedInput.sessionId ? join(process.cwd(), 'temp', 'analyzed', `${validatedInput.sessionId}-ai-analysis.json`) : undefined),
+        scrapedRawFilePath: validatedInput.sessionId ? join(process.cwd(), 'temp', 'scraped', `${validatedInput.sessionId}-raw-content.txt`) : undefined,
+        chunkDir: chunkInfo?.dir,
+        chunkCount: chunkInfo?.count,
+        chunkSize: chunkInfo?.size,
+      },
+    };
+
+    logger?.success(`🎉 Web scraping completed via relevant-chunk AI structuring! Generated ${limitedAiRows.length} rows from ${searchResult.urls.length} URLs`);
+    logger?.success(`📁 CSV saved to: ${aiCsvFilePath}`);
+    return aiResult;
 
   } catch (error: any) {
     console.error('[IntelligentWebScraping] Error:', error);
@@ -418,7 +930,7 @@ async function scrapeUrlsWithCrawl4AI(
   error?: string;
 }> {
   try {
-    const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:11235';
+    const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:8000';
     logger?.log(`Using Crawl4AI service at: ${crawl4aiServiceUrl}`);
     
     // Test if the Crawl4AI service is available
@@ -433,7 +945,7 @@ async function scrapeUrlsWithCrawl4AI(
       logger?.log(`✅ Crawl4AI service is available`);
     } catch (healthError: any) {
       logger?.error(`❌ Crawl4AI service is not available: ${healthError.message}`);
-      logger?.log(`🔄 Skipping scraping and triggering AI fallback`);
+      logger?.log(`🔄 Skipping scraping because Crawl4AI service is unavailable`);
       return {
         success: false,
         content: [],
@@ -625,11 +1137,11 @@ async function scrapeUrlsWithCrawl4AI(
     logger?.log(`Scraping complete: ${scrapedContent.length}/${urls.length} URLs successfully scraped`);
     
     if (scrapedContent.length === 0) {
-      logger?.error('No content could be scraped from any URLs - falling back to AI generation');
+      logger?.error('No content could be scraped from any URLs');
       return {
         success: false,
         content: [],
-        error: 'No content could be scraped from any URLs - will fall back to AI generation',
+        error: 'No content could be scraped from any URLs',
       };
     }
 
@@ -730,13 +1242,18 @@ async function dumpScrapedDataToTempFile(
     content: string;
   }>,
   userQuery: string,
-  logger?: WebScrapingLogger
+  logger?: WebScrapingLogger,
+  sessionId?: string
 ): Promise<string | null> {
   try {
     // Create temp directory if it doesn't exist
     const tempDir = join(process.cwd(), 'temp');
     if (!existsSync(tempDir)) {
       mkdirSync(tempDir, { recursive: true });
+    }
+    const scrapedDir = join(tempDir, 'scraped');
+    if (!existsSync(scrapedDir)) {
+      mkdirSync(scrapedDir, { recursive: true });
     }
 
     // Create a comprehensive dataset file
@@ -758,230 +1275,266 @@ async function dumpScrapedDataToTempFile(
       };
     });
 
-    const comprehensiveData = {
-      metadata: {
-        userQuery,
-        scrapedAt: new Date().toISOString(),
-        totalSources: scrapedContent.length,
-        totalContentLength: cleanedSources.reduce((sum, item) => sum + item.content.length, 0),
-        originalContentLength: scrapedContent.reduce((sum, item) => sum + item.content.length, 0),
-        averageNoiseReduction: Math.round(cleanedSources.reduce((sum, item) => sum + item.noiseReduction, 0) / cleanedSources.length),
-      },
-      sources: cleanedSources,
-      // Create a combined text for AI analysis (using cleaned content)
-      combinedContent: cleanedSources.map(item => 
-        `=== SOURCE ${item.id}: ${item.title} (${item.url}) ===\n${item.content}\n\n`
-      ).join('\n'),
+    const metadata = {
+      userQuery,
+      scrapedAt: new Date().toISOString(),
+      totalSources: scrapedContent.length,
+      totalContentLength: cleanedSources.reduce((sum, item) => sum + item.content.length, 0),
+      originalContentLength: scrapedContent.reduce((sum, item) => sum + item.content.length, 0),
+      averageNoiseReduction: Math.round(cleanedSources.reduce((sum, item) => sum + item.noiseReduction, 0) / cleanedSources.length),
     };
 
-    // Write to temp file
+    // Build a markdown-style "readme" similar to historical scraped-data-*.md files
+    const headerLines: string[] = [
+      '# Scraped Dataset Analysis',
+      '',
+      `**User Query:** ${JSON.stringify(userQuery)}`,
+      '',
+      `**Scraped At:** ${metadata.scrapedAt}`,
+      '',
+      `**Total Sources:** ${metadata.totalSources}`,
+      '',
+      `**Total Content Length:** ${metadata.totalContentLength} characters`,
+      '',
+      `**Average Noise Reduction:** ${metadata.averageNoiseReduction}%`,
+      '',
+      '## Scraped Content Sources',
+      '',
+    ];
+
+    const sourceBlocks = cleanedSources.map(item => {
+      return [
+        `### Source ${item.id}: ${item.url}`,
+        '',
+        `**URL:** ${item.url}`,
+        '',
+        `**Content Length:** ${item.contentLength} characters (${item.wordCount} words)`,
+        '',
+        `**Noise Reduction:** ${item.noiseReduction}%`,
+        '',
+        '**Content:**',
+        '',
+        item.content,
+        '',
+        '---',
+        '',
+      ].join('\n');
+    });
+
+    const markdownCombined = headerLines.join('\n') + sourceBlocks.join('\n');
+
+    const comprehensiveData = {
+      metadata,
+      sources: cleanedSources,
+      combinedContent: markdownCombined,
+    };
+
+    // Write to temp file (JSON snapshot)
     writeFileSync(tempFilePath, JSON.stringify(comprehensiveData, null, 2), 'utf8');
+
+    // Mirror the scraped JSON into an external backend directory for Synthara backend
+    // using a lean payload (metadata + sources only).
+    try {
+      const backendDirEnv = process.env.SYNTHARA_BACKEND_SCRAPED_DIR;
+      const backendBase =
+        backendDirEnv && backendDirEnv.trim().length > 0
+          ? backendDirEnv.trim()
+          : 'C:\\Users\\prash\\OneDrive\\Desktop\\synthara backend extraction\\scraped';
+
+      if (backendBase) {
+        if (!existsSync(backendBase)) {
+          mkdirSync(backendBase, { recursive: true });
+        }
+        const backendFilePath = join(backendBase, `scraped-data-${timestamp}.json`);
+        const backendPayload = {
+          metadata,
+          sources: cleanedSources,
+        };
+        writeFileSync(backendFilePath, JSON.stringify(backendPayload, null, 2), 'utf8');
+        logger?.log(`Backend scraped JSON mirrored to: ${backendFilePath}`);
+      }
+    } catch (mirrorError: any) {
+      logger?.error(`Failed to mirror scraped JSON to backend directory: ${mirrorError.message}`);
+    }
+
+    // Additionally, if sessionId provided, write a raw combined content txt under temp/scraped
+    let scrapedRawPath: string | null = null;
+    if (sessionId) {
+      scrapedRawPath = join(scrapedDir, `${sessionId}-raw-content.txt`);
+      try {
+        writeFileSync(scrapedRawPath, markdownCombined, 'utf8');
+      } catch (e: any) {
+        logger?.error(`Failed to save scraped raw content: ${e.message}`);
+      }
+    }
     
     logger?.log(`📁 Temp file created: ${tempFilePath}`);
     logger?.log(`📊 Dataset stats: ${scrapedContent.length} sources`);
     logger?.log(`🧹 Noise reduction: ${comprehensiveData.metadata.averageNoiseReduction}% average`);
     logger?.log(`📝 Content: ${comprehensiveData.metadata.originalContentLength} → ${comprehensiveData.metadata.totalContentLength} characters`);
 
-    return tempFilePath;
+    return scrapedRawPath || tempFilePath;
   } catch (error: any) {
     logger?.error(`Failed to create temp file: ${error.message}`);
     return null;
   }
 }
 
-/**
- * Analyze the complete scraped dataset and create structured output
- */
-async function analyzeCompleteDatasetAndStructure({
-  tempFilePath,
-  userQuery,
-  numRows,
-  logger
-}: {
-  tempFilePath: string;
-  userQuery: string;
-  numRows: number;
-  logger?: WebScrapingLogger;
-}): Promise<{
-  success: boolean;
-  data?: any[];
-  schema?: Array<{ name: string; type: string }>;
-  feedback?: string;
-  error?: string;
-}> {
-  try {
-    // Read the comprehensive dataset
-    const comprehensiveData = JSON.parse(readFileSync(tempFilePath, 'utf8'));
-    
-    logger?.log(`📖 Reading comprehensive dataset: ${comprehensiveData.sources.length} sources`);
-    logger?.log(`📝 Total content length: ${comprehensiveData.metadata.totalContentLength} characters`);
+interface GeminiStructuredResult {
+  rows: Array<Record<string, any>>;
+  schema: Array<{ name: string; type: string }>;
+  reasoning?: string;
+  rawAiFilePath?: string;
+  modelId: string;
+}
 
-    // Use Gemini to analyze the complete dataset and create structured output
-    const { geminiService } = await import('@/services/gemini-service');
-    const combinedLen = String(comprehensiveData.combinedContent || '').length;
-    const shouldChunk = combinedLen > 140000 || comprehensiveData.sources.length > 10;
-    if (!shouldChunk) {
-      logger?.log('🤖 Sending complete dataset to AI for analysis...');
-      const analysisResult = await geminiService.analyzeCompleteDataset({
-        userQuery,
-        comprehensiveData,
-        targetRows: numRows,
-      });
-      if (analysisResult.success && analysisResult.data.length > 0) {
-        // If fewer rows than requested, perform a top-up pass over the full dataset
-        let directRows = Array.isArray(analysisResult.data) ? [...analysisResult.data] : [];
-        if (directRows.length < numRows) {
-          logger?.log(`🔄 Direct analysis returned ${directRows.length}/${numRows} rows; attempting top-up extraction`);
-          const sources = Array.isArray(comprehensiveData.sources) ? comprehensiveData.sources : [];
-          const fullMd = sources.map((item: any) => `=== SOURCE ${item.id}: ${item.title} (${item.url}) ===\n${item.content}\n`).join('\n');
-          const seen = new Set<string>(directRows.map(r => JSON.stringify(r)));
-          let attempts = 0;
-          while (directRows.length < numRows && attempts < 2) {
-            const remaining = numRows - directRows.length;
-            logger?.log(`🧪 Direct-path top-up attempt ${attempts + 1}: requesting up to ${remaining} more rows`);
-            const resp = await geminiService.analyzeMarkdownContent(fullMd, userQuery, remaining);
-            if (resp.success && resp.structuredData.data.length > 0) {
-              let added = 0;
-              for (const row of resp.structuredData.data) {
-                const key = JSON.stringify(row || {});
-                if (!seen.has(key)) {
-                  directRows.push(row);
-                  seen.add(key);
-                  added++;
-                  if (directRows.length >= numRows) break;
-                }
-              }
-              logger?.log(`✅ Direct-path top-up attempt ${attempts + 1}: added ${added} rows (total ${directRows.length})`);
-            } else {
-              logger?.log(`⚠️ Direct-path top-up attempt ${attempts + 1} produced no rows`);
-            }
-            attempts++;
-          }
-          // Recompute schema over combined rows
-          const allKeys = Array.from(new Set(directRows.flatMap(r => Object.keys(r || {}))));
-          function infer(values: any[]): string {
-            const nonNull = values.filter(v => v !== null && v !== undefined);
-            if (nonNull.length === 0) return 'string';
-            const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
-            if (boolCount === nonNull.length) return 'boolean';
-            const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
-            if (numCount === nonNull.length) return 'number';
-            const dateCount = nonNull.filter(v => !isNaN(new Date(v as any).getTime())).length;
-            if (dateCount === nonNull.length) return 'date';
-            return 'string';
-          }
-          const unifiedSchema = allKeys.map(k => ({ name: k, type: infer(directRows.map(r => r ? r[k] : undefined)) }));
-          const normalized = directRows.map(r => {
-            const obj: Record<string, any> = {};
-            for (const k of allKeys) obj[k] = r && k in r ? r[k] : '';
-            return obj;
-          });
-          const limited = normalized.slice(0, numRows);
-          logger?.success(`✅ AI analysis complete after top-up: ${limited.length} rows generated`);
-          return {
-            success: true,
-            data: limited,
-            schema: unifiedSchema,
-            feedback: analysisResult.feedback,
-          };
-        }
-        logger?.success(`✅ AI analysis complete: ${analysisResult.data.length} rows generated`);
-        return {
-          success: true,
-          data: analysisResult.data,
-          schema: analysisResult.schema,
-          feedback: analysisResult.feedback,
-        };
-      }
-      logger?.log(`⚠️ Direct analysis returned ${analysisResult.success ? '0 rows' : 'an error'} - falling back to chunked map-reduce`);
-      // Fall through to chunked path
-    }
-
-    logger?.log('⚠️ Dataset is large. Using chunked map-reduce analysis to respect token limits...');
-    const sources = Array.isArray(comprehensiveData.sources) ? comprehensiveData.sources : [];
-    const chunkSize = Math.max(3, Math.ceil(sources.length / 4));
-    const chunks: typeof sources[] = [];
-    for (let i = 0; i < sources.length; i += chunkSize) {
-      chunks.push(sources.slice(i, i + chunkSize));
-    }
-    const partialDatasets: { data: any[]; schema: Array<{ name: string; type: string }>; feedback?: string }[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const group = chunks[i];
-      const md = group.map((item: any) => `=== SOURCE ${item.id}: ${item.title} (${item.url}) ===\n${item.content}\n`).join('\n');
-      const target = Math.max(1, Math.round((group.length / Math.max(1, sources.length)) * numRows));
-      logger?.log(`🧩 Analyzing chunk ${i + 1}/${chunks.length} with target ${target} rows...`);
-      const resp = await geminiService.analyzeMarkdownContent(md, userQuery, target);
-      if (resp.success && resp.structuredData.data.length > 0) {
-        partialDatasets.push({ data: resp.structuredData.data, schema: (resp.structuredData.schema || []).map((c: any) => ({ name: String(c.name), type: String(c.type || 'string') })), feedback: resp.structuredData.reasoning });
-        logger?.success(`✅ Chunk ${i + 1}: ${resp.structuredData.data.length} rows`);
-      } else {
-        logger?.log(`⚠️ Chunk ${i + 1} produced no rows`);
-      }
-    }
-    const rows = partialDatasets.flatMap(p => p.data);
-
-    // Top-up pass: if we have fewer rows than requested, try one or two more targeted analyses over the full dataset
-    if (rows.length < numRows) {
-      logger?.log(`🔄 Top-up analysis: have ${rows.length}/${numRows} rows; attempting to extract additional rows`);
-      const sources = Array.isArray(comprehensiveData.sources) ? comprehensiveData.sources : [];
-      const fullMd = sources.map((item: any) => `=== SOURCE ${item.id}: ${item.title} (${item.url}) ===\n${item.content}\n`).join('\n');
-      const seen = new Set<string>(rows.map(r => JSON.stringify(r)));
-      let attempts = 0;
-      while (rows.length < numRows && attempts < 2) {
-        const remaining = numRows - rows.length;
-        logger?.log(`🧪 Top-up attempt ${attempts + 1}: requesting up to ${remaining} more rows`);
-        const resp = await geminiService.analyzeMarkdownContent(fullMd, userQuery, remaining);
-        if (resp.success && resp.structuredData.data.length > 0) {
-          let added = 0;
-          for (const row of resp.structuredData.data) {
-            const key = JSON.stringify(row || {});
-            if (!seen.has(key)) {
-              rows.push(row);
-              seen.add(key);
-              added++;
-              if (rows.length >= numRows) break;
-            }
-          }
-          logger?.log(`✅ Top-up attempt ${attempts + 1}: added ${added} new rows (total ${rows.length})`);
-        } else {
-          logger?.log(`⚠️ Top-up attempt ${attempts + 1} produced no additional rows`);
-        }
-        attempts++;
-      }
-    }
-    const allKeys = Array.from(new Set(rows.flatMap(r => Object.keys(r || {}))));
-    function infer(values: any[]): string {
-      const nonNull = values.filter(v => v !== null && v !== undefined);
-      if (nonNull.length === 0) return 'string';
-      const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
-      if (boolCount === nonNull.length) return 'boolean';
-      const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
-      if (numCount === nonNull.length) return 'number';
-      const dateCount = nonNull.filter(v => !isNaN(new Date(v as any).getTime())).length;
-      if (dateCount === nonNull.length) return 'date';
-      return 'string';
-    }
-    const unifiedSchema = allKeys.map(k => ({ name: k, type: infer(rows.map(r => r ? r[k] : undefined)) }));
-    const normalizedRows = rows.map(r => {
-      const obj: Record<string, any> = {};
-      for (const k of allKeys) obj[k] = r && k in r ? r[k] : '';
-      return obj;
-    });
-    const limited = normalizedRows.slice(0, numRows);
-    logger?.success(`✅ Chunked analysis complete: ${limited.length} rows (from ${rows.length}) across ${unifiedSchema.length} columns`);
-    return {
-      success: true,
-      data: limited,
-      schema: unifiedSchema,
-      feedback: partialDatasets.map(p => p.feedback).filter(Boolean).join(' | '),
-    };
-  } catch (error: any) {
-    logger?.error(`Failed to analyze complete dataset: ${error.message}`);
-    return {
-      success: false,
-      error: error.message,
-    };
+async function analyzeScrapedFileWithGemini(
+  scrapedFilePath: string,
+  userQuery: string,
+  numRows: number,
+  logger?: WebScrapingLogger,
+  sessionId?: string
+): Promise<GeminiStructuredResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured');
   }
+
+  const modelId = process.env.GEMINI_MODEL_ID || 'gemini-2.5-pro';
+
+  logger?.log(`Using Gemini model: ${modelId}`);
+
+  const raw = readFileSync(scrapedFilePath, 'utf8');
+  let combinedContent = '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.combinedContent === 'string') {
+      combinedContent = parsed.combinedContent;
+    } else if (Array.isArray(parsed?.sources)) {
+      combinedContent = parsed.sources
+        .map((item: any, index: number) => `Source ${index + 1}:\nURL: ${item.url}\nTitle: ${item.title}\nContent: ${item.content}`)
+        .join('\n\n');
+    } else {
+      combinedContent = raw;
+    }
+  } catch {
+    combinedContent = raw;
+  }
+
+  // Apply a soft character cap to avoid extreme prompts, but keep this as a single-call pipeline
+  const MAX_CHARS = 250_000;
+  if (combinedContent.length > MAX_CHARS) {
+    logger?.log(`Combined scraped content is large (${combinedContent.length} chars). Truncating to ${MAX_CHARS} chars for Gemini.`);
+    combinedContent = combinedContent.slice(0, MAX_CHARS);
+  }
+
+  const prompt = `You are an expert at data structuring and schema design.\n\n` +
+    `User Query: "${userQuery}"\n` +
+    `Target Rows: ${numRows}\n\n` +
+    `You are given a combined corpus of scraped web content across many sources. Your job is to:\n` +
+    `1) Propose a useful tabular schema (columns) that best answers the user query.\n` +
+    `2) Extract as many grounded rows as possible from the corpus, up to Target Rows.\n` +
+    `3) Never invent entities that are not clearly supported by the text.\n` +
+    `4) It is OK if many cells are empty; do not drop rows just because of missing values.\n\n` +
+    `Return your answer as strict JSON with this exact shape (no markdown, no extra keys):\n` +
+    `{"schema":[{"name":"column_name","type":"String|Number|Date|Boolean","description":"what this column represents"}],` +
+    `"data":[{"column1":"value1","column2":"value2"}],` +
+    `"reasoning":"short explanation of schema design and extraction"}\n\n` +
+    `Combined Scraped Corpus:\n` +
+    combinedContent;
+
+  const ai = new GoogleGenAI({ apiKey });
+  const tools = [
+    {
+      googleSearch: {},
+    },
+  ];
+  const config = {
+    tools,
+  };
+
+  logger?.log(`Calling ${modelId} for single-shot dataset structuring...`);
+
+  const stream = await ai.models.generateContentStream({
+    model: modelId,
+    config,
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: prompt,
+          },
+        ],
+      },
+    ],
+  });
+
+  let fullText = '';
+  for await (const chunk of stream) {
+    if ((chunk as any).text) {
+      fullText += String((chunk as any).text);
+    }
+  }
+
+  // Persist raw response for debugging and traceability
+  let rawAiFilePath: string | undefined;
+  try {
+    const tempDir = join(process.cwd(), 'temp');
+    if (!existsSync(tempDir)) {
+      mkdirSync(tempDir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    rawAiFilePath = join(tempDir, `ai-raw-response-${timestamp}.json`);
+    writeFileSync(rawAiFilePath, fullText, 'utf8');
+    if (sessionId) {
+      const analyzedDir = join(tempDir, 'analyzed');
+      if (!existsSync(analyzedDir)) {
+        mkdirSync(analyzedDir, { recursive: true });
+      }
+      const analyzedPath = join(analyzedDir, `${sessionId}-ai-analysis.json`);
+      writeFileSync(analyzedPath, fullText, 'utf8');
+      rawAiFilePath = analyzedPath;
+    }
+  } catch (saveErr: any) {
+    logger?.error(`Failed to save raw Gemini response: ${saveErr?.message || saveErr}`);
+  }
+
+  const text = fullText.trim();
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // Best-effort salvage: extract first JSON object
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) {
+      throw new Error('Gemini returned non-JSON response');
+    }
+    parsed = JSON.parse(match[0]);
+  }
+
+  const schemaRaw = Array.isArray(parsed?.schema) ? parsed.schema : [];
+  const dataRaw = Array.isArray(parsed?.data) ? parsed.data : [];
+  const reasoning = typeof parsed?.reasoning === 'string' ? parsed.reasoning : '';
+
+  const schema: Array<{ name: string; type: string }> = schemaRaw
+    .map((col: any) => ({
+      name: String(col?.name || col?.column || col?.key || ''),
+      type: String(col?.type || 'string'),
+    }))
+    .filter((col: { name: string; type: string }) => col.name);
+
+  const rows: Array<Record<string, any>> = Array.isArray(dataRaw)
+    ? dataRaw.map((row: any) => (row && typeof row === 'object' ? row : {}))
+    : [];
+
+  return {
+    rows: rows || [],
+    schema: schema || [],
+    reasoning,
+    rawAiFilePath,
+    modelId,
+  };
 }
 
 /**
@@ -1016,195 +1569,3 @@ function generateCSV(data: any[], schema: Array<{ name: string; type: string }>)
   return csvRows.join('\n');
 }
 
-/**
- * Dump all scraped content to a markdown file for AI analysis
- */
-async function dumpScrapedDataToMarkdown(
-  scrapedContent: Array<{
-    url: string;
-    title: string;
-    content: string;
-  }>,
-  userQuery: string,
-  logger?: WebScrapingLogger
-): Promise<string | null> {
-  try {
-    // Create temp directory if it doesn't exist
-    const tempDir = join(process.cwd(), 'temp');
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
-    }
-
-    // Create a comprehensive markdown dataset file
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const markdownFilePath = join(tempDir, `scraped-data-${timestamp}.md`);
-
-    // Clean content before creating markdown
-    const cleanedSources = scrapedContent.map((item, index) => {
-      const cleanedContent = cleanContentForAI(item.content);
-      return {
-        id: index + 1,
-        url: item.url,
-        title: item.title,
-        content: cleanedContent,
-        contentLength: cleanedContent.length,
-        wordCount: cleanedContent.split(/\s+/).length,
-        originalLength: item.content.length,
-        noiseReduction: Math.round(((item.content.length - cleanedContent.length) / item.content.length) * 100),
-      };
-    });
-
-    // Create markdown content
-    let markdownContent = `# Scraped Dataset Analysis\n\n`;
-    markdownContent += `**User Query:** ${userQuery}\n\n`;
-    markdownContent += `**Scraped At:** ${new Date().toISOString()}\n\n`;
-    markdownContent += `**Total Sources:** ${scrapedContent.length}\n\n`;
-    markdownContent += `**Total Content Length:** ${cleanedSources.reduce((sum, item) => sum + item.content.length, 0)} characters\n\n`;
-    markdownContent += `**Average Noise Reduction:** ${Math.round(cleanedSources.reduce((sum, item) => sum + item.noiseReduction, 0) / cleanedSources.length)}%\n\n`;
-    
-    markdownContent += `## Scraped Content Sources\n\n`;
-    
-    // Add each source as a markdown section
-    cleanedSources.forEach((source, index) => {
-      markdownContent += `### Source ${source.id}: ${source.title}\n\n`;
-      markdownContent += `**URL:** ${source.url}\n\n`;
-      markdownContent += `**Content Length:** ${source.contentLength} characters (${source.wordCount} words)\n\n`;
-      markdownContent += `**Noise Reduction:** ${source.noiseReduction}%\n\n`;
-      markdownContent += `**Content:**\n\n`;
-      markdownContent += `${source.content}\n\n`;
-      markdownContent += `---\n\n`;
-    });
-
-    // Write to markdown file
-    writeFileSync(markdownFilePath, markdownContent, 'utf8');
-    
-    logger?.log(`📁 Markdown file created: ${markdownFilePath}`);
-    logger?.log(`📊 Dataset stats: ${scrapedContent.length} sources`);
-    logger?.log(`🧹 Noise reduction: ${Math.round(cleanedSources.reduce((sum, item) => sum + item.noiseReduction, 0) / cleanedSources.length)}% average`);
-    logger?.log(`📝 Content: ${cleanedSources.reduce((sum, item) => sum + item.originalLength, 0)} → ${cleanedSources.reduce((sum, item) => sum + item.contentLength, 0)} characters`);
-
-    return markdownFilePath;
-  } catch (error: any) {
-    logger?.error(`Failed to create markdown file: ${error.message}`);
-    return null;
-  }
-}
-
-/**
- * Analyze the complete markdown dataset and create structured output
- */
-async function analyzeCompleteMarkdownDataset({
-  markdownFilePath,
-  userQuery,
-  numRows,
-  logger
-}: {
-  markdownFilePath: string;
-  userQuery: string;
-  numRows: number;
-  logger?: WebScrapingLogger;
-}): Promise<{
-  success: boolean;
-  data?: any[];
-  schema?: Array<{ name: string; type: string }>;
-  feedback?: string;
-  error?: string;
-}> {
-  try {
-    // Read the markdown file
-    const markdownContent = readFileSync(markdownFilePath, 'utf8');
-    
-    logger?.log(`📖 Reading markdown file: ${markdownContent.length} characters`);
-    
-    // Use Gemini to analyze the markdown content and generate structured data
-    const geminiService = (await import('@/services/gemini-service')).geminiService;
-    
-    // Compute an effective target based on available content capacity
-    const approxTokens = Math.ceil(markdownContent.length / 4);
-    const capacityRows = Math.max(5, Math.floor(approxTokens / 400));
-    const effectiveTarget = Math.max(5, Math.min(numRows, capacityRows));
-    logger?.log(`🎯 Effective target rows: ${effectiveTarget} (requested ${numRows}, capacity ≈ ${capacityRows})`);
-
-    logger?.log('🤖 Sending markdown content to AI for analysis...');
-    const collected: any[] = [];
-    const seen = new Set<string>();
-    let feedback: string = '';
-
-    // First attempt
-    const first = await geminiService.analyzeMarkdownContent(markdownContent, userQuery, effectiveTarget);
-    if (first.success && Array.isArray(first.structuredData.data)) {
-      for (const row of first.structuredData.data) {
-        const key = JSON.stringify(row || {});
-        if (!seen.has(key)) {
-          collected.push(row);
-          seen.add(key);
-        }
-      }
-      feedback = first.structuredData.reasoning || '';
-      logger?.success(`✅ Markdown analysis: ${collected.length} rows`);
-    } else {
-      logger?.log(`⚠️ Markdown analysis returned no rows (${first.error || 'unknown error'})`);
-    }
-
-    // Top-up attempts if under target
-    let attempts = 0;
-    while (collected.length < effectiveTarget && attempts < 2) {
-      const remaining = effectiveTarget - collected.length;
-      logger?.log(`🔄 Markdown top-up attempt ${attempts + 1}: requesting up to ${remaining} more rows`);
-      const resp = await geminiService.analyzeMarkdownContent(markdownContent, userQuery, remaining);
-      if (resp.success && Array.isArray(resp.structuredData.data) && resp.structuredData.data.length > 0) {
-        let added = 0;
-        for (const row of resp.structuredData.data) {
-          const key = JSON.stringify(row || {});
-          if (!seen.has(key)) {
-            collected.push(row);
-            seen.add(key);
-            added++;
-            if (collected.length >= effectiveTarget) break;
-          }
-        }
-        logger?.success(`✅ Top-up attempt ${attempts + 1}: added ${added} rows (total ${collected.length})`);
-      } else {
-        logger?.log(`⚠️ Top-up attempt ${attempts + 1} produced no rows`);
-      }
-      attempts++;
-    }
-
-    if (collected.length === 0) {
-      throw new Error('No structured data generated from markdown');
-    }
-
-    // Unify schema across collected rows and normalize
-    const allKeys = Array.from(new Set(collected.flatMap(r => Object.keys(r || {}))));
-    function infer(values: any[]): string {
-      const nonNull = values.filter(v => v !== null && v !== undefined);
-      if (nonNull.length === 0) return 'string';
-      const boolCount = nonNull.filter(v => typeof v === 'boolean' || v === 'true' || v === 'false').length;
-      if (boolCount === nonNull.length) return 'boolean';
-      const numCount = nonNull.filter(v => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
-      if (numCount === nonNull.length) return 'number';
-      const dateCount = nonNull.filter(v => !isNaN(new Date(v as any).getTime())).length;
-      if (dateCount === nonNull.length) return 'date';
-      return 'string';
-    }
-    const unifiedSchema = allKeys.map(k => ({ name: k, type: infer(collected.map(r => r ? r[k] : undefined)) }));
-    const normalized = collected.map(r => {
-      const obj: Record<string, any> = {};
-      for (const k of allKeys) obj[k] = r && k in r ? r[k] : '';
-      return obj;
-    });
-
-    return {
-      success: true,
-      data: normalized,
-      schema: unifiedSchema,
-      feedback,
-    };
-  } catch (error: any) {
-    logger?.error(`Markdown analysis failed: ${error.message}`);
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-}

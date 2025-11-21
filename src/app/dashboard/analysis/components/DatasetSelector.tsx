@@ -27,6 +27,7 @@ import { getUserDatasets, type SavedDataset } from '@/lib/supabase/actions';
 interface DatasetSelectorProps {
   onDatasetSelect: (data: Record<string, any>[], metadata: { id?: string; name: string; source: 'saved' | 'uploaded' }) => void;
   onAnalysisStart: () => void;
+  hideAnalyzeButton?: boolean;
 }
 
 const parseCSV = async (csvText: string): Promise<Record<string, any>[]> => {
@@ -48,7 +49,7 @@ const parseCSV = async (csvText: string): Promise<Record<string, any>[]> => {
     return rows;
 };
 
-export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSelectorProps) {
+export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeButton = false }: DatasetSelectorProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
@@ -333,26 +334,28 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart }: DatasetSel
           </div>
         )}
 
-        {/* Analyze Button */}
-        <div className="flex justify-end">
-          <Button 
-            onClick={handleAnalyze}
-            disabled={!hasData}
-            className="min-w-32"
-          >
-            {hasData ? (
-              <>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Analyze Dataset
-              </>
-            ) : (
-              <>
-                <AlertCircle className="h-4 w-4 mr-2" />
-                Select Dataset First
-              </>
-            )}
-          </Button>
-        </div>
+        {/* Analyze Button (hidden in some contexts) */}
+        {!hideAnalyzeButton && (
+          <div className="flex justify-end">
+            <Button 
+              onClick={handleAnalyze}
+              disabled={!hasData}
+              className="min-w-32"
+            >
+              {hasData ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Analyze Dataset
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  Select Dataset First
+                </>
+              )}
+            </Button>
+          </div>
+        )}
 
         {/* Help Text */}
         <Alert>

@@ -17,7 +17,10 @@ class Crawl4AIService {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:11235';
+    this.baseUrl =
+      process.env.CRAWL4AI_EXTRACT_URL ||
+      process.env.CRAWL4AI_SERVICE_URL ||
+      'http://localhost:11236';
   }
 
   async health(timeoutMs: number = 5000): Promise<boolean> {

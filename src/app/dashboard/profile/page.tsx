@@ -199,7 +199,7 @@ export default function ProfilePage() {
         </TabsList>
 
         <TabsContent value="profile">
-          <Card className="shadow-xl">
+          <Card>
             <CardHeader className="pb-4 sm:pb-6">
               <CardTitle className="font-headline text-lg sm:text-xl lg:text-2xl">Personal Information</CardTitle>
               <CardDescription className="text-sm sm:text-base">Update your personal details here. Click 'Edit Profile' to make changes.</CardDescription>
@@ -301,7 +301,7 @@ export default function ProfilePage() {
         </TabsContent>
 
         <TabsContent value="preferences">
-          <Card className="shadow-xl">
+          <Card>
             <CardHeader>
               <CardTitle className="font-headline text-2xl">Interface Preferences</CardTitle>
               <CardDescription className="text-md">Customize your platform experience.</CardDescription>
@@ -337,7 +337,7 @@ export default function ProfilePage() {
         
         <TabsContent value="security">
           <div className="space-y-8">
-            <Card className="shadow-xl">
+            <Card>
               <CardHeader>
                 <CardTitle className="font-headline text-2xl">Password Management</CardTitle>
                 <CardDescription className="text-md">Change your account password regularly for better security.</CardDescription>
@@ -410,7 +410,7 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-             <Card className="shadow-xl border-destructive/50">
+             <Card className="border-destructive/50">
               <CardHeader>
                 <CardTitle className="font-headline text-2xl text-destructive flex items-center"><Trash2 className="mr-2.5"/>Delete Account</CardTitle>
                 <CardDescription className="text-md">Permanently delete your account and all associated data. This action cannot be undone.</CardDescription>
@@ -440,7 +440,7 @@ export default function ProfilePage() {
         </TabsContent>
 
         <TabsContent value="notifications">
-          <Card className="shadow-xl">
+          <Card>
             <CardHeader>
               <CardTitle className="font-headline text-2xl">Notification Settings</CardTitle>
               <CardDescription className="text-md">Manage how you receive notifications from Synthara.</CardDescription>

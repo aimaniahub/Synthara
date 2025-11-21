@@ -235,44 +235,46 @@ export function StatisticalSummary({ profile, className }: StatisticalSummaryPro
             </CardContent>
           </Card>
         )}
-      </div>
 
-      {/* Missing Data Details */}
-      {profile.missingDataPattern.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" />
-              Missing Data Analysis
-            </CardTitle>
-            <CardDescription>
-              Columns with missing values and their impact
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {profile.missingDataPattern.map((item) => (
-                <div key={item.column} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-medium text-sm">{item.column}</span>
-                    <Badge variant="destructive" className="text-xs">
-                      {item.missingCount} missing
-                    </Badge>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-24">
-                      <Progress value={100 - item.missingPercentage} className="h-2" />
-                    </div>
-                    <span className="text-sm text-muted-foreground w-12 text-right">
-                      {item.missingPercentage.toFixed(1)}%
+        {/* Missing Data Details */}
+        {profile.missingDataPattern.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                Missing Data Analysis
+              </CardTitle>
+              <CardDescription>
+                Columns with missing values and their impact
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {profile.missingDataPattern.map((item) => (
+                  <div key={item.column} className="flex items-center justify-between gap-4">
+                    <span className="font-medium text-sm">
+                      {item.column}
                     </span>
+                    <div className="flex items-center gap-3">
+                      <Badge variant="destructive" className="text-xs whitespace-nowrap">
+                        {item.missingCount} missing
+                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24">
+                          <Progress value={100 - item.missingPercentage} className="h-2" />
+                        </div>
+                        <span className="text-sm text-muted-foreground w-12 text-right">
+                          {item.missingPercentage.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

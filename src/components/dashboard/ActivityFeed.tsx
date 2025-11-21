@@ -33,7 +33,7 @@ const getActivityIcon = (activityType: string) => {
 export function ActivityFeed({ activities, isLoading }: ActivityFeedProps) {
   if (isLoading) {
     return (
-      <Card className="border rounded-lg bg-background">
+      <Card>
         <CardHeader className="border-b">
           <CardTitle className="text-base font-semibold text-foreground">Recent Activity</CardTitle>
           <CardDescription className="text-muted-foreground">Loading your latest actions...</CardDescription>
@@ -48,7 +48,7 @@ export function ActivityFeed({ activities, isLoading }: ActivityFeedProps) {
   }
 
   return (
-    <Card className="border rounded-lg bg-background overflow-hidden">
+    <Card className="overflow-hidden">
       <CardHeader className="border-b">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-md bg-muted">

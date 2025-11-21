@@ -361,6 +361,72 @@ Make sure the data is clean, consistent, and directly relevant to the user query
   }
 
   /**
+   * Analyze already-selected relevant chunks and structure them into a dataset
+   * This is used by the intelligent web scraping flow after chunk + relevance selection,
+   * so we only send a bounded subset of scraped text into the model.
+   */
+  async analyzeRelevantChunksToStructuredData(
+    chunks: Array<{ url: string; title: string; content: string }>,
+    userQuery: string,
+    numRows: number
+  ): Promise<GeminiDataStructuringResponse> {
+    try {
+      if (!this.apiKey && !this.shouldUseOpenRouter()) {
+        return {
+          success: false,
+          structuredData: { schema: [], data: [], reasoning: '' },
+          error: 'No AI provider configured (Gemini or OpenRouter)'
+        };
+      }
+
+      // Enforce a hard character budget across all chunks to stay within token limits
+      const MAX_TOTAL_CHARS = 40000;
+      const limitedChunks: GeminiRefinedContent[] = [];
+      let used = 0;
+
+      for (const chunk of chunks) {
+        let content = chunk.content || '';
+        if (!content.trim()) continue;
+
+        const remaining = MAX_TOTAL_CHARS - used;
+        if (remaining <= 0) break;
+
+        if (content.length > remaining) {
+          content = content.slice(0, remaining);
+        }
+
+        limitedChunks.push({
+          url: chunk.url,
+          title: chunk.title || chunk.url,
+          relevantContent: content,
+          confidence: 1,
+        });
+        used += content.length;
+      }
+
+      if (limitedChunks.length === 0) {
+        return {
+          success: false,
+          structuredData: { schema: [], data: [], reasoning: '' },
+          error: 'No non-empty content available in relevant chunks'
+        };
+      }
+
+      console.log(`[Gemini] Structuring ${limitedChunks.length} relevant chunks (≈${used} chars) for ${numRows} rows`);
+
+      // Reuse the existing structuring pipeline to keep JSON handling consistent
+      return this.structureData(limitedChunks, userQuery, numRows);
+    } catch (error: any) {
+      console.error('[Gemini] analyzeRelevantChunksToStructuredData error:', error);
+      return {
+        success: false,
+        structuredData: { schema: [], data: [], reasoning: '' },
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Generate free-form content and return raw text
    */
   async generateContent(prompt: string): Promise<{ text: string }> {

@@ -4,6 +4,8 @@
  */
 
 import { OpenAI } from 'openai';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { join } from 'path';
 
 // Initialize OpenRouter client
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -26,6 +28,26 @@ export interface SimpleAIInput {
 export interface SimpleAIOutput {
   text: string;
   model: string;
+}
+
+export interface StructuredDatasetSchemaColumn {
+  name: string;
+  type: string;
+  description?: string;
+}
+
+export interface StructuredDataset {
+  schema: StructuredDatasetSchemaColumn[];
+  data: Array<Record<string, any>>;
+  reasoning?: string;
+  rawFilePath?: string;
+}
+
+export interface StructureRelevantChunksInput {
+  chunks: Array<{ url: string; title: string; content: string }>;
+  userQuery: string;
+  numRows: number;
+  sessionId?: string;
 }
 
 export class SimpleAI {
@@ -79,8 +101,8 @@ export class SimpleAI {
     }
   }
 
-  static async generateWithSchema<T>(input: SimpleAIInput & { schema: any }): Promise<T> {
-    const { schema, ...aiInput } = input;
+  static async generateWithSchema<T>(input: SimpleAIInput & { schema: any; sessionId?: string }): Promise<T> {
+    const { schema, sessionId, ...aiInput } = input;
     
     // Add JSON schema instruction to prompt
     const enhancedPrompt = `${aiInput.prompt}
@@ -95,26 +117,284 @@ ${JSON.stringify(schema, null, 2)}`;
       prompt: enhancedPrompt,
     });
 
+    // Always persist the raw AI response so we can debug or post-process it later
+    let rawResponsePath: string | null = null;
     try {
-      // Clean the response text to handle markdown code blocks
-      let cleanedText = result.text.trim();
+      const tempDir = join(process.cwd(), 'temp');
+      if (!existsSync(tempDir)) {
+        mkdirSync(tempDir, { recursive: true });
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      rawResponsePath = join(tempDir, `ai-raw-response-${timestamp}.json`);
+      writeFileSync(rawResponsePath, result.text, 'utf8');
+      console.log(`[SimpleAI] Raw AI response saved to: ${rawResponsePath}`);
 
-      // Remove markdown code blocks if present
-      if (cleanedText.startsWith('```json')) {
-        cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-      } else if (cleanedText.startsWith('```')) {
-        cleanedText = cleanedText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      // If we have a sessionId, also copy to temp/analyzed/{sessionId}-ai-analysis.json immediately
+      if (sessionId) {
+        const analyzedDir = join(tempDir, 'analyzed');
+        if (!existsSync(analyzedDir)) {
+          mkdirSync(analyzedDir, { recursive: true });
+        }
+        const analyzedPath = join(analyzedDir, `${sessionId}-ai-analysis.json`);
+        writeFileSync(analyzedPath, result.text, 'utf8');
+      }
+    } catch (saveError: any) {
+      console.error('[SimpleAI] Failed to save raw AI response:', saveError?.message || saveError);
+    }
+
+    // Helper: best-effort JSON extraction and parsing
+    const tryParseJson = (raw: string): T => {
+      const text = raw.trim();
+
+      // Strategy 1: direct parse
+      try {
+        return JSON.parse(text) as T;
+      } catch {}
+
+      // Strategy 2: strip markdown fences
+      let cleaned = text;
+      if (cleaned.startsWith('```json')) {
+        cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      cleaned = cleaned.trim();
+
+      try {
+        return JSON.parse(cleaned) as T;
+      } catch {}
+
+      // Strategy 3: extract first JSON object or array substring
+      const candidates: string[] = [];
+      const objectMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (objectMatch) candidates.push(objectMatch[0]);
+      const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+      if (arrayMatch) candidates.push(arrayMatch[0]);
+
+      for (const c of candidates) {
+        try {
+          return JSON.parse(c.trim()) as T;
+        } catch {
+          // continue
+        }
       }
 
-      // Remove any leading/trailing whitespace
-      cleanedText = cleanedText.trim();
+      // Strategy 4: salvage just the `data` array if present, even if other parts are messy
+      try {
+        const dataMatch = cleaned.match(/"data"\s*:\s*(\[[\s\S]*\])/);
+        if (dataMatch && dataMatch[1]) {
+          let dataSegment = dataMatch[1];
+          // Best-effort fix for trailing commas before closing brackets
+          dataSegment = dataSegment.replace(/,(\s*[\]}])/g, '$1');
+          const wrapped = `{ "data": ${dataSegment} }`;
+          return JSON.parse(wrapped) as T;
+        }
+      } catch {
+        // ignore and fall through
+      }
 
-      return JSON.parse(cleanedText) as T;
-    } catch (parseError) {
-      console.error('[SimpleAI] Failed to parse JSON response:', result.text);
-      console.error('[SimpleAI] Parse error:', parseError);
+      // Strategy 5: basic quote/bracket healing for truncated JSON
+      const healAndParse = (snippet: string): T | null => {
+        let s = snippet.trim();
+
+        // Balance quotes
+        const quoteCount = (s.match(/"/g) || []).length;
+        if (quoteCount % 2 === 1) {
+          s += '"';
+        }
+
+        // Balance curly braces
+        const openCurly = (s.match(/\{/g) || []).length;
+        const closeCurly = (s.match(/\}/g) || []).length;
+        if (openCurly > closeCurly) {
+          s += '}'.repeat(openCurly - closeCurly);
+        }
+
+        // Balance square brackets
+        const openSquare = (s.match(/\[/g) || []).length;
+        const closeSquare = (s.match(/\]/g) || []).length;
+        if (openSquare > closeSquare) {
+          s += ']'.repeat(openSquare - closeSquare);
+        }
+
+        try {
+          return JSON.parse(s) as T;
+        } catch {
+          return null;
+        }
+      };
+
+      const healedFromCleaned = healAndParse(cleaned);
+      if (healedFromCleaned) return healedFromCleaned;
+
+      for (const c of candidates) {
+        const healed = healAndParse(c);
+        if (healed) return healed;
+      }
+
       throw new Error('AI returned invalid JSON format');
+    };
+
+    try {
+      const parsed = tryParseJson(result.text) as any;
+      if (rawResponsePath) {
+        parsed._rawFilePath = rawResponsePath;
+      }
+      return parsed as T;
+    } catch (parseError) {
+      const preview = result.text.length > 1000 ? `${result.text.slice(0, 1000)}…` : result.text;
+      console.error('[SimpleAI] Failed to parse JSON response (preview):', preview);
+      console.error('[SimpleAI] Parse error:', parseError);
+      throw parseError;
     }
+  }
+
+  static async structureRelevantChunksToDataset(input: StructureRelevantChunksInput): Promise<StructuredDataset> {
+    const { chunks, userQuery, numRows, sessionId } = input;
+
+    const MAX_TOTAL_CHARS = 170000;
+    const limited: Array<{ url: string; title: string; content: string }> = [];
+    let used = 0;
+
+    for (const chunk of chunks) {
+      let content = (chunk.content || '').trim();
+      if (!content) continue;
+
+      const remaining = MAX_TOTAL_CHARS - used;
+      if (remaining <= 0) break;
+
+      if (content.length > remaining) {
+        content = content.slice(0, remaining);
+      }
+
+      limited.push({
+        url: chunk.url,
+        title: chunk.title || chunk.url,
+        content,
+      });
+      used += content.length;
+    }
+
+    if (!limited.length) {
+      throw new Error('No non-empty content available in relevant chunks');
+    }
+
+    const sourcesText = limited
+      .map((item, index) => `Source ${index + 1}:
+URL: ${item.url}
+Title: ${item.title}
+Content: ${item.content}`)
+      .join('\n\n');
+
+    const prompt = `You are an expert at data structuring and schema design.
+Given refined web content and a user query, create a structured dataset with appropriate columns and data.
+
+User Query: "${userQuery}"
+Target Rows: ${numRows}
+
+IMPORTANT ABOUT TARGET ROWS:
+- Always treat Target Rows as the main limit on how many rows to output.
+- If the user text mentions phrases like "top 10" or "top N" but Target Rows is larger, you should ignore that smaller number and aim to produce as many grounded rows as possible, up to Target Rows.
+
+Refined Content:
+${sourcesText}
+
+PROCESSING STRATEGY (FOLLOW THIS):
+- First, scan the overall structure to understand how the data is organized across sources.
+- Identify sections that contain entity lists, tables, bullet lists, A-to-Z indexes, catalogs, or other repeated patterns that match the user query.
+- Prefer well-structured sources (tables, lists, IMDB-style pages, A–Z lists) but still use other sources as support.
+- Break the content mentally by source and process each source independently.
+- Recognize patterns like "Name | Location | Type" or similar repeated structures and extract rows from them.
+- Filter out JavaScript/CSS/HTML boilerplate, navigation, ads, and other noise.
+
+ROW GRANULARITY (VERY IMPORTANT):
+- Treat each distinct real-world entity mentioned in the sources as one row. Examples of entities:
+  - For medical queries: each disease, condition, symptom group, treatment protocol, guideline, or dataset.
+  - For products: each individual product or SKU.
+  - For places: each hospital, clinic, college, or location.
+- When a page lists many entities (e.g. a long list of diseases, symptoms, guidelines, or products), you should create one row per entity rather than summarizing them into a few broad rows.
+
+MERGING AND DEDUPLICATION:
+- Use information from ALL sources to fill in each row. If multiple sources clearly describe the same entity, you may merge their details into a single consolidated row.
+- Do NOT over-merge: if there is any doubt whether two mentions are the same entity, keep them as separate rows.
+
+ROW COUNT AND RECALL:
+- It is OK if some columns are empty or unknown for a row. Do NOT drop a row just because some fields are missing.
+- Extract as many **real** rows as possible, up to the Target Rows value.
+- If the sources clearly contain many entities (e.g. hundreds of diseases or products) and Target Rows is large, prefer generating close to Target Rows rather than only a small representative sample.
+- Never invent entities that are not grounded in the sources.
+
+Return your response as a JSON object with this exact structure:
+{
+  "schema": [
+    {
+      "name": "column_name",
+      "type": "String|Number|Date|Boolean",
+      "description": "what this column represents"
+    }
+  ],
+  "data": [
+    {
+      "column1": "value1",
+      "column2": "value2"
+    }
+  ],
+  "reasoning": "explanation of the schema design and data extraction approach"
+}`;
+
+    const schemaShape = {
+      schema: [
+        {
+          name: 'column_name',
+          type: 'String|Number|Date|Boolean',
+          description: 'what this column represents',
+        },
+      ],
+      data: [
+        {
+          column1: 'value1',
+          column2: 'value2',
+        },
+      ],
+      reasoning: 'text',
+    };
+
+    const result = await SimpleAI.generateWithSchema<StructuredDataset>({
+      prompt,
+      schema: schemaShape,
+      model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
+      maxTokens: 5000,
+      temperature: 0.3,
+      sessionId,
+    });
+
+    // If we have a sessionId and a saved raw file, copy it to temp/analyzed/{sessionId}-ai-analysis.json
+    try {
+      const rawPath = (result as any)?._rawFilePath as string | undefined;
+      if (sessionId && rawPath) {
+        const tempBase = join(process.cwd(), 'temp');
+        const analyzedDir = join(tempBase, 'analyzed');
+        if (!existsSync(analyzedDir)) {
+          mkdirSync(analyzedDir, { recursive: true });
+        }
+        const analyzedPath = join(analyzedDir, `${sessionId}-ai-analysis.json`);
+        const rawText = readFileSync(rawPath, 'utf8');
+        writeFileSync(analyzedPath, rawText, 'utf8');
+        (result as any).rawFilePath = analyzedPath;
+      }
+    } catch (copyErr: any) {
+      console.error('[SimpleAI] Failed to copy raw AI response to analyzed folder:', copyErr?.message || copyErr);
+    }
+
+    if (!Array.isArray(result.data)) {
+      result.data = [];
+    }
+
+    if (!Array.isArray(result.schema)) {
+      result.schema = [];
+    }
+
+    return result;
   }
 }
 

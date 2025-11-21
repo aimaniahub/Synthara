@@ -270,6 +270,39 @@ export default function DataAnalysisPage() {
     }
   }
 
+  // Visually advance cleaning steps while long-running cleaning is in progress
+  useEffect(() => {
+    if (!isCleaning || cleanedCandidate.length > 0) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      setCleaningSteps((steps) => {
+        const runningIndex = steps.findIndex((step) => step.status === 'running');
+
+        // If nothing is running or we're already on the last step, keep current state
+        if (runningIndex === -1 || runningIndex >= steps.length - 1) {
+          return steps;
+        }
+
+        return steps.map((step, index) => {
+          if (index < runningIndex) {
+            return { ...step, status: 'done' };
+          }
+          if (index === runningIndex + 1) {
+            return { ...step, status: 'running' };
+          }
+          if (index === runningIndex) {
+            return { ...step, status: 'done' };
+          }
+          return step;
+        });
+      });
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [isCleaning, cleanedCandidate.length]);
+
   async function handleAppendAndSave() {
     if (!datasetMetadata?.id || !cleanedCandidate.length || !columnsInOrder.length) return;
     setIsAppending(true);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 import { analysisService } from '@/services/analysis-service';
-import { geminiService } from '@/services/gemini-service';
+import { SimpleAI } from '@/ai/simple-ai';
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,34 +38,128 @@ export async function POST(request: NextRequest) {
     const analysisResult = analysisService.analyzeDataset(analysisData);
 
     // Generate AI insights (always include for better UX)
-    let aiInsights = null;
+    let aiInsights: any = null;
     try {
       // Use sample data for AI analysis to improve performance
       const sampleData = analysisData.slice(0, Math.min(100, analysisData.length));
-      const schema = analysisResult.profile.columns.map(col => ({
+      const schema = analysisResult.profile.columns.map((col: any) => ({
         name: col.name,
-        type: col.type
+        type: col.type,
       }));
 
-      const columnAnalysis = await geminiService.analyzeDatasetProfile(
-        schema,
-        sampleData,
-        analysisResult.profile
-      );
+      const columnPrompt = `You are a senior data analyst.
 
-      const deepAnalysis = await geminiService.generateDeepInsights(
-        analysisResult.profile,
-        analysisResult.profile.correlationMatrix || [],
-        {
-          numericColumns: analysisResult.profile.numericColumns,
-          categoricalColumns: analysisResult.profile.categoricalColumns,
-          totalRows: analysisResult.profile.totalRows
-        }
-      );
+Dataset schema:
+${JSON.stringify(schema, null, 2)}
+
+Sample rows (up to 100):
+${JSON.stringify(sampleData.slice(0, 20), null, 2)}
+
+Profile summary:
+${JSON.stringify(analysisResult.profile, null, 2)}
+
+For each column, provide:
+- A short human-readable description of what the column represents
+- Notable quality issues (missing values, outliers, skew, etc.)
+- Concrete recommendations to improve data quality or usage
+
+Return JSON only:
+{
+  "columnInsights": [
+    {
+      "name": "column_name",
+      "summary": "short description",
+      "qualityIssues": ["issue 1", "issue 2"],
+      "recommendations": ["recommendation 1", "recommendation 2"]
+    }
+  ]
+}`;
+
+      const columnAnalysis = await SimpleAI.generateWithSchema<{
+        columnInsights: Array<{
+          name: string;
+          summary: string;
+          qualityIssues: string[];
+          recommendations: string[];
+        }>;
+      }>({
+        prompt: columnPrompt,
+        schema: {
+          columnInsights: [
+            {
+              name: 'column_name',
+              summary: 'short description',
+              qualityIssues: ['issue 1'],
+              recommendations: ['recommendation 1'],
+            },
+          ],
+        },
+        model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
+        maxTokens: 2000,
+        temperature: 0.3,
+      });
+
+      const deepPrompt = `You are a senior data scientist.
+
+Dataset profile:
+${JSON.stringify(analysisResult.profile, null, 2)}
+
+Correlation matrix (may be empty):
+${JSON.stringify(analysisResult.profile.correlationMatrix || [], null, 2)}
+
+Numeric columns: ${JSON.stringify(analysisResult.profile.numericColumns || [])}
+Categorical columns: ${JSON.stringify(analysisResult.profile.categoricalColumns || [])}
+Total rows: ${analysisResult.profile.totalRows}
+
+Provide high-level insights about this dataset, including:
+- A concise summary of what the dataset seems to capture
+- Interesting correlations or relationships
+- Actionable recommendations for feature engineering or further analysis
+
+Return JSON only:
+{
+  "summary": "short paragraph",
+  "correlations": [
+    { "columnA": "col1", "columnB": "col2", "strength": "weak|moderate|strong", "insight": "text" }
+  ],
+  "recommendations": ["rec 1", "rec 2"]
+}`;
+
+      const deepAnalysis = await SimpleAI.generateWithSchema<{
+        summary: string;
+        correlations: Array<{
+          columnA: string;
+          columnB: string;
+          strength: string;
+          insight: string;
+        }>;
+        recommendations: string[];
+      }>({
+        prompt: deepPrompt,
+        schema: {
+          summary: 'short paragraph',
+          correlations: [
+            {
+              columnA: 'col1',
+              columnB: 'col2',
+              strength: 'weak',
+              insight: 'text',
+            },
+          ],
+          recommendations: ['rec 1'],
+        },
+        model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
+        maxTokens: 2000,
+        temperature: 0.3,
+      });
 
       aiInsights = {
-        columnInsights: columnAnalysis.success ? columnAnalysis.columnInsights : [],
-        deepInsights: deepAnalysis.success ? deepAnalysis : null
+        columnInsights: Array.isArray(columnAnalysis.columnInsights) ? columnAnalysis.columnInsights : [],
+        deepInsights: {
+          summary: deepAnalysis.summary || '',
+          correlations: Array.isArray(deepAnalysis.correlations) ? deepAnalysis.correlations : [],
+          recommendations: Array.isArray(deepAnalysis.recommendations) ? deepAnalysis.recommendations : [],
+        },
       };
     } catch (aiError) {
       console.warn('AI analysis failed:', aiError);
@@ -73,10 +167,10 @@ export async function POST(request: NextRequest) {
       aiInsights = {
         columnInsights: [],
         deepInsights: {
-          summary: "AI analysis temporarily unavailable. Please try again later.",
+          summary: 'AI analysis temporarily unavailable. Please try again later.',
           correlations: [],
-          recommendations: []
-        }
+          recommendations: [],
+        },
       };
     }
 

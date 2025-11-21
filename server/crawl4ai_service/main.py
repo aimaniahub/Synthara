@@ -18,6 +18,8 @@ except Exception:
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 DEFAULT_MODEL = os.getenv("CRAWL4AI_LLM_MODEL", "gpt-4o-mini")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("CRAWL4AI_GEMINI_MODEL", os.getenv("GEMINI_MODEL_ID", "gemini-2.5-pro"))
 
 app = FastAPI(title="Crawl4AI Structured Extraction Service", version="0.1.0")
 
@@ -191,6 +193,75 @@ async def call_openai_extract(chunk: str, query: str, model: str, temperature: f
         return []
 
 
+async def call_gemini_extract(chunk: str, query: str, model: str, temperature: float, json_mode: bool) -> List[Dict[str, Any]]:
+    if not GEMINI_API_KEY:
+        return []
+    try:
+        system_prompt = (
+            "You are a precise data extractor. Return ONLY JSON. "
+            "Given a chunk of webpage text and a user query, extract structured rows relevant to the query. "
+            "If nothing relevant exists, return an empty array []."
+        )
+        user_prompt = (
+            f"USER QUERY:\n{query}\n\n"
+            f"CHUNK:\n{chunk[:8000]}\n\n"
+            "Return JSON array of objects. No prose. No markdown."
+        )
+
+        combined_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                url,
+                json={
+                    "contents": [
+                        {
+                            "role": "user",
+                            "parts": [
+                                {"text": combined_prompt},
+                            ],
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": temperature,
+                        "maxOutputTokens": 2048,
+                        "responseMimeType": "application/json" if json_mode else "text/plain",
+                    },
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        text = ""
+        try:
+            candidates = data.get("candidates") or []
+            if candidates:
+                content = candidates[0].get("content") or {}
+                parts = content.get("parts") or []
+                if parts and isinstance(parts[0].get("text"), str):
+                    text = parts[0]["text"] or ""
+        except Exception:
+            text = ""
+
+        if not text:
+            return []
+
+        rows = safe_parse_rows(text)
+        if rows:
+            return rows
+
+        for cand in extract_json_candidates(text):
+            rows = safe_parse_rows(cand)
+            if rows:
+                return rows
+
+        return []
+    except Exception:
+        return []
+
+
 def dedupe_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set()
     out = []
@@ -207,11 +278,15 @@ def dedupe_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 async def extract(req: ExtractRequest) -> ExtractResponse:
     if not req.urls:
         return ExtractResponse(success=False, results=[], error="No URLs provided")
-    if req.llm.provider.lower() != "openai":
-        # Only OpenAI implemented here
-        return ExtractResponse(success=False, results=[], error="Only OpenAI provider implemented in this server")
-    if not OPENAI_API_KEY:
-        return ExtractResponse(success=False, results=[], error="OPENAI_API_KEY not set on server")
+    provider = (req.llm.provider or "openai").lower()
+    if provider == "openai":
+        if not OPENAI_API_KEY:
+            return ExtractResponse(success=False, results=[], error="OPENAI_API_KEY not set on server")
+    elif provider == "gemini":
+        if not GEMINI_API_KEY:
+            return ExtractResponse(success=False, results=[], error="GEMINI_API_KEY not set on server")
+    else:
+        return ExtractResponse(success=False, results=[], error="Unsupported LLM provider")
 
     per_url_target = max(1, math.ceil(req.target_rows / max(1, len(req.urls))))
     results: List[PageResult] = []
@@ -228,13 +303,22 @@ async def extract(req: ExtractRequest) -> ExtractResponse:
 
         accumulated: List[Dict[str, Any]] = []
         for ch in chunks:
-            rows = await call_openai_extract(
-                chunk=ch,
-                query=req.query,
-                model=req.llm.model or DEFAULT_MODEL,
-                temperature=req.llm.temperature,
-                json_mode=req.llm.json_mode,
-            )
+            if provider == "openai":
+                rows = await call_openai_extract(
+                    chunk=ch,
+                    query=req.query,
+                    model=req.llm.model or DEFAULT_MODEL,
+                    temperature=req.llm.temperature,
+                    json_mode=req.llm.json_mode,
+                )
+            else:
+                rows = await call_gemini_extract(
+                    chunk=ch,
+                    query=req.query,
+                    model=req.llm.model or GEMINI_MODEL,
+                    temperature=req.llm.temperature,
+                    json_mode=req.llm.json_mode,
+                )
             if rows:
                 accumulated.extend(rows)
                 accumulated = dedupe_rows(accumulated)

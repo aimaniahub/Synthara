@@ -194,7 +194,7 @@ function DataPreviewContent() {
             </TabsList>
 
             <TabsContent value="preview">
-              <Card className="shadow-xl">
+              <Card>
                 <CardHeader>
                   <CardTitle className="font-headline">Data Table Preview</CardTitle>
                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mt-2">
@@ -272,7 +272,7 @@ function DataPreviewContent() {
 
             <TabsContent value="statistics">
                 <div className="grid md:grid-cols-2 gap-6">
-                    <Card className="shadow-xl">
+                    <Card>
                         <CardHeader>
                             <CardTitle className="font-headline">Overall Dataset Statistics</CardTitle>
                         </CardHeader>
@@ -288,7 +288,7 @@ function DataPreviewContent() {
                         ) : renderEmptyState("Statistics will appear here once a dataset is selected.")}
                         </CardContent>
                     </Card>
-                    <Card className="shadow-xl">
+                    <Card>
                         <CardHeader>
                             <CardTitle className="font-headline">Column Statistics Example</CardTitle>
                             <CardDescription>Detailed statistics for selected columns (Placeholder).</CardDescription>
@@ -310,7 +310,7 @@ function DataPreviewContent() {
       </div>
 
       {loadedDataset && !isLoadingDataset && (
-        <Card className="shadow-xl">
+        <Card>
             <CardHeader>
             <CardTitle className="font-headline flex items-center"><Settings2 className="mr-2"/> Export &amp; Versioning</CardTitle>
             </CardHeader>

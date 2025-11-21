@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { intelligentWebScraping } from '@/ai/flows/intelligent-web-scraping-flow';
-import { geminiService } from '@/services/gemini-service';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
 // Request deduplication for stream API
 const activeRequests = new Map<string, Promise<Response>>();
@@ -72,7 +73,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { prompt, numRows, useWebData, refinedSearchQuery } = body;
+  const { prompt, numRows, useWebData, refinedSearchQuery, sessionId: incomingSessionId } = body;
 
   // Create a unique key for this request
   const requestKey = `${prompt}-${numRows}-${refinedSearchQuery || ''}`.toLowerCase().trim();
@@ -85,7 +86,13 @@ export async function POST(request: NextRequest) {
 
   console.log(`[StreamAPI] 🚀 Starting new stream request for: "${prompt.substring(0, 50)}..."`);
 
-  const responsePromise = createStreamResponse(body, requestKey);
+  // Ensure we have a sessionId available downstream
+  const sessionId = (typeof incomingSessionId === 'string' && incomingSessionId.trim())
+    ? incomingSessionId.trim()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const bodyWithSession = { ...body, sessionId };
+
+  const responsePromise = createStreamResponse(bodyWithSession, requestKey);
   activeRequests.set(requestKey, responsePromise);
 
   // Clean up after request completes
@@ -98,7 +105,10 @@ export async function POST(request: NextRequest) {
 }
 
 async function createStreamResponse(body: any, requestKey: string): Promise<Response> {
-  const { prompt, numRows, useWebData, refinedSearchQuery } = body;
+  const { prompt, numRows, useWebData, refinedSearchQuery, sessionId } = body;
+  const currentSessionId: string = typeof sessionId === 'string' && sessionId.trim()
+    ? sessionId.trim()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
   // Create a readable stream for Server-Sent Events
   const stream = new ReadableStream({
@@ -250,6 +260,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
       (async () => {
         try {
           sendLog('🚀 Starting dataset generation...', 'info');
+          sendLog(`🆔 Session: ${currentSessionId}`, 'info');
           
           if (useWebData) {
             sendLog('🌐 Web scraping mode enabled', 'info');
@@ -286,6 +297,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
               numRows: numRows || 25,
               maxUrls: 10, // Maximum URLs to search and scrape - LIMITED TO 4
               useAI: true, // Use AI for all processing steps
+              sessionId: currentSessionId,
             }, logger);
 
             // Add a small delay to ensure all processing is complete
@@ -304,38 +316,8 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
               success: result?.success || false,
             });
 
-            // Handle fallback to AI generation if web scraping failed
-            if (result && result.fallbackToAI) {
-              sendLog('🔄 Web scraping failed, falling back to AI-only generation...', 'info');
-              sendProgress('Fallback', 6, 7, 'Switching to AI-only data generation');
-              
-              // Generate data using AI only (fallback)
-              try {
-                const fallbackResult = await generateFallbackData(prompt, numRows || 25);
-                
-                if (fallbackResult && fallbackResult.data && fallbackResult.data.length > 0) {
-                  sendLog(`🎉 Fallback successful: Generated ${fallbackResult.data.length} rows using AI only`, 'success');
-                  sendProgress('Complete', 7, 7, `Generated ${fallbackResult.data.length} rows (AI fallback)`);
-                  
-                  const fallbackData = JSON.stringify({
-                    type: 'complete',
-                    result: fallbackResult,
-                    timestamp: new Date().toISOString()
-                  });
-                  if (isControllerActive()) {
-                    controller.enqueue(encoder.encode(`data: ${fallbackData}\n\n`));
-                  }
-                } else {
-                  throw new Error('AI fallback generated no data');
-                }
-              } catch (fallbackError: any) {
-                sendLog(`❌ AI fallback also failed: ${fallbackError.message}`, 'error');
-                throw new Error(`Both web scraping and AI fallback failed: ${fallbackError.message}`);
-              }
-            }
-            // Always send the result, even if it's empty initially
-            // The web scraping process might take time and return results later
-            else if (result && result.success && result.data && result.data.length > 0) {
+            // Successful web + AI processing with rows
+            if (result && result.success && result.data && result.data.length > 0) {
               // We have some data, validate completeness
               const hasRows = result.data && result.data.length > 0;
               const hasCsv = result.csv && result.csv.length > 0;
@@ -363,6 +345,93 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
                 metadata: typeof result.metadata === 'object' && result.metadata !== null ? result.metadata : {}
               };
 
+              // Send file paths if available
+              try {
+                const filesPayload = JSON.stringify({
+                  type: 'files',
+                  sessionId: currentSessionId,
+                  rawAiFilePath: result?.metadata?.rawAiFilePath || '',
+                  scrapedRawFilePath: result?.metadata?.scrapedRawFilePath || '',
+                  chunkDir: result?.metadata?.chunkDir || '',
+                  chunkCount: result?.metadata?.chunkCount || 0,
+                  chunkSize: result?.metadata?.chunkSize || 0,
+                  timestamp: new Date().toISOString(),
+                });
+                if (isControllerActive()) controller.enqueue(encoder.encode(`data: ${filesPayload}\n\n`));
+              } catch {}
+
+              // Prefer streaming from chunk files (temp/chunks/{session}-chunk-{i}.json) if present
+              const chunkCount = (result?.metadata as any)?.chunkCount as number | undefined;
+              const chunkDir = (result?.metadata as any)?.chunkDir as string | undefined;
+              if (chunkDir && typeof chunkCount === 'number' && chunkCount > 0) {
+                try {
+                  for (let i = 0; i < chunkCount; i++) {
+                    const filePath = join(chunkDir, `${currentSessionId}-chunk-${i}.json`);
+                    if (!existsSync(filePath)) continue;
+                    const text = readFileSync(filePath, 'utf8');
+                    const parsed = JSON.parse(text);
+                    const payload = JSON.stringify({
+                      type: 'rows_chunk',
+                      rows: Array.isArray(parsed?.rows) ? parsed.rows : [],
+                      schema: i === 0 ? (Array.isArray(parsed?.schema) ? parsed.schema : safeResult.schema) : undefined,
+                      offset: typeof parsed?.offset === 'number' ? parsed.offset : i * (parsed?.rows?.length || 0),
+                      totalRows: typeof parsed?.totalRows === 'number' ? parsed.totalRows : (safeResult.data?.length || 0),
+                      timestamp: new Date().toISOString(),
+                    });
+                    if (isControllerActive()) controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+                  }
+                } catch (fileChunkErr) {
+                  console.error('[StreamAPI] File chunk streaming error, falling back to in-memory rows:', fileChunkErr);
+                  // Fallback to in-memory incremental streaming
+                  try {
+                    const rows = Array.isArray(safeResult.data) ? safeResult.data : [];
+                    const totalRows = rows.length;
+                    const chunkSize = 10;
+                    if (totalRows > 0 && isControllerActive()) {
+                      for (let offset = 0; offset < totalRows; offset += chunkSize) {
+                        const chunkRows = rows.slice(offset, offset + chunkSize);
+                        const chunkPayload = JSON.stringify({
+                          type: 'rows_chunk',
+                          rows: chunkRows,
+                          schema: offset === 0 ? safeResult.schema : undefined,
+                          offset,
+                          totalRows,
+                          timestamp: new Date().toISOString(),
+                        });
+                        controller.enqueue(encoder.encode(`data: ${chunkPayload}\n\n`));
+                      }
+                    }
+                  } catch (chunkError) {
+                    console.error('[StreamAPI] Error streaming row chunks:', chunkError);
+                  }
+                }
+              } else {
+                // If no files, use in-memory incremental streaming (existing behavior)
+                try {
+                  const rows = Array.isArray(safeResult.data) ? safeResult.data : [];
+                  const totalRows = rows.length;
+                  const chunkSize = 10;
+
+                  if (totalRows > 0 && isControllerActive()) {
+                    for (let offset = 0; offset < totalRows; offset += chunkSize) {
+                      const chunkRows = rows.slice(offset, offset + chunkSize);
+                      const chunkPayload = JSON.stringify({
+                        type: 'rows_chunk',
+                        rows: chunkRows,
+                        schema: offset === 0 ? safeResult.schema : undefined,
+                        offset,
+                        totalRows,
+                        timestamp: new Date().toISOString(),
+                      });
+
+                      controller.enqueue(encoder.encode(`data: ${chunkPayload}\n\n`));
+                    }
+                  }
+                } catch (chunkError) {
+                  console.error('[StreamAPI] Error streaming row chunks:', chunkError);
+                }
+              }
+
               const finalData = JSON.stringify({
                 type: hasRows && hasCsv ? 'complete' : 'progress',
                 result: safeResult,
@@ -371,31 +440,17 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
               if (isControllerActive()) {
                 controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
               }
-            } else {
-              // Only show "no data" error if we're sure the process is complete
-              sendLog('ℹ️ Processing in progress, please wait for results...', 'info');
-              sendProgress('Processing', 6, 7, 'Generating data...');
-
-              // Send a progress update instead of an error
-              const safeProgressResult = result && typeof result === 'object' ? {
-                success: result.success || false,
-                data: Array.isArray(result.data) ? result.data : [],
-                csv: typeof result.csv === 'string' ? result.csv : '',
-                schema: Array.isArray(result.schema) ? result.schema : [],
-                feedback: typeof result.feedback === 'string' ? result.feedback : '',
-                urls: Array.isArray(result.urls) ? result.urls : [],
-                searchQueries: Array.isArray(result.searchQueries) ? result.searchQueries : [],
-                metadata: typeof result.metadata === 'object' && result.metadata !== null ? result.metadata : {}
-              } : {};
-
-              const progressData = JSON.stringify({
-                type: 'progress',
-                message: 'Data generation in progress...',
-                result: safeProgressResult,
-                timestamp: new Date().toISOString()
+            } else if (result && !result.success) {
+              // Explicit error from web scraping / structuring flow
+              const message = result.error || 'Web scraping failed';
+              sendLog(`❌ ${message}`, 'error');
+              const errorPayload = JSON.stringify({
+                type: 'error',
+                error: message,
+                timestamp: new Date().toISOString(),
               });
               if (isControllerActive()) {
-                controller.enqueue(encoder.encode(`data: ${progressData}\n\n`));
+                controller.enqueue(encoder.encode(`data: ${errorPayload}\n\n`));
               }
             }
           } else {
@@ -459,99 +514,3 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
 }
 
 // The logging is now integrated directly into the generateFromWeb flow
-
-/**
- * Generate fallback data using AI when web scraping fails
- */
-async function generateFallbackData(prompt: string, numRows: number) {
-  try {
-    console.log(`[Fallback] Generating ${numRows} rows using AI for prompt: "${prompt.substring(0, 100)}..."`);
-    
-    // Create a comprehensive prompt for AI generation
-    const aiPrompt = `Generate a realistic dataset with ${numRows} rows based on this description: "${prompt}"
-
-Requirements:
-- Create realistic, varied data that matches the description
-- Include appropriate data types (strings, numbers, dates, etc.)
-- Ensure data is consistent and logical
-- Generate a proper CSV format
-- Include a schema with column names and types
-
-Return the data as a JSON object with this structure:
-{
-  "data": [array of objects with the generated data],
-  "schema": [array of column definitions with name, type, description],
-  "csv": "CSV formatted string"
-}`;
-
-    const response = await geminiService.generateContent(aiPrompt);
-    
-    if (!response || !response.text) {
-      throw new Error('No response from AI service');
-    }
-
-    // Try to parse the AI response
-    let parsedResponse;
-    try {
-      // Clean the response text
-      const cleanedText = response.text
-        .replace(/```json\n?/g, '')
-        .replace(/```\n?/g, '')
-        .trim();
-      
-      parsedResponse = JSON.parse(cleanedText);
-    } catch (parseError) {
-      console.error('[Fallback] Failed to parse AI response:', parseError);
-      throw new Error('Failed to parse AI response');
-    }
-
-    // Validate the response structure
-    if (!parsedResponse.data || !Array.isArray(parsedResponse.data)) {
-      throw new Error('Invalid data structure in AI response');
-    }
-
-    // Ensure we have the right number of rows
-    const actualRows = Math.min(parsedResponse.data.length, numRows);
-    const data = parsedResponse.data.slice(0, actualRows);
-
-    // Generate CSV if not provided
-    let csv = parsedResponse.csv;
-    if (!csv && data.length > 0) {
-      const headers = Object.keys(data[0]);
-      const csvRows = data.map(row => 
-        headers.map(header => {
-          const value = row[header];
-          if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
-            return `"${value.replace(/"/g, '""')}"`;
-          }
-          return value || '';
-        }).join(',')
-      );
-      csv = [headers.join(','), ...csvRows].join('\n');
-    }
-
-    return {
-      success: true,
-      data,
-      csv: csv || '',
-      schema: parsedResponse.schema || Object.keys(data[0] || {}).map(key => ({ 
-        name: key, 
-        type: 'string',
-        description: `Generated ${key} field`
-      })),
-      feedback: `Generated ${actualRows} rows using AI fallback due to web scraping issues`,
-      urls: [],
-      searchQueries: [],
-      metadata: {
-        generationMethod: 'ai_fallback',
-        originalPrompt: prompt,
-        requestedRows: numRows,
-        actualRows: actualRows
-      }
-    };
-
-  } catch (error: any) {
-    console.error('[Fallback] Error generating fallback data:', error);
-    throw new Error(`Fallback generation failed: ${error.message}`);
-  }
-}

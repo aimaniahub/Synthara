@@ -1,0 +1,151 @@
+# Synthara Node Integration Guide
+
+## System Overview
+
+Synthara Node acts as a **Headless Processing Agent**. Unlike a traditional server, it runs in an execution environment (browser/edge) that **polls** your application for work and **streams** results back via webhooks.
+
+### Architecture
+
+1.  **Job Queue (Your Frontend)**: Your app prepares a JSON dataset and exposes it via an endpoint (e.g., `/api/job/latest`).
+2.  **Processing (Synthara Node)**: The Node fetches this JSON, uses Gemini AI to extract/clean data.
+3.  **Real-time Updates (Your Frontend)**: The Node sends `POST` requests to your webhook endpoint (e.g., `/api/hooks/synthara`) with progress, logs, and final CSV data.
+
+---
+
+## Step 1: Expose a Job Endpoint (GET)
+
+Your frontend/backend must host an endpoint that returns the **Job Input JSON**.
+The Node will send a `GET` request to the URL configured in the "Input Source" field.
+
+**Recommended Endpoint:** `GET http://localhost:3000/api/job/latest`
+
+### JSON Response Schema
+
+```json
+{
+  "metadata": {
+    "userQuery": "Extract all pricing tiers and feature lists",
+    "scrapedAt": "2023-10-27T10:00:00Z",
+    "totalSources": 5
+  },
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://example.com/pricing",
+      "title": "Pricing Page",
+      "content": "Basic plan is $10..."
+    },
+    {
+      "id": 2,
+      "url": "https://example.com/features",
+      "title": "Features",
+      "content": "Includes SSL and API access..."
+    }
+  ],
+  "rawInput": "(Optional) Raw text dump if sources are not structured"
+}
+```
+
+**CORS Requirement:**
+Ensure your server allows Cross-Origin requests (CORS) from the domain where Synthara Node is running.
+```javascript
+// Example Express.js CORS config
+app.use(cors({ origin: '*' }));
+```
+
+---
+
+## Step 2: Create a Webhook Endpoint (POST)
+
+Your frontend/backend must host an endpoint to receive real-time events.
+The Node will send `POST` requests to the configured **Target Webhook URL**.
+
+**Recommended Endpoint:** `POST http://localhost:3000/api/hooks/synthara`
+
+### Payload Schema
+
+The `event` field determines the payload type.
+
+#### 1. Job Started
+```json
+{
+  "event": "job_start",
+  "jobId": "x7s9d2",
+  "timestamp": 1698391200000,
+  "status": "started"
+}
+```
+
+#### 2. Progress / New Rows
+Sent whenever a chunk is processed.
+```json
+{
+  "event": "progress",
+  "jobId": "x7s9d2",
+  "timestamp": 1698391205000,
+  "status": "processing",
+  "data": {
+    "rows": [
+      { "plan_name": "Basic", "price": "$10", "source_url": "..." }
+    ],
+    "progress": {
+      "current": 1,
+      "total": 5
+    },
+    "logs": "Extracted 12 new rows..."
+  }
+}
+```
+
+#### 3. Job Complete
+Sent when extraction finishes (before cleaning).
+```json
+{
+  "event": "job_complete",
+  "jobId": "x7s9d2",
+  "timestamp": 1698391300000,
+  "status": "completed"
+}
+```
+
+#### 4. Data Cleaned (Smart Fix)
+Sent after the "Smart Fix" process completes.
+```json
+{
+  "event": "data_cleaned",
+  "jobId": "x7s9d2",
+  "timestamp": 1698391400000,
+  "status": "cleaned",
+  "data": {
+    "csv": "header1,header2\nval1,val2...",
+    "rows": [...]
+  }
+}
+```
+
+#### 5. Error
+```json
+{
+  "event": "error",
+  "jobId": "x7s9d2",
+  "timestamp": 1698391500000,
+  "status": "failed",
+  "error": "API Rate Limit Exceeded"
+}
+```
+
+---
+
+## Step 3: Connection Workflow
+
+1.  **Start your Frontend/Server** on `localhost:3000`.
+2.  **Open Synthara Node**.
+3.  In the Left Panel configuration:
+    *   Set **Target Webhook URL** to `http://localhost:3000/api/hooks/synthara`.
+    *   Ensure **Stream Output** is ON.
+4.  In the **Input Source** section:
+    *   Select **FETCH URL**.
+    *   Enter `http://localhost:3000/api/job/latest`.
+    *   Click **FETCH JOB**.
+5.  Watch the **Server Console** on Synthara Node for logs.
+6.  Watch your backend terminal for incoming Webhook data.

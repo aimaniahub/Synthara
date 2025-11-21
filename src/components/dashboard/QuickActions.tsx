@@ -36,7 +36,7 @@ export function QuickActions({ actions }: QuickActionsProps) {
           const colors = colorClasses[action.color || 'blue'];
           
           return (
-            <Card key={action.title} className="border rounded-lg bg-background">
+            <Card key={action.title}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className={`p-2 rounded-md ${colors.iconBg}`}>

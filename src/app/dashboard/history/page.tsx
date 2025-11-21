@@ -68,7 +68,7 @@ export default function HistoryPage() {
           <h1 className="text-2xl sm:text-3xl font-headline font-bold text-foreground">History &amp; Activity Logs</h1>
           <p className="text-muted-foreground">Review your past activities, generated datasets, and trained models.</p>
         </div>
-        <Card className="shadow-xl">
+        <Card>
           <CardContent className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin" />
             <span className="ml-2">Loading activities...</span>
@@ -88,7 +88,7 @@ export default function HistoryPage() {
         <p className="text-sm text-muted-foreground">Review your past activities, generated datasets, and trained models.</p>
       </div>
 
-      <Card className="shadow-xl">
+      <Card>
         <CardHeader className="pb-4 sm:pb-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
             <CardTitle className="font-headline text-lg sm:text-xl lg:text-2xl">Activity Timeline</CardTitle>

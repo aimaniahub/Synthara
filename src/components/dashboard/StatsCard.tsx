@@ -14,7 +14,7 @@ interface StatsCardProps {
 
 export function StatsCard({ title, value, icon: Icon, trend }: StatsCardProps) {
   return (
-    <Card className="border rounded-lg bg-background">
+    <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="p-2 rounded-md">

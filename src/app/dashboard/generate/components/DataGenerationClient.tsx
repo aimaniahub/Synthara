@@ -20,18 +20,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { SimpleTerminalLogger } from '@/components/ui/simple-terminal-logger';
-import { 
-  Play, 
-  Download, 
-  Save, 
-  RefreshCw, 
-  Database, 
-  Globe, 
+import {
+  Play,
+  Download,
+  Save,
+  RefreshCw,
+  Database,
+  Globe,
   FileText,
   CheckCircle,
   AlertCircle,
   Loader2,
-  Wand2
+  Wand2,
 } from 'lucide-react';
 
 // Form validation schema
@@ -70,8 +70,12 @@ export function DataGenerationClient() {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [enhancementInfo, setEnhancementInfo] = useState<{ enhancedPrompt: string; reasoning?: string } | null>(null);
   const [isPublic, setIsPublic] = useState(false);
-  
+  const [hasMirroredToBackend, setHasMirroredToBackend] = useState(false);
+
   const terminalLoggerRef = useRef<any>(null);
+  const jobStartAtRef = useRef<number | null>(null);
+
+  const isBackendCsvPhase = hasMirroredToBackend && isGenerating;
 
   const form = useForm<DataGenerationFormData>({
     resolver: zodResolver(dataGenerationSchema),
@@ -311,12 +315,17 @@ export function DataGenerationClient() {
     }
   }, [getValues, isEnhancing, setValue, toast, trigger]);
 
+  const handlePrepareSyntharaJob = useCallback(async () => {
+    return;
+  }, []);
+
   // Handle form submission - live AI generation
   const onSubmit = useCallback(async (data: DataGenerationFormData) => {
     if (isGenerating || isSubmitting) return;
 
     setIsSubmitting(true);
     setIsGenerating(true);
+    setHasMirroredToBackend(false);
     setGenerationResult(null);
     setScrapedContent([]);
     setProgress(0);
@@ -329,7 +338,7 @@ export function DataGenerationClient() {
         terminalLoggerRef.current.scrollIntoView({ behavior: 'smooth' });
       }
 
-      // Create request data
+      // Create request data for internal generation pipeline
       const requestData = {
         prompt: data.prompt,
         numRows: data.numRows,
@@ -337,7 +346,7 @@ export function DataGenerationClient() {
         datasetName: data.datasetName,
       };
 
-      // Start the generation process
+      // Start the generation process using internal pipeline
       const response = await fetch('/api/generate-stream', {
         method: 'POST',
         headers: {
@@ -361,14 +370,14 @@ export function DataGenerationClient() {
 
       let hasCompleted = false;
       const startTime = Date.now();
-      const timeout = 300000; // 5 minutes timeout
+      const timeout = 900000; // 15 minutes timeout
       let lastDataTime = startTime;
-      const maxSilenceTime = 60000; // 1 minute of silence before considering it failed
+      const maxSilenceTime = 180000; // 3 minutes of silence before considering it failed
 
       while (true) {
         // Check for timeout
         if (Date.now() - startTime > timeout) {
-          throw new Error('Generation timed out after 5 minutes');
+          throw new Error('Generation timed out after 15 minutes');
         }
 
         // Check for silence timeout
@@ -408,8 +417,17 @@ export function DataGenerationClient() {
               
               if (parsedData.type === 'progress') {
                 setProgress(parsedData.percentage || 0);
-                setProgressLabel(parsedData.message || '');
+                if (!hasMirroredToBackend) {
+                  setProgressLabel(parsedData.message || '');
+                }
               } else if (parsedData.type === 'log' || parsedData.type === 'info') {
+                const message: string = parsedData.message || '';
+                if (!hasMirroredToBackend && message.includes('Backend scraped JSON mirrored to:')) {
+                  setHasMirroredToBackend(true);
+                  jobStartAtRef.current = Date.now();
+                  setProgressLabel('Waiting for stored web data to be structured and converted to CSV...');
+                  setShowTerminal(false);
+                }
                 // Log messages are handled by the terminal logger
                 console.log('Generation log:', parsedData.message);
               } else if (parsedData.type === 'scraped_content') {
@@ -478,9 +496,12 @@ export function DataGenerationClient() {
         }
       }
 
-      // If we didn't receive a complete signal, something went wrong
-      if (!hasCompleted && !isGenerating) {
-        throw new Error('Generation process ended unexpectedly');
+      // If we didn't receive a complete signal, treat the end of the stream as
+      // a graceful finish but log a warning and clear loading state.
+      if (!hasCompleted) {
+        console.warn('[Client] Stream ended without explicit completion event');
+        setIsGenerating(false);
+        setIsSubmitting(false);
       }
 
     } catch (error: any) {
@@ -496,7 +517,77 @@ export function DataGenerationClient() {
         variant: "destructive",
       });
     }
-  }, [isGenerating, isSubmitting, toast, parseJsonSafely]);
+  }, [isGenerating, isSubmitting, toast, parseJsonSafely, hasMirroredToBackend]);
+
+  useEffect(() => {
+    if (!hasMirroredToBackend) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const pollLatestCsv = async () => {
+      try {
+        const response = await fetch('/api/backend/latest-csv', {
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json().catch(() => null);
+        if (!payload || !payload.success) {
+          return;
+        }
+
+        const modifiedAt: string | undefined = payload.modifiedAt;
+        if (jobStartAtRef.current && modifiedAt) {
+          const mtime = new Date(modifiedAt).getTime();
+          if (Number.isFinite(mtime) && mtime <= jobStartAtRef.current) {
+            return;
+          }
+        }
+
+        const rows = Array.isArray(payload.data) ? payload.data : [];
+        const csv = typeof payload.csv === 'string' ? payload.csv : '';
+        const rawSchema = Array.isArray(payload.schema) ? payload.schema : [];
+        const schema = rawSchema.map((col: any) => ({
+          name: String(col.name),
+          type: String(col.type || 'string'),
+          description: col.description ? String(col.description) : undefined,
+        }));
+
+        const result: GenerationResult = {
+          data: rows,
+          csv,
+          schema,
+          feedback: 'Loaded from backend CSV output',
+        };
+
+        setGenerationResult(result);
+        setIsGenerating(false);
+        setIsSubmitting(false);
+        setProgress(100);
+        setProgressLabel('CSV loaded from backend output');
+        setHasMirroredToBackend(false);
+        cancelled = true;
+      } catch {
+      }
+    };
+
+    void pollLatestCsv();
+    const intervalId = setInterval(() => {
+      if (!cancelled) {
+        void pollLatestCsv();
+      }
+    }, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [hasMirroredToBackend, setGenerationResult]);
 
   // Generate sample data based on prompt
   const generateSampleData = useCallback((prompt: string, numRows: number) => {
@@ -716,6 +807,7 @@ export function DataGenerationClient() {
     setIsGenerating(false);
     setIsSubmitting(false);
     setEnhancementInfo(null);
+    setHasMirroredToBackend(false);
   }, [form]);
 
   return (
@@ -819,23 +911,36 @@ export function DataGenerationClient() {
               </div>
             </div>
 
-            {/* Web Data Toggle */}
-            <div className="flex items-center justify-between space-x-2">
-              <div className="space-y-1">
-                <Label htmlFor="useWebData" className="flex items-center gap-2">
-                  <Globe className="h-4 w-4" />
-                  Use Web Data
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Enable to scrape real data from the web instead of generating synthetic data
-                </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between space-x-2">
+                <div className="space-y-1">
+                  <Label htmlFor="useWebData" className="flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    Use Web Data
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enable to scrape real data from the web instead of generating synthetic data
+                  </p>
+                </div>
+                <Switch
+                  id="useWebData"
+                  checked={watchedValues.useWebData}
+                  onCheckedChange={(checked) => setValue('useWebData', checked)}
+                  disabled={isGenerating}
+                />
               </div>
-              <Switch
-                id="useWebData"
-                checked={watchedValues.useWebData}
-                onCheckedChange={(checked) => setValue('useWebData', checked)}
-                disabled={isGenerating}
-              />
+
+              {watchedValues.useWebData && (
+                <div className="rounded-md bg-muted/40 p-3 space-y-2">
+                  <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Web scraping enabled</span>
+                    <span>
+                      The app will search with SERP, scrape pages with Crawl4AI, then structure data into a
+                      CSV-ready dataset.
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -874,10 +979,10 @@ export function DataGenerationClient() {
         </CardContent>
       </Card>
 
-      {/* Progress Indicator */}
+      {/* Progress Indicator & Backend CSV Loading State */}
       {isGenerating && (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{progressLabel}</span>
@@ -885,6 +990,22 @@ export function DataGenerationClient() {
               </div>
               <Progress value={progress} className="w-full" />
             </div>
+
+            {isBackendCsvPhase && (
+              <div className="flex items-center justify-center rounded-lg bg-muted/40 px-4 py-6">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-primary/20 bg-background">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">Structuring scraped web data into CSV</p>
+                    <p className="text-xs text-muted-foreground">
+                      Scraping is complete. We are now cleaning, organizing, and shaping rows into a downloadable CSV.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

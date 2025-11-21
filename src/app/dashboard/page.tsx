@@ -166,22 +166,22 @@ export default async function DashboardPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="space-y-1">
-                    <span className="text-slate-500 dark:text-slate-400">Rows</span>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                    <span className="text-muted-foreground">Rows</span>
+                    <p className="font-semibold text-foreground">
                       {lastSavedDataset ? lastSavedDataset.num_rows.toLocaleString() : "—"}
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-slate-500 dark:text-slate-400">Columns</span>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                    <span className="text-muted-foreground">Columns</span>
+                    <p className="font-semibold text-foreground">
                       {lastSavedDataset && Array.isArray(lastSavedDataset.schema_json) ? lastSavedDataset.schema_json.length : "—"}
                     </p>
                   </div>
                 </div>
                 {lastSavedDataset && (
                   <div className="space-y-2">
-                    <span className="text-sm text-slate-500 dark:text-slate-400">Prompt Preview</span>
-                    <p className="text-xs bg-slate-100 dark:bg-slate-800 p-3 rounded-lg text-slate-700 dark:text-slate-300">
+                    <span className="text-sm text-muted-foreground">Prompt Preview</span>
+                    <p className="text-xs bg-muted p-3 rounded-lg text-muted-foreground">
                       {lastSavedDataset.prompt_used.substring(0, 120)}...
                     </p>
                   </div>

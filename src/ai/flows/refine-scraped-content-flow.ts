@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { geminiService, type GeminiRefinedContent } from '@/services/gemini-service';
+import { SimpleAI } from '@/ai/simple-ai';
 
 // Input validation schema
 const RefineScrapedContentInputSchema = z.object({
@@ -51,18 +51,69 @@ export async function refineScrapedContent(input: RefineScrapedContentInput): Pr
       };
     }
 
-    // Use Gemini to refine the content
-    console.log('[RefineScrapedContent] Using AI to filter and refine content...');
-    const refinementResponse = await geminiService.refineContent(
-      validatedInput.scrapedContent,
-      validatedInput.userQuery
-    );
+    // Use OpenRouter (SimpleAI) to refine the content
+    console.log('[RefineScrapedContent] Using AI (OpenRouter) to filter and refine content...');
 
-    if (!refinementResponse.success) {
-      throw new Error(`Failed to refine content: ${refinementResponse.error}`);
+    const contentSummary = validatedInput.scrapedContent
+      .map((item, index) => `Source ${index + 1}:
+URL: ${item.url}
+Title: ${item.title}
+Content: ${item.content.substring(0, 1000)}...`)
+      .join('\n\n');
+
+    const prompt = `You are an expert at content refinement for data extraction.
+Given scraped web content and a user query, filter out noise and keep only relevant information.
+
+User Query: "${validatedInput.userQuery}"
+
+Scraped Content:
+${contentSummary}
+
+For each source, extract only the content that is directly relevant to the user query. Remove:
+- Navigation menus, footers, headers
+- Advertisements and promotional content
+- Irrelevant sections
+- Duplicate information
+- Meta information not related to the query
+
+Keep:
+- Data that directly answers the user query
+- Structured information (tables, lists)
+- Key facts and figures
+- Relevant descriptions and details
+
+Return your response as a JSON object with this exact structure:
+{
+  "refinedContent": [
+    {
+      "url": "source_url",
+      "title": "page_title",
+      "relevantContent": "cleaned_relevant_content",
+      "confidence": 0.95
     }
+  ]
+}`;
 
-    const refinedContent = refinementResponse.refinedContent;
+    const aiResult = await SimpleAI.generateWithSchema<{
+      refinedContent: Array<{ url: string; title: string; relevantContent: string; confidence: number }>;
+    }>({
+      prompt,
+      schema: {
+        refinedContent: [
+          {
+            url: 'source_url',
+            title: 'page_title',
+            relevantContent: 'cleaned_relevant_content',
+            confidence: 0.95,
+          },
+        ],
+      },
+      model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
+      maxTokens: 4000,
+      temperature: 0.3,
+    });
+
+    const refinedContent = Array.isArray(aiResult.refinedContent) ? aiResult.refinedContent : [];
     console.log(`[RefineScrapedContent] Refined ${validatedInput.scrapedContent.length} sources to ${refinedContent.length} relevant sources`);
 
     // Additional filtering based on confidence scores

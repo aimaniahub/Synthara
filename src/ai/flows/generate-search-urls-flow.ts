@@ -1,13 +1,13 @@
 'use server';
 
 import { z } from 'zod';
-import { geminiService, type GeminiSearchQuery } from '@/services/gemini-service';
+import { SimpleAI } from '@/ai/simple-ai';
 import { serpapiService, type SerpAPIResult } from '@/services/serpapi-service';
 
 // Input validation schema
 const GenerateSearchUrlsInputSchema = z.object({
   userQuery: z.string().min(1, 'User query is required'),
-  maxUrls: z.number().min(1).max(15).default(15),
+  maxUrls: z.number().min(1).max(80).default(15),
 });
 
 // Output validation schema
@@ -31,6 +31,12 @@ const GenerateSearchUrlsOutputSchema = z.object({
 export type GenerateSearchUrlsInput = z.infer<typeof GenerateSearchUrlsInputSchema>;
 export type GenerateSearchUrlsOutput = z.infer<typeof GenerateSearchUrlsOutputSchema>;
 
+type AISearchQuery = {
+  query: string;
+  reasoning: string;
+  priority: number;
+};
+
 // Simple in-memory cache for search results to avoid duplicate API calls
 const searchCache = new Map<string, { urls: any[], timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -50,9 +56,9 @@ function cleanupCache() {
 /**
  * Deduplicate search queries by normalizing and comparing them
  */
-function deduplicateQueries(queries: GeminiSearchQuery[]): GeminiSearchQuery[] {
+function deduplicateQueries(queries: AISearchQuery[]): AISearchQuery[] {
   const seen = new Set<string>();
-  const deduplicated: GeminiSearchQuery[] = [];
+  const deduplicated: AISearchQuery[] = [];
   
   for (const query of queries) {
     // Normalize query: lowercase, trim, remove extra spaces
@@ -97,8 +103,8 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
     
     // Validate input
     const validatedInput = GenerateSearchUrlsInputSchema.parse(input);
-    // Over-fetch to survive filtering and scraping failures
-    const overfetchLimit = Math.min(validatedInput.maxUrls * 3, 30);
+    // Over-fetch to survive filtering and scraping failures (allow larger expansions)
+    const overfetchLimit = Math.min(validatedInput.maxUrls * 4, 80);
     
     // Check cache first
     const cacheKey = validatedInput.userQuery.toLowerCase().trim();
@@ -112,61 +118,86 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
       };
     }
 
-    // Step 1: Generate search queries using Gemini
-    console.log('[GenerateSearchUrls] Step 1: Generating search queries with AI...');
-    const searchQueriesResponse = await geminiService.generateSearchQueries(validatedInput.userQuery);
-    
-    if (!searchQueriesResponse.success) {
-      console.warn(`[GenerateSearchUrls] Gemini search query generation failed: ${searchQueriesResponse.error}. Using fallback queries.`);
-      
-      // Fallback: Generate basic search queries
-      const searchQueries = generateFallbackSearchQueries(validatedInput.userQuery);
-      console.log(`[GenerateSearchUrls] Using ${searchQueries.length} fallback search queries`);
-      
-      // Continue with fallback queries
-      const searchResponse = await serpapiService.searchMultipleQueries(
-        searchQueries.map(q => q.query),
-        Math.ceil(overfetchLimit / Math.max(1, searchQueries.length))
-      );
+    // Step 1: Generate search queries using OpenRouter (SimpleAI)
+    console.log('[GenerateSearchUrls] Step 1: Generating search queries with AI (OpenRouter)...');
 
-      if (!searchResponse.success) {
-        console.warn(`[GenerateSearchUrls] SerpAPI search failed: ${searchResponse.error}. Using fallback URLs.`);
-        
-        // Fallback: Generate default URLs based on the query
-        const fallbackUrls = generateFallbackUrls(validatedInput.userQuery, validatedInput.maxUrls);
-        console.log(`[GenerateSearchUrls] Using ${fallbackUrls.length} fallback URLs`);
-        
-        return {
-          success: true,
-          urls: fallbackUrls,
-          searchQueries: searchQueries,
-        };
+    let searchQueries: AISearchQuery[] = [];
+
+    try {
+      const aiResponse = await SimpleAI.generateWithSchema<{ queries: AISearchQuery[] }>({
+        prompt: `Generate 5 simple, diverse search queries for web search.
+
+User Query: "${validatedInput.userQuery}"
+
+Generate queries that:
+1. Are simple and natural (how humans search)
+2. Use plain keywords without advanced operators
+3. Focus on finding relevant data sources
+4. Are DIFFERENT from each other (avoid similar queries)
+5. Cover different aspects of the topic
+
+AVOID: site: operators, OR operators, quotes, exclusions, date filters, duplicate concepts
+
+Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] }`,
+        schema: {
+          queries: [
+            {
+              query: 'string',
+              reasoning: 'string',
+              priority: 1,
+            },
+          ],
+        },
+        model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
+        maxTokens: 800,
+        temperature: 0.4,
+      });
+
+      if (aiResponse && Array.isArray(aiResponse.queries)) {
+        searchQueries = aiResponse.queries;
       }
-
-      console.log(`[GenerateSearchUrls] Found ${searchResponse.results.length} URLs from search`);
-
-      // Rank and filter URLs by relevance
-      const rankedUrls = await rankUrlsByRelevance(
-        searchResponse.results,
-        validatedInput.userQuery,
-        overfetchLimit
-      );
-
-      console.log(`[GenerateSearchUrls] Selected ${rankedUrls.length} most relevant URLs`);
-
-      return {
-        success: true,
-        urls: rankedUrls,
-        searchQueries: searchQueries,
-      };
+    } catch (error: any) {
+      console.warn(`[GenerateSearchUrls] AI search query generation failed: ${error?.message || String(error)}. Using fallback queries.`);
     }
 
-    let searchQueries = searchQueriesResponse.queries;
-    
+    if (!searchQueries.length) {
+      const fallbackQueries = generateFallbackSearchQueries(validatedInput.userQuery);
+      console.log(`[GenerateSearchUrls] Using ${fallbackQueries.length} fallback search queries`);
+      searchQueries = fallbackQueries;
+    }
+
     // Deduplicate queries to avoid unnecessary API calls
     searchQueries = deduplicateQueries(searchQueries);
-    
-    console.log(`[GenerateSearchUrls] Generated ${searchQueries.length} unique search queries`);
+
+    // Ensure we have at least 5 unique queries, pad using simple/fallback if needed
+    const DESIRED_SERP_CALLS = 5;
+    if (searchQueries.length < DESIRED_SERP_CALLS) {
+      const padSimple = generateSimpleQueries(validatedInput.userQuery);
+      const padFallback = generateFallbackSearchQueries(validatedInput.userQuery);
+      const seenQ = new Set(searchQueries.map(q => q.query.toLowerCase().trim()));
+      const pushIfNew = (q: string, reason: string) => {
+        const norm = q.toLowerCase().trim();
+        if (!seenQ.has(norm)) {
+          searchQueries.push({ query: q, reasoning: reason, priority: 1 });
+          seenQ.add(norm);
+        }
+      };
+      for (const q of padSimple) {
+        if (searchQueries.length >= DESIRED_SERP_CALLS) break;
+        pushIfNew(q, 'Simple padding');
+      }
+      for (const q of padFallback) {
+        if (searchQueries.length >= DESIRED_SERP_CALLS) break;
+        pushIfNew(q.query, 'Fallback padding');
+      }
+    }
+
+    // Limit to exactly 5 queries
+    if (searchQueries.length > DESIRED_SERP_CALLS) {
+      searchQueries = searchQueries.slice(0, DESIRED_SERP_CALLS);
+    }
+
+    console.log(`[GenerateSearchUrls] Using ${searchQueries.length} queries for SerpAPI`);
 
     // Step 2: Search for URLs using SerpAPI
     console.log('[GenerateSearchUrls] Step 2: Searching for URLs with SerpAPI...');

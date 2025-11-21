@@ -1,18 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
 import { 
   Brain, 
   Lightbulb, 
   AlertTriangle, 
   TrendingUp, 
-  CheckCircle,
   RefreshCw,
   Loader2,
   Sparkles
@@ -33,12 +31,10 @@ interface AIInsightsProps {
 export function AIInsights({ data, profile, aiInsights, className }: AIInsightsProps) {
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
-  const [showAllColumns, setShowAllColumns] = useState(false);
   const [showAllCorr, setShowAllCorr] = useState(false);
   const [showAllRecs, setShowAllRecs] = useState(false);
 
   const MAX_LIST_ITEMS = 3;
-  const MAX_COLUMN_ITEMS = 6;
   const TRUNCATE_CHARS = 180;
 
   const truncate = (text: string, max = TRUNCATE_CHARS) => {
@@ -80,16 +76,6 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
     } finally {
       setIsRetrying(false);
     }
-  };
-
-  const getQualityColor = (quality: number) => {
-    return 'text-foreground';
-  };
-
-  const getQualityBadgeVariant = (quality: number): "default" | "secondary" | "destructive" | "outline" => {
-    if (quality >= 80) return 'default';
-    if (quality >= 60) return 'secondary';
-    return 'destructive';
   };
 
   // Use passed-in insights or show loading/error states
@@ -201,38 +187,8 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
         </div>
       )}
 
-      {/* Column Insights (concise) */}
-      {columnInsights.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              Column Insights
-            </CardTitle>
-            <CardDescription>Short notes per column</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {(showAllColumns ? columnInsights : columnInsights.slice(0, MAX_COLUMN_ITEMS)).map((insight, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-sm">{insight.column}</h4>
-                  <Badge variant={getQualityBadgeVariant(insight.dataQuality)}>{insight.dataQuality}% quality</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">{truncate(insight.semanticMeaning)}</p>
-                {index < columnInsights.length - 1 && <Separator />}
-              </div>
-            ))}
-            {columnInsights.length > MAX_COLUMN_ITEMS && (
-              <Button variant="outline" size="sm" onClick={() => setShowAllColumns(v => !v)}>
-                {showAllColumns ? 'Show less' : 'Show more'}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Correlations (concise) */}
-      {deepInsights && deepInsights.correlations.length > 0 && (
+      {deepInsights && Array.isArray(deepInsights.correlations) && deepInsights.correlations.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -244,9 +200,27 @@ export function AIInsights({ data, profile, aiInsights, className }: AIInsightsP
           <CardContent>
             <ul className="space-y-2">
               {(showAllCorr ? deepInsights.correlations : deepInsights.correlations.slice(0, MAX_LIST_ITEMS)).map((correlation, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm">
+                <li key={index} className="flex items-start gap-3 text-sm">
                   <TrendingUp className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>{truncate(correlation)}</span>
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-xs sm:text-sm">
+                        {String((correlation as any).columnA || '')} 
+                        <span className="mx-1 text-muted-foreground">↔</span>
+                        {String((correlation as any).columnB || '')}
+                      </span>
+                      {(correlation as any).strength && (
+                        <Badge variant="outline" className="text-[10px] sm:text-xs capitalize">
+                          {(correlation as any).strength} relationship
+                        </Badge>
+                      )}
+                    </div>
+                    {(correlation as any).insight && (
+                      <p className="text-xs text-muted-foreground">
+                        {truncate(String((correlation as any).insight))}
+                      </p>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

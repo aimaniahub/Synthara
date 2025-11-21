@@ -1,7 +1,7 @@
 'use server';
 
 import { z } from 'zod';
-import { geminiService, type GeminiStructuredData } from '@/services/gemini-service';
+import { SimpleAI } from '@/ai/simple-ai';
 // CSV generation utility
 async function jsonToCsv(jsonData: Array<Record<string, any>>): Promise<string> {
   if (!jsonData || jsonData.length === 0) {
@@ -78,19 +78,28 @@ export async function structureData(input: StructureDataInput): Promise<Structur
       };
     }
 
-    // Use Gemini to structure the data
-    console.log('[StructureData] Using AI to structure data with schema...');
-    const structuringResponse = await geminiService.structureData(
-      validatedInput.refinedContent,
-      validatedInput.userQuery,
-      validatedInput.numRows
-    );
+    // Use OpenRouter (SimpleAI) to structure the data
+    console.log('[StructureData] Using AI (OpenRouter) to structure data with schema...');
 
-    if (!structuringResponse.success) {
-      throw new Error(`Failed to structure data: ${structuringResponse.error}`);
-    }
+    const dataset = await SimpleAI.structureRelevantChunksToDataset({
+      chunks: validatedInput.refinedContent.map(item => ({
+        url: item.url,
+        title: item.title,
+        content: item.relevantContent,
+      })),
+      userQuery: validatedInput.userQuery,
+      numRows: validatedInput.numRows,
+    });
 
-    const structuredData = structuringResponse.structuredData;
+    const structuredData = {
+      schema: dataset.schema.map(col => ({
+        name: col.name,
+        type: col.type,
+        description: col.description || '',
+      })),
+      data: dataset.data,
+      reasoning: dataset.reasoning || '',
+    };
     console.log(`[StructureData] AI structured data: ${structuredData.data.length} rows, ${structuredData.schema.length} columns`);
 
     // Generate CSV from structured data

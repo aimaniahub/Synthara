@@ -163,20 +163,20 @@
 
   /* New modern card styles */
   .modern-card {
-    @apply bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300;
+    @apply bg-card/90 backdrop-blur-sm border border-border/80 rounded-2xl shadow-sm hover:shadow-md transition-all duration-300;
   }
 
   .dark .modern-card {
-    @apply bg-slate-800/80 border-slate-700/50 shadow-slate-900/20;
+    @apply bg-card/95 border-border/80 shadow-sm hover:shadow-md;
   }
 
   /* Enhanced glass effects */
   .glass-modern {
-    @apply bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl;
+    @apply bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-lg;
   }
 
   .dark .glass-modern {
-    @apply bg-slate-800/30 border-slate-700/30;
+    @apply bg-slate-900/40 border-slate-700/40 shadow-lg;
   }
 
   /* Mobile-first responsive utilities */
