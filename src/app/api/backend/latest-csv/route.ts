@@ -40,16 +40,26 @@ export async function GET() {
     const outputDir = join(process.cwd(), 'output');
     if (!existsSync(outputDir)) {
       return NextResponse.json(
-        { success: false, error: 'Output directory not found' },
-        { status: 404 },
+        { success: false, status: 'not_ready', error: 'Output directory not found' },
+        {
+          status: 202,
+          headers: {
+            'Retry-After': '5',
+          },
+        },
       );
     }
 
     const entries = readdirSync(outputDir).filter((name) => name.toLowerCase().endsWith('.csv'));
     if (!entries.length) {
       return NextResponse.json(
-        { success: false, error: 'No CSV files found in output directory' },
-        { status: 404 },
+        { success: false, status: 'not_ready', error: 'No CSV files found in output directory' },
+        {
+          status: 202,
+          headers: {
+            'Retry-After': '5',
+          },
+        },
       );
     }
 
@@ -71,6 +81,7 @@ export async function GET() {
     if (!trimmed) {
       return NextResponse.json({
         success: true,
+        status: 'ready',
         filename: latest.name,
         modifiedAt: new Date(latest.mtimeMs).toISOString(),
         csv: csvRaw,
@@ -83,6 +94,7 @@ export async function GET() {
     if (!lines.length) {
       return NextResponse.json({
         success: true,
+        status: 'ready',
         filename: latest.name,
         modifiedAt: new Date(latest.mtimeMs).toISOString(),
         csv: csvRaw,
@@ -107,6 +119,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
+      status: 'ready',
       filename: latest.name,
       modifiedAt: new Date(latest.mtimeMs).toISOString(),
       csv: csvRaw,

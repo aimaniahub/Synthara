@@ -23,12 +23,12 @@ async function getSupabaseUserClient() {
     throw new Error('Supabase is not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.');
   }
   const { data: { user }, error: userError } = await supabase.auth.getUser();
-  
+
   if (userError) {
     console.error('Error fetching user:', userError.message);
     throw new Error(`Authentication error: ${userError.message}`);
   }
-  
+
   if (!user) {
     console.error('User not authenticated');
     throw new Error('User not authenticated');
@@ -134,7 +134,7 @@ export async function saveDataset(
     // Handle both old and new format
     const csv = generationResult.generatedCsv || generationResult.csv;
     const schema = generationResult.detectedSchema || generationResult.schema;
-    
+
     if (!csv || !schema) {
       const missingFields = [];
       if (!csv) missingFields.push('csv/generatedCsv');
@@ -144,7 +144,7 @@ export async function saveDataset(
       console.error('[SaveDataset] Validation failed:', errorMsg);
       throw new Error(errorMsg);
     }
-    
+
     const { data, error } = await supabase
       .from('generated_datasets')
       .insert({
@@ -176,7 +176,7 @@ export async function saveDataset(
       details: { datasetName, numRows, schemaColumns: generationResult.detectedSchema?.length || 0 },
       relatedResourceId: data.id,
     });
-    
+
     return { success: true, datasetId: data.id };
   } catch (err: any) {
     console.error('Error saving dataset:', err.message);
@@ -212,7 +212,7 @@ export async function getUserActivities(limit = 20): Promise<ActivityLog[]> {
 }
 
 export async function getUserDatasets(limit = 20): Promise<SavedDataset[]> {
- try {
+  try {
     const { supabase, user } = await getSupabaseUserClient();
     // Select all fields except data_csv for list view performance
     const { data, error } = await supabase

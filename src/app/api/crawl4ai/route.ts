@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       extract_markdown: true,
       extract_clean_html: true,
       extract_text: true,
-      wait_for: 3000,
+      wait_for: null,
       timeout: 30000,
       remove_forms: true,
       remove_scripts: true,
@@ -38,17 +38,18 @@ export async function POST(request: NextRequest) {
     for (const url of urls) {
       try {
         console.log(`[Crawl4AI API] Scraping: ${url}`);
-        
+
         // Call actual Crawl4AI service
-        const crawl4aiUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:8000';
+        const crawl4aiUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:11235';
         const response = await fetch(`${crawl4aiUrl}/crawl`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            url,
-            options: defaultOptions
+            urls: [url],
+            browser_config: {},
+            crawler_config: defaultOptions
           }),
         });
 
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
         }
 
         const crawlResult = await response.json();
-        
+
         results.push({
           url,
           title: crawlResult.title || '',

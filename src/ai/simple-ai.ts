@@ -85,7 +85,7 @@ export class SimpleAI {
       };
     } catch (error: any) {
       console.error(`[SimpleAI] Error with model ${model}:`, error.message);
-      
+
       // Handle specific error types
       if (error.message?.includes('429') || error.status === 429) {
         throw new Error(`Rate limit exceeded. Please wait a moment and try again. If this persists, check your OpenRouter API key and model availability.`);
@@ -96,14 +96,14 @@ export class SimpleAI {
       } else if (error.message?.includes('quota') || error.message?.includes('limit')) {
         throw new Error(`API quota exceeded. Please check your OpenRouter account limits.`);
       }
-      
+
       throw new Error(`AI generation failed: ${error.message}`);
     }
   }
 
   static async generateWithSchema<T>(input: SimpleAIInput & { schema: any; sessionId?: string }): Promise<T> {
     const { schema, sessionId, ...aiInput } = input;
-    
+
     // Add JSON schema instruction to prompt
     const enhancedPrompt = `${aiInput.prompt}
 
@@ -149,7 +149,7 @@ ${JSON.stringify(schema, null, 2)}`;
       // Strategy 1: direct parse
       try {
         return JSON.parse(text) as T;
-      } catch {}
+      } catch { }
 
       // Strategy 2: strip markdown fences
       let cleaned = text;
@@ -162,7 +162,7 @@ ${JSON.stringify(schema, null, 2)}`;
 
       try {
         return JSON.parse(cleaned) as T;
-      } catch {}
+      } catch { }
 
       // Strategy 3: extract first JSON object or array substring
       const candidates: string[] = [];

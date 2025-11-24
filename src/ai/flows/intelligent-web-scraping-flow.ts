@@ -60,7 +60,7 @@ function extractRowsFromAnalyzedFile(sessionId: string | undefined, logger?: Web
     try {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.data)) return parsed.data as Array<Record<string, any>>;
-    } catch {}
+    } catch { }
 
     // Strategy 2: strip code fences
     let cleaned = raw;
@@ -70,7 +70,7 @@ function extractRowsFromAnalyzedFile(sessionId: string | undefined, logger?: Web
     try {
       const parsed = JSON.parse(cleaned);
       if (parsed && Array.isArray(parsed.data)) return parsed.data as Array<Record<string, any>>;
-    } catch {}
+    } catch { }
 
     // Strategy 3: extract data array substring
     try {
@@ -82,7 +82,7 @@ function extractRowsFromAnalyzedFile(sessionId: string | undefined, logger?: Web
         const parsed = JSON.parse(wrapped);
         if (parsed && Array.isArray(parsed.data)) return parsed.data as Array<Record<string, any>>;
       }
-    } catch {}
+    } catch { }
 
     // Strategy 4: first object/array
     try {
@@ -96,7 +96,7 @@ function extractRowsFromAnalyzedFile(sessionId: string | undefined, logger?: Web
         const parsed = JSON.parse(arr[0]);
         if (Array.isArray(parsed)) return parsed as Array<Record<string, any>>;
       }
-    } catch {}
+    } catch { }
 
     logger?.log(`No rows could be extracted from analyzed file for session ${sessionId}`);
     return [];
@@ -188,7 +188,7 @@ export async function intelligentWebScraping(
     // Step 1: Generate search URLs
     logger?.log('Step 1: Generating search queries and finding relevant URLs...');
     logger?.progress('Search URLs', 1, 6, 'Finding relevant web sources');
-    
+
     const searchResult = await generateSearchUrls({
       userQuery: validatedInput.userQuery,
       maxUrls: validatedInput.maxUrls,
@@ -241,7 +241,7 @@ export async function intelligentWebScraping(
       const errorMsg = `Failed to scrape content: ${scrapedContent.error || 'No content extracted'}`;
       logger?.error(errorMsg);
       logger?.log('🔄 Some URLs failed to scrape, but continuing with available data...');
-      
+
       // Check if we have any partial success
       if (scrapedContent.content && scrapedContent.content.length > 0) {
         logger?.log(`✅ Proceeding with ${scrapedContent.content.length} successfully scraped sources`);
@@ -267,8 +267,8 @@ export async function intelligentWebScraping(
         logger?.log(`Backfill batch ${Math.floor(i / 5) + 1}/${Math.ceil(backfillQueue.length / 5)}: ${backfillBatch.length} URLs`);
         const backfillResp = await scrapeUrlsWithCrawl4AI(backfillBatch, logger);
         if (backfillResp.success && Array.isArray(backfillResp.content)) {
-          const existing = new Set(scrapedResults.map(r => r.url));
-          const uniqueNew = backfillResp.content.filter(r => !existing.has(r.url));
+          const existing = new Set(scrapedResults.map((r: { url: string }) => r.url));
+          const uniqueNew = backfillResp.content.filter((r: { url: string }) => !existing.has(r.url));
           scrapedResults.push(...uniqueNew);
           logger?.log(`Backfill added ${uniqueNew.length} pages (total ${scrapedResults.length})`);
         } else {
@@ -317,23 +317,44 @@ export async function intelligentWebScraping(
       }
     );
 
-    if (!extraction.success || !Array.isArray(extraction.results) || extraction.results.length === 0) {
-      const errorMsg = extraction.error || 'Crawl4AI+Gemini extraction produced no results';
-      logger?.error(errorMsg);
-      return {
-        success: false,
-        error: errorMsg,
-        urls: searchResult.urls.map(url => url.url),
-        searchQueries: searchResult.searchQueries.map(q => q.query),
-      };
+    let allRows: Array<Record<string, any>> = [];
+    let usedFallback = false;
+
+    if (extraction.success && Array.isArray(extraction.results) && extraction.results.length > 0) {
+      allRows = extraction.results.flatMap(result =>
+        Array.isArray(result.rows) ? result.rows : []
+      );
     }
 
-    const allRows = extraction.results.flatMap(result =>
-      Array.isArray(result.rows) ? result.rows : []
-    );
+    // Fallback: If Crawl4AI failed or returned no rows, try direct Gemini analysis
+    if (allRows.length === 0 && tempFilePath) {
+      const errorMsg = extraction.error || 'Crawl4AI extraction returned 0 rows';
+      logger?.error(`Primary extraction failed: ${errorMsg}. Attempting fallback to direct Gemini analysis...`);
+      logger?.progress('AI Structuring', 3, 6, 'Primary failed, using fallback AI analysis');
+
+      try {
+        const geminiResult = await analyzeScrapedFileWithGemini(
+          tempFilePath,
+          validatedInput.userQuery,
+          validatedInput.numRows,
+          logger,
+          validatedInput.sessionId
+        );
+
+        if (geminiResult.rows.length > 0) {
+          allRows = geminiResult.rows;
+          usedFallback = true;
+          logger?.success(`✅ Fallback analysis successful! Generated ${allRows.length} rows.`);
+        } else {
+          logger?.error('Fallback analysis also returned 0 rows.');
+        }
+      } catch (fallbackError: any) {
+        logger?.error(`Fallback analysis failed: ${fallbackError.message}`);
+      }
+    }
 
     if (!allRows.length) {
-      const errorMsg = 'Crawl4AI+Gemini extraction returned 0 rows';
+      const errorMsg = 'Both primary extraction and fallback analysis failed to generate data';
       logger?.error(errorMsg);
       return {
         success: false,
@@ -406,9 +427,8 @@ export async function intelligentWebScraping(
         refinedSources: scrapedResults.length,
         generatedRows: limitedRows.length,
         timestamp: new Date().toISOString(),
-        csvFilePath: csvFilePath,
+        csvFilePath,
         sessionId: validatedInput.sessionId,
-        rawAiFilePath: undefined,
         scrapedRawFilePath: tempFilePath,
       },
     };
@@ -419,16 +439,18 @@ export async function intelligentWebScraping(
     logger?.success(`📁 CSV saved to: ${csvFilePath}`);
     return resultSummary;
 
-    // Legacy chunk-based AI structuring path below (no longer used when Gemini 3 Pro path succeeds)
-    logger?.log('Step 3: Building relevant text chunks for AI structuring...');
-    logger?.progress('Chunk Selection', 3, 6, 'Selecting most relevant content chunks');
-
-    type ContentChunk = {
-      url: string;
-      title: string;
-      chunkIndex: number;
-      content: string;
+  } catch (error: any) {
+    console.error('[IntelligentWebScraping] Error:', error);
+    const errorMsg = `Web scraping failed: ${error.message}`;
+    logger?.error(errorMsg);
+    return {
+      success: false,
+      error: errorMsg,
     };
+  }
+}
+
+/* Legacy chunk-based AI structuring path (commented out)
 
     function buildContentChunksForRetrieval(
       scrapedContent: Array<{ url: string; title: string; content: string }>,
@@ -733,23 +755,14 @@ export async function intelligentWebScraping(
         if (newUrls.length === 0) {
           logger?.log(`Expansion round ${round}: no new unique URLs available`);
           continue;
-        }
 
         logger?.log(`Expansion round ${round}: scraping ${newUrls.length} new URLs`);
         const extraScrape = await scrapeUrlsWithCrawl4AI(newUrls, logger);
         if (extraScrape.success && Array.isArray(extraScrape.content) && extraScrape.content.length > 0) {
-          const uniqueNew = extraScrape.content.filter(item => !knownUrls.has(item.url));
-          uniqueNew.forEach(item => knownUrls.add(item.url));
+          const uniqueNew = extraScrape.content.filter((item: { url: string }) => !knownUrls.has(item.url));
+          uniqueNew.forEach((item: { url: string }) => knownUrls.add(item.url));
           scrapedResults.push(...uniqueNew);
           logger?.log(`Expansion round ${round}: added ${uniqueNew.length} new pages (total scraped: ${scrapedResults.length})`);
-
-          // Rebuild combined readme and prefer it for AI analysis
-          await dumpScrapedDataToTempFile(scrapedResults, validatedInput.userQuery, logger, validatedInput.sessionId);
-
-          let rerunChunks: ContentChunk[];
-          if (tempFilePath) {
-            const combinedPath = tempFilePath as string;
-            if (existsSync(combinedPath)) {
               try {
                 const md = readFileSync(combinedPath, 'utf8');
                 const limited = md.slice(0, 170000);
@@ -864,58 +877,6 @@ export async function intelligentWebScraping(
     if (!existsSync(aiOutputDir)) {
       mkdirSync(aiOutputDir, { recursive: true });
     }
-    const aiTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const aiCsvFileName = `dataset-${aiTimestamp}.csv`;
-    const aiCsvFilePath = join(aiOutputDir, aiCsvFileName);
-    try {
-      writeFileSync(aiCsvFilePath, aiCsv, 'utf8');
-      logger?.success(`✅ SINGLE CSV saved to: ${aiCsvFilePath}`);
-      logger?.log(`📊 Final dataset: ${limitedAiRows.length} rows, ${aiSchema.length} columns`);
-    } catch (error) {
-      logger?.error(`Failed to save CSV: ${error}`);
-    }
-
-    const aiResult: IntelligentWebScrapingOutput = {
-      success: true,
-      data: limitedAiRows,
-      csv: aiCsv,
-      schema: aiSchema,
-      urls: searchResult.urls.map(url => url.url),
-      searchQueries: searchResult.searchQueries.map(q => q.query),
-      feedback: 'AI structuring of relevant chunks',
-      metadata: {
-        totalUrls: searchResult.urls.length,
-        scrapedPages: scrapedResults.length,
-        refinedSources: scrapedResults.length,
-        generatedRows: limitedAiRows.length,
-        timestamp: new Date().toISOString(),
-        csvFilePath: aiCsvFilePath,
-        sessionId: validatedInput.sessionId,
-        rawAiFilePath: rawAiFilePath || (validatedInput.sessionId ? join(process.cwd(), 'temp', 'analyzed', `${validatedInput.sessionId}-ai-analysis.json`) : undefined),
-        scrapedRawFilePath: validatedInput.sessionId ? join(process.cwd(), 'temp', 'scraped', `${validatedInput.sessionId}-raw-content.txt`) : undefined,
-        chunkDir: chunkInfo?.dir,
-        chunkCount: chunkInfo?.count,
-        chunkSize: chunkInfo?.size,
-      },
-    };
-
-    logger?.success(`🎉 Web scraping completed via relevant-chunk AI structuring! Generated ${limitedAiRows.length} rows from ${searchResult.urls.length} URLs`);
-    logger?.success(`📁 CSV saved to: ${aiCsvFilePath}`);
-    return aiResult;
-
-  } catch (error: any) {
-    console.error('[IntelligentWebScraping] Error:', error);
-    const errorMsg = `Web scraping failed: ${error.message}`;
-    logger?.error(errorMsg);
-    return {
-      success: false,
-      error: errorMsg,
-    };
-  }
-}
-
-/**
- * Scrape URLs using Crawl4AI service
  */
 async function scrapeUrlsWithCrawl4AI(
   urls: string[],
@@ -930,12 +891,12 @@ async function scrapeUrlsWithCrawl4AI(
   error?: string;
 }> {
   try {
-    const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:8000';
+    const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:11235';
     logger?.log(`Using Crawl4AI service at: ${crawl4aiServiceUrl}`);
-    
+
     // Test if the Crawl4AI service is available
     try {
-      const healthCheck = await fetch(`${crawl4aiServiceUrl}/health`, { 
+      const healthCheck = await fetch(`${crawl4aiServiceUrl}/health`, {
         method: 'GET',
         signal: AbortSignal.timeout(5000) // 5 second timeout
       });
@@ -963,24 +924,24 @@ async function scrapeUrlsWithCrawl4AI(
     // IMPORTANT: Wait for ALL URLs to be scraped before proceeding
     const batchSize = 5;
     logger?.log(`Starting batch processing of ${urls.length} URLs in batches of ${batchSize}`);
-    
+
     for (let i = 0; i < urls.length; i += batchSize) {
       const batch = urls.slice(i, i + batchSize);
       logger?.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(urls.length / batchSize)}: ${batch.length} URLs`);
 
       const batchPromises = batch.map(async (url) => {
         try {
-            logger?.log(`Scraping: ${url.substring(0, 50)}...`);
-          
+          logger?.log(`Scraping: ${url.substring(0, 50)}...`);
+
           // Add retry logic for failed requests
           let response;
           let lastError;
           const maxRetries = 3;
-          
+
           for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
               logger?.log(`Attempt ${attempt}/${maxRetries} for ${url.substring(0, 50)}...`);
-              
+
               response = await fetch(`${crawl4aiServiceUrl}/crawl`, {
                 method: 'POST',
                 headers: {
@@ -988,7 +949,8 @@ async function scrapeUrlsWithCrawl4AI(
                 },
                 body: JSON.stringify({
                   urls: [url],
-                  options: {
+                  browser_config: {},
+                  crawler_config: {
                     extract_media: false,
                     extract_links: false,
                     extract_images: false,
@@ -996,17 +958,12 @@ async function scrapeUrlsWithCrawl4AI(
                     extract_markdown: true,
                     extract_clean_html: true,
                     extract_text: true,
-                    wait_for: 3000,
+                    wait_for: null,
                     timeout: 20000, // Reduced timeout for faster failure detection
-                    // Additional options for better content extraction
-                    remove_forms: true,
-                    remove_scripts: true,
-                    remove_styles: true,
-                    remove_comments: true,
-                  }
+                  },
                 }),
               });
-              
+
               // If we get a response, break out of retry loop
               break;
             } catch (retryError: any) {
@@ -1017,7 +974,7 @@ async function scrapeUrlsWithCrawl4AI(
               }
             }
           }
-          
+
           if (!response) {
             throw lastError || new Error('Failed to get response after retries');
           }
@@ -1027,7 +984,7 @@ async function scrapeUrlsWithCrawl4AI(
           }
 
           const result = await response.json();
-          
+
           // Debug: Log the structure of the response
           console.log(`[Crawl4AI] Response structure for ${url}:`, {
             success: result.success,
@@ -1037,13 +994,13 @@ async function scrapeUrlsWithCrawl4AI(
             firstResultContentType: typeof result.results?.[0]?.content,
             firstResultMarkdownType: typeof result.results?.[0]?.markdown,
           });
-          
+
           if (result.success && result.results && result.results.length > 0) {
             const crawlResult = result.results[0];
-            
+
             // Prioritize markdown for cleaner content and better AI analysis
             let contentString = '';
-            
+
             // 1. Try markdown first (cleanest, most AI-friendly)
             if (crawlResult.markdown) {
               if (typeof crawlResult.markdown === 'string') {
@@ -1054,7 +1011,7 @@ async function scrapeUrlsWithCrawl4AI(
                 logger?.log(`✅ Using markdown object text for ${url} (${contentString.length} chars)`);
               }
             }
-            
+
             // 2. Fallback to extracted_content if markdown not available
             if (!contentString && crawlResult.extracted_content) {
               if (typeof crawlResult.extracted_content === 'string') {
@@ -1065,35 +1022,35 @@ async function scrapeUrlsWithCrawl4AI(
                 logger?.log(`⚠️ Using extracted_content object for ${url} (${contentString.length} chars)`);
               }
             }
-            
+
             // 3. Last resort: cleaned HTML
             if (!contentString && crawlResult.cleaned_html && typeof crawlResult.cleaned_html === 'string') {
               contentString = crawlResult.cleaned_html;
               logger?.log(`⚠️ Using cleaned_html for ${url} (${contentString.length} chars)`);
             }
-            
+
             // 4. Final fallback: raw HTML
             if (!contentString && crawlResult.html && typeof crawlResult.html === 'string') {
               contentString = crawlResult.html;
               logger?.log(`⚠️ Using raw HTML for ${url} (${contentString.length} chars)`);
             }
-            
+
             // 5. If still no content, log warning and continue with empty content
             if (!contentString) {
               logger?.error(`❌ No usable content found for ${url} - continuing with empty content`);
               logger?.log(`🔍 Debug info for ${url}: title="${crawlResult.title}", content length=${crawlResult.content?.length || 0}, markdown length=${crawlResult.markdown?.length || 0}, html length=${crawlResult.html?.length || 0}`);
               contentString = '';
             }
-            
+
             const content = {
               url: url,
               title: crawlResult.title || url,
               content: contentString,
             };
-            
+
             // Send scraped content to logger for real-time display
             logger?.info(`SCRAPED_CONTENT:${JSON.stringify(content)}`);
-            
+
             return content;
           } else {
             throw new Error(result.error || 'Failed to extract content');
@@ -1115,7 +1072,7 @@ async function scrapeUrlsWithCrawl4AI(
           } else {
             logger?.error(`❌ Failed to scrape ${url}: ${error.message}`);
           }
-          
+
           // Don't fail completely - continue with other URLs
           logger?.log(`🔄 Continuing with remaining URLs...`);
           return null;
@@ -1128,14 +1085,14 @@ async function scrapeUrlsWithCrawl4AI(
         title: string;
         content: string;
       }>;
-      
+
       scrapedContent.push(...validResults);
       logger?.log(`Batch ${Math.floor(i / batchSize) + 1} completed: ${validResults.length}/${batch.length} successful`);
     }
 
     // CRITICAL: Ensure ALL URLs have been processed before proceeding
     logger?.log(`Scraping complete: ${scrapedContent.length}/${urls.length} URLs successfully scraped`);
-    
+
     if (scrapedContent.length === 0) {
       logger?.error('No content could be scraped from any URLs');
       return {
@@ -1172,15 +1129,15 @@ async function scrapeUrlsWithCrawl4AI(
  */
 function cleanContentForAI(content: string): string {
   if (!content) return '';
-  
+
   let cleaned = content;
-  
+
   // 1. Remove HTML tags but keep the text content
   cleaned = cleaned.replace(/<[^>]*>/g, ' ');
-  
+
   // 2. Remove excessive whitespace and normalize
   cleaned = cleaned.replace(/\s+/g, ' ');
-  
+
   // 3. Remove common noise patterns
   cleaned = cleaned
     .replace(/&nbsp;/g, ' ')
@@ -1190,23 +1147,23 @@ function cleanContentForAI(content: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'");
-  
+
   // 4. Remove excessive punctuation and special characters
   cleaned = cleaned
     .replace(/[^\w\s.,!?;:()\-'"]/g, ' ')
     .replace(/\s+/g, ' ');
-  
+
   // 5. Remove very short lines (likely navigation or ads)
   cleaned = cleaned
     .split('\n')
     .filter(line => line.trim().length > 10)
     .join('\n');
-  
+
   // 6. Remove duplicate lines
   const lines = cleaned.split('\n');
   const uniqueLines = [...new Set(lines)];
   cleaned = uniqueLines.join('\n');
-  
+
   // 7. Remove excessive repeated words (likely navigation)
   const words = cleaned.split(/\s+/);
   const wordCounts = new Map();
@@ -1214,21 +1171,21 @@ function cleanContentForAI(content: string): string {
     const lowerWord = word.toLowerCase();
     wordCounts.set(lowerWord, (wordCounts.get(lowerWord) || 0) + 1);
   });
-  
+
   // Remove words that appear too frequently (likely noise)
   const filteredWords = words.filter(word => {
     const lowerWord = word.toLowerCase();
     const count = wordCounts.get(lowerWord) || 0;
     return count < 10 || word.length > 3; // Keep longer words even if frequent
   });
-  
+
   cleaned = filteredWords.join(' ');
-  
+
   // 8. Final cleanup
   cleaned = cleaned
     .replace(/\s+/g, ' ')
     .trim();
-  
+
   return cleaned;
 }
 
@@ -1332,18 +1289,21 @@ async function dumpScrapedDataToTempFile(
     // Write to temp file (JSON snapshot)
     writeFileSync(tempFilePath, JSON.stringify(comprehensiveData, null, 2), 'utf8');
 
+
     // Mirror the scraped JSON into an external backend directory for Synthara backend
     // using a lean payload (metadata + sources only).
+    // DISABLED: This triggers broken polling in the frontend
+    /*
     try {
       const backendDirEnv = process.env.SYNTHARA_BACKEND_SCRAPED_DIR;
       const backendBase =
         backendDirEnv && backendDirEnv.trim().length > 0
           ? backendDirEnv.trim()
-          : 'C:\\Users\\prash\\OneDrive\\Desktop\\synthara backend extraction\\scraped';
+          : 'C:\\Users\\punee\\OneDrive\\Desktop\\synthara backend extraction (2)\\synthara backend extraction\\scraped';
 
       if (backendBase) {
         if (!existsSync(backendBase)) {
-          mkdirSync(backendBase, { recursive: true });
+          mkdirSync(backendBase, { recursive: true});
         }
         const backendFilePath = join(backendBase, `scraped-data-${timestamp}.json`);
         const backendPayload = {
@@ -1356,6 +1316,8 @@ async function dumpScrapedDataToTempFile(
     } catch (mirrorError: any) {
       logger?.error(`Failed to mirror scraped JSON to backend directory: ${mirrorError.message}`);
     }
+    */
+
 
     // Additionally, if sessionId provided, write a raw combined content txt under temp/scraped
     let scrapedRawPath: string | null = null;
@@ -1367,7 +1329,7 @@ async function dumpScrapedDataToTempFile(
         logger?.error(`Failed to save scraped raw content: ${e.message}`);
       }
     }
-    
+
     logger?.log(`📁 Temp file created: ${tempFilePath}`);
     logger?.log(`📊 Dataset stats: ${scrapedContent.length} sources`);
     logger?.log(`🧹 Noise reduction: ${comprehensiveData.metadata.averageNoiseReduction}% average`);
@@ -1395,9 +1357,9 @@ async function analyzeScrapedFileWithGemini(
   logger?: WebScrapingLogger,
   sessionId?: string
 ): Promise<GeminiStructuredResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured');
+    throw new Error('GEMINI_API_KEY (or GOOGLE_GEMINI_API_KEY) is not configured');
   }
 
   const modelId = process.env.GEMINI_MODEL_ID || 'gemini-2.5-pro';

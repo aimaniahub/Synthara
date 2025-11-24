@@ -27,7 +27,7 @@ async function scrapeUrlsForJob(urls: string[]): Promise<
     content: string;
   }>
 > {
-  const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:8000';
+  const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:11235';
 
   const healthOk = await fetch(`${crawl4aiServiceUrl}/health`, {
     method: 'GET',
@@ -52,7 +52,8 @@ async function scrapeUrlsForJob(urls: string[]): Promise<
         },
         body: JSON.stringify({
           urls: [url],
-          options: {
+          browser_config: {},
+          crawler_config: {
             extract_media: false,
             extract_links: false,
             extract_images: false,
@@ -60,7 +61,7 @@ async function scrapeUrlsForJob(urls: string[]): Promise<
             extract_markdown: true,
             extract_clean_html: true,
             extract_text: true,
-            wait_for: 3000,
+            wait_for: null,
             timeout: 20000,
             remove_forms: true,
             remove_scripts: true,

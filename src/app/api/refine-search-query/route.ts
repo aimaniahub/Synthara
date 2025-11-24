@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     // Simple keyword extraction fallback
     const fallbackResult = extractSimpleKeywords(userPrompt);
-    
+
     console.log(`[RefineAPI] ✅ Using simple keyword extraction:`, fallbackResult);
 
     return NextResponse.json({
@@ -51,7 +51,7 @@ function extractSimpleKeywords(userPrompt: string): { searchQuery: string; keywo
 
   // Remove duplicates and limit to 5 keywords
   const uniqueWords = [...new Set(words)].slice(0, 5);
-  
+
   return {
     searchQuery: uniqueWords.join(' '),
     keywords: uniqueWords

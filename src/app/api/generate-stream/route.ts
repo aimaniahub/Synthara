@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
-      
+
       // Send initial connection message
       const initialData = JSON.stringify({
         type: 'info',
@@ -115,12 +115,12 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
     start(controller) {
       const encoder = new TextEncoder();
       let isControllerClosed = false;
-      
+
       // Function to check if controller is still active
       const isControllerActive = () => {
         return !isControllerClosed && controller.desiredSize !== null;
       };
-      
+
       // Function to send log messages to all active SSE connections
       const sendLog = (message: string, type: 'info' | 'success' | 'error' | 'progress' = 'info') => {
         try {
@@ -167,7 +167,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
               message: 'Log message contained invalid characters',
               timestamp: new Date().toISOString()
             });
-            
+
             // Broadcast fallback to all connections
             activeStreams.forEach((streamController, connectionId) => {
               try {
@@ -239,7 +239,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
               details: 'Progress update',
               timestamp: new Date().toISOString()
             });
-            
+
             // Broadcast fallback to all connections
             activeStreams.forEach((streamController, connectionId) => {
               try {
@@ -261,11 +261,11 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
         try {
           sendLog('🚀 Starting dataset generation...', 'info');
           sendLog(`🆔 Session: ${currentSessionId}`, 'info');
-          
+
           if (useWebData) {
             sendLog('🌐 Web scraping mode enabled', 'info');
             sendProgress('Initializing', 1, 7, 'Setting up web scraping pipeline');
-            
+
             // Create a custom logger that sends updates to the frontend
             const logger = {
               log: (message: string) => sendLog(`📝 ${message}`, 'info'),
@@ -295,15 +295,13 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
             const result = await intelligentWebScraping({
               userQuery: prompt,
               numRows: numRows || 25,
-              maxUrls: 10, // Maximum URLs to search and scrape - LIMITED TO 4
-              useAI: true, // Use AI for all processing steps
+              maxUrls: 10,
+              useAI: true,
               sessionId: currentSessionId,
             }, logger);
 
-            // Add a small delay to ensure all processing is complete
-            // This prevents showing fallback data before AI processing finishes
-            sendLog('🔄 Finalizing data processing...', 'info');
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Create a safe result object that includes the requested number of rows
+            const safeResult = { ...result, requestedRows: numRows };
 
             // Validate result structure before sending
             console.log('[StreamAPI] Generation result validation:', {
@@ -328,37 +326,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
               } else if (hasRows && !hasCsv) {
                 sendLog(`⚠️ Data generated but missing CSV. Processing...`, 'info');
                 sendProgress('Processing', 7, 7, `Generated ${result.data?.length || 0} rows, finalizing...`);
-              } else {
-                sendLog(`ℹ️ Processing in progress, please wait...`, 'info');
-                sendProgress('Processing', 6, 7, 'Finalizing data structure...');
               }
-
-              // Always send the result, let the client decide what to do
-              const safeResult = {
-                success: result.success || false,
-                data: Array.isArray(result.data) ? result.data : [],
-                csv: typeof result.csv === 'string' ? result.csv : '',
-                schema: Array.isArray(result.schema) ? result.schema : (Array.isArray(result.data) && result.data.length > 0 ? Object.keys(result.data[0]).map(key => ({ name: key, type: 'String' })) : []),
-                feedback: typeof result.feedback === 'string' ? result.feedback : '',
-                urls: Array.isArray(result.urls) ? result.urls : [],
-                searchQueries: Array.isArray(result.searchQueries) ? result.searchQueries : [],
-                metadata: typeof result.metadata === 'object' && result.metadata !== null ? result.metadata : {}
-              };
-
-              // Send file paths if available
-              try {
-                const filesPayload = JSON.stringify({
-                  type: 'files',
-                  sessionId: currentSessionId,
-                  rawAiFilePath: result?.metadata?.rawAiFilePath || '',
-                  scrapedRawFilePath: result?.metadata?.scrapedRawFilePath || '',
-                  chunkDir: result?.metadata?.chunkDir || '',
-                  chunkCount: result?.metadata?.chunkCount || 0,
-                  chunkSize: result?.metadata?.chunkSize || 0,
-                  timestamp: new Date().toISOString(),
-                });
-                if (isControllerActive()) controller.enqueue(encoder.encode(`data: ${filesPayload}\n\n`));
-              } catch {}
 
               // Prefer streaming from chunk files (temp/chunks/{session}-chunk-{i}.json) if present
               const chunkCount = (result?.metadata as any)?.chunkCount as number | undefined;
@@ -475,7 +443,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
         } finally {
           // Add a delay before closing to ensure all data is sent
           await new Promise(resolve => setTimeout(resolve, 2000));
-          
+
           try {
             if (isControllerActive()) {
               // Send a final completion message only if we haven't already sent a complete message with data
@@ -486,7 +454,7 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
                 timestamp: new Date().toISOString()
               });
               controller.enqueue(encoder.encode(`data: ${completionData}\n\n`));
-              
+
               // Mark controller as closed before closing
               isControllerClosed = true;
               controller.close();

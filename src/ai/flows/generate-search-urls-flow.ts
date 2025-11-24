@@ -59,17 +59,17 @@ function cleanupCache() {
 function deduplicateQueries(queries: AISearchQuery[]): AISearchQuery[] {
   const seen = new Set<string>();
   const deduplicated: AISearchQuery[] = [];
-  
+
   for (const query of queries) {
     // Normalize query: lowercase, trim, remove extra spaces
     const normalized = query.query.toLowerCase().trim().replace(/\s+/g, ' ');
-    
+
     // Skip if we've seen this exact query before
     if (seen.has(normalized)) {
       console.log(`[GenerateSearchUrls] Skipping duplicate query: "${query.query}"`);
       continue;
     }
-    
+
     // Skip if this query is too similar to existing ones (substring match)
     let isSimilar = false;
     for (const existing of seen) {
@@ -79,13 +79,13 @@ function deduplicateQueries(queries: AISearchQuery[]): AISearchQuery[] {
         break;
       }
     }
-    
+
     if (!isSimilar) {
       seen.add(normalized);
       deduplicated.push(query);
     }
   }
-  
+
   console.log(`[GenerateSearchUrls] Deduplicated ${queries.length} queries to ${deduplicated.length} unique queries`);
   return deduplicated;
 }
@@ -100,12 +100,12 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
   try {
     // Clean up expired cache entries
     cleanupCache();
-    
+
     // Validate input
     const validatedInput = GenerateSearchUrlsInputSchema.parse(input);
     // Over-fetch to survive filtering and scraping failures (allow larger expansions)
     const overfetchLimit = Math.min(validatedInput.maxUrls * 4, 80);
-    
+
     // Check cache first
     const cacheKey = validatedInput.userQuery.toLowerCase().trim();
     const cached = searchCache.get(cacheKey);
@@ -215,7 +215,7 @@ Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] 
 
     if (!searchResponse.success || searchResponse.results.length === 0) {
       console.warn(`[GenerateSearchUrls] SerpAPI search failed: ${searchResponse.error}. Trying simplified fallback queries.`);
-      
+
       // Try ultra-simple queries first
       const simpleQueries = generateSimpleQueries(validatedInput.userQuery);
       console.log('[GenerateSearchUrls] Trying simplified fallback queries...');
@@ -223,28 +223,28 @@ Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] 
         simpleQueries,
         Math.ceil(overfetchLimit / Math.max(1, simpleQueries.length))
       );
-      
+
       if (simpleSearch.success && simpleSearch.results.length > 0) {
         console.log(`[GenerateSearchUrls] Found ${simpleSearch.results.length} results with simple queries`);
-        
+
         // Rank and filter simple query results
         const rankedUrls = await rankUrlsByRelevance(
           simpleSearch.results,
           validatedInput.userQuery,
           validatedInput.maxUrls
         );
-        
+
         return {
           success: true,
           urls: rankedUrls,
           searchQueries: searchQueries,
         };
       }
-      
+
       // Final fallback: Generate default URLs based on the query
       const fallbackUrls = generateFallbackUrls(validatedInput.userQuery, validatedInput.maxUrls);
       console.log(`[GenerateSearchUrls] Using ${fallbackUrls.length} fallback URLs`);
-      
+
       return {
         success: true,
         urls: fallbackUrls,
@@ -307,8 +307,8 @@ async function rankUrlsByRelevance(
     const qLower = userQuery.toLowerCase();
     const isFinance = /(\b|\s)(nse|stock|stocks|equity|fno|f&o|breakout|rsi|volume|sector|nifty|banknifty|share)(\b|\s)/i.test(qLower);
     const financeDomainBoost = new Set([
-      'nseindia.com','moneycontrol.com','investing.com','tradingview.com','economictimes.indiatimes.com',
-      'bseindia.com','zerodha.com','tickertape.in','screener.in','livemint.com','finance.yahoo.com'
+      'nseindia.com', 'moneycontrol.com', 'investing.com', 'tradingview.com', 'economictimes.indiatimes.com',
+      'bseindia.com', 'zerodha.com', 'tickertape.in', 'screener.in', 'livemint.com', 'finance.yahoo.com'
     ]);
 
     // Simple relevance scoring based on title and snippet matching with optional domain boost
@@ -322,7 +322,7 @@ async function rankUrlsByRelevance(
           combinedScore = Math.min(1, combinedScore + 0.2);
         }
       }
-      
+
       return {
         url: result.link,
         title: result.title,
@@ -358,10 +358,10 @@ function calculateRelevanceScore(text: string, query: string): number {
 
   const textLower = text.toLowerCase();
   const queryLower = query.toLowerCase();
-  
+
   // Split query into words
   const queryWords = queryLower.split(/\s+/).filter(word => word.length > 2);
-  
+
   if (queryWords.length === 0) return 0;
 
   // Count word matches
@@ -374,7 +374,7 @@ function calculateRelevanceScore(text: string, query: string): number {
 
   // Calculate score as percentage of words matched
   const score = matches / queryWords.length;
-  
+
   // Boost score for exact phrase matches
   if (textLower.includes(queryLower)) {
     return Math.min(1.0, score + 0.3);
@@ -388,20 +388,20 @@ function calculateRelevanceScore(text: string, query: string): number {
  */
 function generateSimpleQueries(userQuery: string): string[] {
   const queryLower = userQuery.toLowerCase();
-  
+
   // Extract key entities
   const words = queryLower.split(/\s+/).filter(word => word.length > 2);
-  
+
   // Generate simple variations
   const simpleQueries = [
     userQuery, // Original query
     words.join(' '), // Clean version
   ];
-  
+
   // Add location-specific variations if location is detected
   const locations = ['bengaluru', 'bangalore', 'mumbai', 'delhi', 'chennai', 'hyderabad', 'pune', 'kolkata'];
   const hasLocation = locations.some(loc => queryLower.includes(loc));
-  
+
   if (hasLocation) {
     // Add list/directory variations
     simpleQueries.push(`${words.join(' ')} list`);
@@ -411,7 +411,7 @@ function generateSimpleQueries(userQuery: string): string[] {
     simpleQueries.push(`${words.join(' ')} 2025`);
     simpleQueries.push(`${words.join(' ')} latest`);
   }
-  
+
   return [...new Set(simpleQueries)]; // Remove duplicates
 }
 
@@ -429,7 +429,7 @@ function generateFallbackSearchQueries(userQuery: string): Array<{
   const hasPhrase = (p: string) => queryLower.includes(p);
 
   // Finance/stocks-specific fallback (avoid misclassifying 'level' as 'ev')
-  const financeWords = ['nse','stock','stocks','equity','fno','f&o','breakout','rsi','volume','sector','nifty','banknifty','share'];
+  const financeWords = ['nse', 'stock', 'stocks', 'equity', 'fno', 'f&o', 'breakout', 'rsi', 'volume', 'sector', 'nifty', 'banknifty', 'share'];
   const isFinance = financeWords.some(w => hasWord(w) || hasPhrase(w));
   if (isFinance) {
     const base = queryLower.replace(/\s+/g, ' ').trim();
@@ -473,7 +473,7 @@ function generateFallbackSearchQueries(userQuery: string): Array<{
       }
     ];
   }
-  
+
   if (queryLower.includes('restaurant') || queryLower.includes('food')) {
     return [
       {
@@ -488,7 +488,7 @@ function generateFallbackSearchQueries(userQuery: string): Array<{
       }
     ];
   }
-  
+
   // Generic fallback
   return [
     {

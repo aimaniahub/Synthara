@@ -131,7 +131,7 @@ Examples of BAD queries (too similar):
 Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] }`;
 
       const response = await this.callGeminiAPI(prompt);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -166,7 +166,7 @@ Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] 
    * Refine scraped content to remove noise and keep relevant information
    */
   async refineContent(
-    scrapedContent: Array<{url: string, title: string, content: string}>,
+    scrapedContent: Array<{ url: string, title: string, content: string }>,
     userQuery: string
   ): Promise<GeminiContentRefinementResponse> {
     try {
@@ -180,7 +180,7 @@ Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] 
 
       console.log(`[Gemini] Refining content from ${scrapedContent.length} sources`);
 
-      const contentSummary = scrapedContent.map((item, index) => 
+      const contentSummary = scrapedContent.map((item, index) =>
         `Source ${index + 1}:
 URL: ${item.url}
 Title: ${item.title}
@@ -223,7 +223,7 @@ Return your response as a JSON object with this exact structure:
 Set confidence between 0-1 based on how relevant the content is to the user query. Rate content 0.3+ if it contains ANY relevant data, even if the page has other content.`;
 
       const response = await this.callGeminiAPI(prompt);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -273,7 +273,7 @@ Set confidence between 0-1 based on how relevant the content is to the user quer
 
       console.log(`[Gemini] Structuring data from ${refinedContent.length} sources for ${numRows} rows`);
 
-      const contentSummary = refinedContent.map((item, index) => 
+      const contentSummary = refinedContent.map((item, index) =>
         `Source ${index + 1}:
 URL: ${item.url}
 Title: ${item.title}
@@ -321,7 +321,7 @@ Return your response as a JSON object with this exact structure:
 Make sure the data is clean, consistent, and directly relevant to the user query.`;
 
       const response = await this.callGeminiAPI(prompt);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -440,7 +440,7 @@ Make sure the data is clean, consistent, and directly relevant to the user query
   /**
    * Call Gemini API with retry logic and rate limiting
    */
-  private async callGeminiAPI(prompt: string, maxRetries: number = 3): Promise<{success: boolean, text: string, error?: string}> {
+  private async callGeminiAPI(prompt: string, maxRetries: number = 3): Promise<{ success: boolean, text: string, error?: string }> {
     const totalKeys = this.apiKeys.length > 0 ? this.apiKeys.length : (this.apiKey ? 1 : 0);
     if (totalKeys === 0) {
       return { success: false, text: '', error: 'Gemini API key not configured' };
@@ -595,21 +595,21 @@ Make sure the data is clean, consistent, and directly relevant to the user query
    */
   private extractJsonFromResponse(text: string): string {
     console.log(`[Gemini] Extracting JSON from response (${text.length} characters)`);
-    
+
     // Strategy 1: Look for JSON in markdown code blocks (most common)
     const codeBlockPatterns = [
       /```(?:json)?\s*(\{[\s\S]*?\})\s*```/g,
       /```(?:json)?\s*(\[[\s\S]*?\])\s*```/g,
       /```json\s*([\s\S]*?)\s*```/g
     ];
-    
+
     for (const pattern of codeBlockPatterns) {
       const matches = [...text.matchAll(pattern)];
       for (const match of matches) {
         if (match[1]) {
           const extracted = match[1].trim();
           console.log(`[Gemini] Found JSON in code block: ${extracted.substring(0, 200)}...`);
-          
+
           // Validate JSON structure
           if (this.isValidJsonStructure(extracted)) {
             return this.cleanJsonString(extracted);
@@ -617,47 +617,47 @@ Make sure the data is clean, consistent, and directly relevant to the user query
         }
       }
     }
-    
+
     // Strategy 2: Look for JSON objects/arrays without code blocks
     const jsonPatterns = [
       /\{[\s\S]*\}/g,
       /\[[\s\S]*\]/g
     ];
-    
+
     for (const pattern of jsonPatterns) {
       const matches = [...text.matchAll(pattern)];
       for (const match of matches) {
         const extracted = match[0].trim();
         console.log(`[Gemini] Found JSON without code blocks: ${extracted.substring(0, 200)}...`);
-        
+
         if (this.isValidJsonStructure(extracted)) {
           return this.cleanJsonString(extracted);
         }
       }
     }
-    
+
     // Strategy 3: Look for JSON-like content and try to extract it
     const jsonLikePattern = /(?:^|\n)\s*(\{[\s\S]*?\})\s*(?:\n|$)/;
     const jsonLikeMatch = text.match(jsonLikePattern);
     if (jsonLikeMatch && jsonLikeMatch[1]) {
       const extracted = jsonLikeMatch[1].trim();
       console.log(`[Gemini] Found JSON-like content: ${extracted.substring(0, 200)}...`);
-      
+
       if (this.isValidJsonStructure(extracted)) {
         return this.cleanJsonString(extracted);
       }
     }
-    
+
     // Strategy 4: Try to find and extract any valid JSON from the text
     const lines = text.split('\n');
     let jsonLines: string[] = [];
     let inJsonBlock = false;
     let braceCount = 0;
     let bracketCount = 0;
-    
+
     for (const line of lines) {
       const trimmedLine = line.trim();
-      
+
       // Start of JSON block
       if (trimmedLine.startsWith('{') || trimmedLine.startsWith('[')) {
         inJsonBlock = true;
@@ -666,40 +666,40 @@ Make sure the data is clean, consistent, and directly relevant to the user query
         bracketCount = (trimmedLine.match(/\[/g) || []).length;
         continue;
       }
-      
+
       // Continue JSON block
       if (inJsonBlock) {
         jsonLines.push(trimmedLine);
         braceCount += (trimmedLine.match(/\{/g) || []).length;
         bracketCount += (trimmedLine.match(/\[/g) || []).length;
-        
+
         // Check if JSON block is complete
         const closeBraces = (trimmedLine.match(/\}/g) || []).length;
         const closeBrackets = (trimmedLine.match(/\]/g) || []).length;
-        
+
         if (braceCount <= closeBraces && bracketCount <= closeBrackets) {
           const extracted = jsonLines.join(' ').trim();
           console.log(`[Gemini] Extracted multi-line JSON: ${extracted.substring(0, 200)}...`);
-          
+
           if (this.isValidJsonStructure(extracted)) {
             return this.cleanJsonString(extracted);
           }
-          
+
           inJsonBlock = false;
           jsonLines = [];
         }
       }
     }
-    
+
     // Strategy 5: Try all candidates and pick the first parseable
     const candidates = this.extractAllJsonCandidates(text);
     for (const c of candidates) {
       const parsed = this.safeParseJson(c);
       if (parsed !== null) {
-        try { return JSON.stringify(parsed); } catch {}
+        try { return JSON.stringify(parsed); } catch { }
       }
     }
-    
+
     // Guaranteed safe minimal JSON to prevent parse errors upstream
     console.log(`[Gemini] No valid JSON found. Returning empty JSON object.`);
     return '{}';
@@ -710,27 +710,27 @@ Make sure the data is clean, consistent, and directly relevant to the user query
    */
   private isValidJsonStructure(text: string): boolean {
     const trimmed = text.trim();
-    
+
     // Must start with { or [
     if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
       return false;
     }
-    
+
     // Must have balanced braces/brackets
     const openBraces = (trimmed.match(/\{/g) || []).length;
     const closeBraces = (trimmed.match(/\}/g) || []).length;
     const openBrackets = (trimmed.match(/\[/g) || []).length;
     const closeBrackets = (trimmed.match(/\]/g) || []).length;
-    
+
     if (openBraces !== closeBraces || openBrackets !== closeBrackets) {
       return false;
     }
-    
+
     // Must end with } or ]
     if (!trimmed.endsWith('}') && !trimmed.endsWith(']')) {
       return false;
     }
-    
+
     return true;
   }
 
@@ -739,33 +739,33 @@ Make sure the data is clean, consistent, and directly relevant to the user query
    */
   private completeTruncatedJson(jsonString: string): string {
     let completed = jsonString.trim();
-    
+
     // Count opening and closing braces/brackets
     const openBraces = (completed.match(/\{/g) || []).length;
     const closeBraces = (completed.match(/\}/g) || []).length;
     const openBrackets = (completed.match(/\[/g) || []).length;
     const closeBrackets = (completed.match(/\]/g) || []).length;
-    
+
     // If we're in the middle of a string, try to close it
     if (completed.match(/"[^"]*$/)) {
       completed += '"';
     }
-    
+
     // If we're in the middle of a property, try to close it
     if (completed.match(/:\s*"[^"]*$/)) {
       completed += '"';
     }
-    
+
     // Add missing closing brackets
     for (let i = 0; i < openBrackets - closeBrackets; i++) {
       completed += ']';
     }
-    
+
     // Add missing closing braces
     for (let i = 0; i < openBraces - closeBraces; i++) {
       completed += '}';
     }
-    
+
     console.log(`[Gemini] Completed truncated JSON: ${completed.substring(0, 200)}...`);
     return completed;
   }
@@ -775,25 +775,25 @@ Make sure the data is clean, consistent, and directly relevant to the user query
    */
   private cleanJsonString(jsonString: string): string {
     let cleaned = jsonString.trim();
-    
+
     // Remove any leading/trailing whitespace and newlines
     cleaned = cleaned.replace(/^\s+|\s+$/g, '');
-    
+
     // Fix common issues step by step:
-    
+
     // 1. Fix single quotes to double quotes (but be careful with apostrophes in text)
     cleaned = cleaned.replace(/([{,]\s*)'([^']*)'(\s*:)/g, '$1"$2"$3'); // Property names
     cleaned = cleaned.replace(/:\s*'([^']*)'(\s*[,}])/g, ': "$1"$2'); // String values
-    
+
     // 2. Remove any trailing commas before closing braces/brackets
     cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
-    
+
     // 3. Fix missing quotes around property names (only if not already quoted)
     cleaned = cleaned.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
-    
+
     // 4. Normalize whitespace
     cleaned = cleaned.replace(/\s+/g, ' ');
-    
+
     return cleaned;
   }
 
@@ -834,16 +834,16 @@ Make sure the data is clean, consistent, and directly relevant to the user query
   private safeParseJson(jsonText: string): any | null {
     try {
       return JSON.parse(jsonText);
-    } catch {}
+    } catch { }
     try {
       const fixed = this.cleanJsonString(jsonText);
       return JSON.parse(fixed);
-    } catch {}
+    } catch { }
     try {
       const completed = this.completeTruncatedJson(jsonText);
       const fixedCompleted = this.cleanJsonString(completed);
       return JSON.parse(fixedCompleted);
-    } catch {}
+    } catch { }
     return null;
   }
 
@@ -957,7 +957,7 @@ Make sure the data is clean, consistent, and directly relevant to the user query
       }
 
       console.log(`[Gemini] Analyzing complete dataset: ${comprehensiveData.sources.length} sources, ${comprehensiveData.metadata.totalContentLength} characters`);
-      
+
       // Log the first few sources for debugging
       console.log(`[Gemini] First source preview:`, {
         title: comprehensiveData.sources[0]?.title,
@@ -1017,7 +1017,7 @@ RESPONSE FORMAT (JSON):
         console.log(`[Gemini] Sending prompt to Gemini API (${prompt.length} characters)...`);
         response = await this.callGeminiAPI(prompt);
       }
-      
+
       if (!response.success) {
         console.error(`[Gemini] API call failed:`, response.error);
         return {
@@ -1033,7 +1033,7 @@ RESPONSE FORMAT (JSON):
       try {
         const jsonText = this.extractJsonFromResponse(response.text);
         const result = JSON.parse(jsonText);
-        
+
         // Validate the response structure
         if (!result.schema || !Array.isArray(result.schema) || !result.data || !Array.isArray(result.data)) {
           throw new Error('Invalid response structure from Gemini');
@@ -1079,7 +1079,7 @@ RESPONSE FORMAT (JSON):
     retryCount: number = 0
   ): Promise<GeminiDataStructuringResponse> {
     const maxRetries = 2;
-    
+
     try {
       console.log(`[Gemini] Analyzing markdown content: ${markdownContent.length} characters (attempt ${retryCount + 1}/${maxRetries + 1})`);
       console.log(`[Gemini] User query: "${userQuery}"`);
@@ -1128,7 +1128,7 @@ IMPORTANT: Return ONLY the JSON object above. No markdown formatting, no additio
       } else {
         response = await this.callGeminiAPI(prompt);
       }
-      
+
       if (!response.success) {
         console.error(`[Gemini] Markdown analysis API call failed:`, response.error);
         return {
@@ -1165,7 +1165,7 @@ IMPORTANT: Return ONLY the JSON object above. No markdown formatting, no additio
       } catch (parseError: any) {
         console.error('[Gemini] Parsing failed, attempting retry with stricter instructions');
         console.error('[Gemini] Original response text:', response.text.substring(0, 1000));
-        
+
         if (retryCount < maxRetries) {
           console.log(`[Gemini] Retrying with more explicit JSON instructions (retry ${retryCount + 1}/${maxRetries})`);
           await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
@@ -1179,14 +1179,14 @@ IMPORTANT: Return ONLY the JSON object above. No markdown formatting, no additio
 
     } catch (error: any) {
       console.error('[Gemini] Markdown analysis error:', error);
-      
+
       // Retry on general errors if we haven't exceeded max retries
       if (retryCount < maxRetries) {
         console.log(`[Gemini] Retrying after error (retry ${retryCount + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
         return this.analyzeMarkdownContent(markdownContent, userQuery, numRows, retryCount + 1);
       }
-      
+
       return {
         success: false,
         structuredData: {
@@ -1240,11 +1240,11 @@ IMPORTANT: Return ONLY the JSON object above. No markdown formatting, no additio
    */
   private createFallbackStructure(userQuery: string, data: any[] = []): any {
     const query = userQuery.toLowerCase();
-    
+
     // Determine schema based on query content
     let schema: any[] = [];
     let sampleData: any[] = [];
-    
+
     if (query.includes('electronic') || query.includes('product') || query.includes('flipkart')) {
       schema = [
         { name: "product_name", type: "string", description: "Name of the electronic product" },
@@ -1397,7 +1397,7 @@ Return JSON format:
 }`;
 
       const response = await this.callGeminiAPI(prompt);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -1485,7 +1485,7 @@ Return JSON format:
 }`;
 
       const response = await this.callGeminiAPI(prompt);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -1626,7 +1626,7 @@ RESPONSE FORMAT (JSON):
 }`;
 
       const response = await this.callGeminiAPI(prompt);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -1736,7 +1736,7 @@ RESPONSE FORMAT (JSON):
 }`;
 
       const response = await this.callGeminiAPI(prompt);
-      
+
       if (!response.success) {
         return {
           success: false,

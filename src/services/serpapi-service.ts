@@ -24,7 +24,7 @@ export class SerpAPIService {
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.SERPAPI_KEY || process.env.SERPAPI_API_KEY || '';
-    
+
     if (!this.apiKey) {
       console.warn('[SerpAPI] No API key provided. SerpAPI functionality will be limited.');
     }
@@ -128,7 +128,7 @@ export class SerpAPIService {
       // Search each query
       for (const query of queries) {
         const response = await this.searchUrls(query, maxResultsPerQuery);
-        
+
         if (response.success) {
           allResults.push(...response.results);
         } else {

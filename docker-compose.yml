@@ -13,7 +13,7 @@ services:
       - GOOGLE_GEMINI_API_KEY=${GOOGLE_GEMINI_API_KEY}
       - SERPAPI_KEY=${SERPAPI_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CRAWL4AI_SERVICE_URL=http://crawl4ai:8000
+      - CRAWL4AI_SERVICE_URL=http://crawl4ai:11235
       - NEXT_PUBLIC_APP_URL=http://localhost:3000
     networks:
       - synthara-network
@@ -26,7 +26,7 @@ services:
       - "11234:11234"  # MCP server port
       - "11235:11235"  # Additional service port
     environment:
-      - PORT=8000
+      - PORT=11235
     networks:
       - synthara-network
     restart: unless-stopped

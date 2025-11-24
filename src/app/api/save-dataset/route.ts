@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (!csvData && generationResult.data && generationResult.data.length > 0) {
       // Generate CSV from data if not provided
       const headers = generationResult.schema?.map((col: any) => col.name) || Object.keys(generationResult.data[0]);
-      const csvRows = generationResult.data.map((row: any) => 
+      const csvRows = generationResult.data.map((row: any) =>
         headers.map((header: any) => {
           const value = row[header];
           // Escape CSV values properly
@@ -91,39 +91,39 @@ export async function POST(request: NextRequest) {
         supabaseSuccess = false;
         supabaseError = 'Supabase not configured';
       } else {
-      
-      // Get current user (if authenticated)
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        console.log('[Save Dataset] No authenticated user, skipping Supabase save');
-        supabaseSuccess = false;
-        supabaseError = 'No authenticated user';
-      } else {
-        // Save to Supabase
-        const { data: insertData, error: insertError } = await supabase
-          .from('generated_datasets')
-          .insert({
-            user_id: user.id,
-            dataset_name: datasetName,
-            prompt_used: prompt,
-            num_rows: generationResult.data.length,
-            schema_json: generationResult.schema || [],
-            data_csv: csvData,
-            feedback: generationResult.feedback || null,
-            is_public: !!isPublic
-          })
-          .select()
-          .single();
 
-        if (insertError) {
-          console.error('[Save Dataset] Supabase insert error:', insertError);
-          supabaseError = insertError.message;
+        // Get current user (if authenticated)
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          console.log('[Save Dataset] No authenticated user, skipping Supabase save');
+          supabaseSuccess = false;
+          supabaseError = 'No authenticated user';
         } else {
-          console.log('[Save Dataset] Saved to Supabase:', insertData.id);
-          supabaseSuccess = true;
+          // Save to Supabase
+          const { data: insertData, error: insertError } = await supabase
+            .from('generated_datasets')
+            .insert({
+              user_id: user.id,
+              dataset_name: datasetName,
+              prompt_used: prompt,
+              num_rows: generationResult.data.length,
+              schema_json: generationResult.schema || [],
+              data_csv: csvData,
+              feedback: generationResult.feedback || null,
+              is_public: !!isPublic
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error('[Save Dataset] Supabase insert error:', insertError);
+            supabaseError = insertError.message;
+          } else {
+            console.log('[Save Dataset] Saved to Supabase:', insertData.id);
+            supabaseSuccess = true;
+          }
         }
-      }
       }
     } catch (supabaseErr: any) {
       console.error('[Save Dataset] Supabase error:', supabaseErr);
@@ -150,9 +150,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[Save Dataset] Error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to save dataset' 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save dataset'
       },
       { status: 500 }
     );

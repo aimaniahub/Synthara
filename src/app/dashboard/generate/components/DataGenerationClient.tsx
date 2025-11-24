@@ -163,34 +163,34 @@ export function DataGenerationClient() {
   // Helper function to clean JSON string
   const cleanJsonString = useCallback((jsonString: string): string => {
     let cleaned = jsonString.trim();
-    
+
     // Remove any leading/trailing whitespace and newlines
     cleaned = cleaned.replace(/^\s+|\s+$/g, '');
-    
+
     // Fix common issues step by step:
-    
+
     // 1. Fix single quotes to double quotes (but be careful with apostrophes in text)
     cleaned = cleaned.replace(/([{,]\s*)'([^']*)'(\s*:)/g, '$1"$2"$3'); // Property names
     cleaned = cleaned.replace(/:\s*'([^']*)'(\s*[,}])/g, ': "$1"$2'); // String values
-    
+
     // 2. Fix unescaped quotes in string values
     cleaned = cleaned.replace(/"([^"]*)"([^"]*)"([^"]*)":/g, '"$1\\"$2\\"$3":'); // Property names with quotes
     cleaned = cleaned.replace(/:\s*"([^"]*)"([^"]*)"([^"]*)"/g, ': "$1\\"$2\\"$3"'); // String values with quotes
-    
+
     // 3. Fix trailing commas
     cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
-    
+
     // 4. Fix missing commas between properties
     cleaned = cleaned.replace(/"\s*\n\s*"/g, '",\n"');
     cleaned = cleaned.replace(/}\s*\n\s*{/g, '},\n{');
     cleaned = cleaned.replace(/]\s*\n\s*\[/g, '],\n[');
-    
+
     // 5. Fix unescaped newlines in strings
     cleaned = cleaned.replace(/"([^"]*)\n([^"]*)"/g, '"$1\\n$2"');
-    
+
     // 6. Fix unescaped backslashes
     cleaned = cleaned.replace(/\\(?!["\\/bfnrt])/g, '\\\\');
-    
+
     return cleaned;
   }, []);
 
@@ -201,7 +201,7 @@ export function DataGenerationClient() {
       /\{[\s\S]*\}/g,
       /\[[\s\S]*\]/g
     ];
-    
+
     for (const pattern of patterns) {
       const matches = text.match(pattern);
       if (matches) {
@@ -223,34 +223,34 @@ export function DataGenerationClient() {
         }
       }
     }
-    
+
     return null;
   }, []);
 
   // Helper function to complete truncated JSON
   const completeTruncatedJson = useCallback((jsonString: string): string => {
     let completed = jsonString.trim();
-    
+
     // Count opening and closing braces/brackets
     const openBraces = (completed.match(/\{/g) || []).length;
     const closeBraces = (completed.match(/\}/g) || []).length;
     const openBrackets = (completed.match(/\[/g) || []).length;
     const closeBrackets = (completed.match(/\]/g) || []).length;
-    
+
     // If we're in the middle of a string, try to close it
     if (completed.match(/"[^"]*$/)) {
       completed += '"';
     }
-    
+
     // Add missing closing brackets/braces
     for (let i = 0; i < openBrackets - closeBrackets; i++) {
       completed += ']';
     }
-    
+
     for (let i = 0; i < openBraces - closeBraces; i++) {
       completed += '}';
     }
-    
+
     return completed;
   }, []);
 
@@ -372,7 +372,7 @@ export function DataGenerationClient() {
       const startTime = Date.now();
       const timeout = 900000; // 15 minutes timeout
       let lastDataTime = startTime;
-      const maxSilenceTime = 180000; // 3 minutes of silence before considering it failed
+      const maxSilenceTime = 300000; // 5 minutes of silence before considering it failed
 
       while (true) {
         // Check for timeout
@@ -396,38 +396,31 @@ export function DataGenerationClient() {
           if (line.startsWith('data: ')) {
             try {
               const jsonString = line.substring(6);
-              
+
               // Skip empty lines or lines with just whitespace
               if (!jsonString.trim()) {
                 continue;
               }
-              
+
               const parsedData = parseJsonSafely(jsonString);
-              
+
               // Check if parsing failed and returned fallback error
               if (!parsedData || (parsedData.type === 'error' && parsedData.message === 'Failed to parse server response')) {
                 console.warn('[Client] Skipping malformed JSON line:', line.substring(0, 100) + '...');
                 continue; // Skip this line and continue processing
               }
-              
+
               // Forward all stream events to the terminal logger
               if (terminalLoggerRef.current) {
                 terminalLoggerRef.current.handleStreamEvent(parsedData);
               }
-              
+
               if (parsedData.type === 'progress') {
                 setProgress(parsedData.percentage || 0);
                 if (!hasMirroredToBackend) {
                   setProgressLabel(parsedData.message || '');
                 }
               } else if (parsedData.type === 'log' || parsedData.type === 'info') {
-                const message: string = parsedData.message || '';
-                if (!hasMirroredToBackend && message.includes('Backend scraped JSON mirrored to:')) {
-                  setHasMirroredToBackend(true);
-                  jobStartAtRef.current = Date.now();
-                  setProgressLabel('Waiting for stored web data to be structured and converted to CSV...');
-                  setShowTerminal(false);
-                }
                 // Log messages are handled by the terminal logger
                 console.log('Generation log:', parsedData.message);
               } else if (parsedData.type === 'scraped_content') {
@@ -453,7 +446,7 @@ export function DataGenerationClient() {
                   setProgress(100);
                   setProgressLabel('Generation complete!');
                   hasCompleted = true;
-                  
+
                   toast({
                     title: "Data generation complete!",
                     description: `Successfully generated ${parsedData.result.data.length} rows of data.`,
@@ -466,7 +459,7 @@ export function DataGenerationClient() {
                     resultKeys: parsedData.result ? Object.keys(parsedData.result) : 'N/A',
                     message: parsedData.message || 'No message'
                   });
-                  
+
                   // If this is just a stream completion message without data, don't treat it as an error
                   if (parsedData.message === 'Stream completed' || !parsedData.result) {
                     console.log('Stream completed without data - this is normal for some completion messages');
@@ -510,7 +503,7 @@ export function DataGenerationClient() {
       setIsSubmitting(false);
       setProgress(0);
       setProgressLabel('');
-      
+
       toast({
         title: "Generation failed",
         description: error.message || "An error occurred during data generation.",
@@ -519,80 +512,12 @@ export function DataGenerationClient() {
     }
   }, [isGenerating, isSubmitting, toast, parseJsonSafely, hasMirroredToBackend]);
 
-  useEffect(() => {
-    if (!hasMirroredToBackend) {
-      return;
-    }
 
-    let cancelled = false;
-
-    const pollLatestCsv = async () => {
-      try {
-        const response = await fetch('/api/backend/latest-csv', {
-          cache: 'no-store',
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const payload = await response.json().catch(() => null);
-        if (!payload || !payload.success) {
-          return;
-        }
-
-        const modifiedAt: string | undefined = payload.modifiedAt;
-        if (jobStartAtRef.current && modifiedAt) {
-          const mtime = new Date(modifiedAt).getTime();
-          if (Number.isFinite(mtime) && mtime <= jobStartAtRef.current) {
-            return;
-          }
-        }
-
-        const rows = Array.isArray(payload.data) ? payload.data : [];
-        const csv = typeof payload.csv === 'string' ? payload.csv : '';
-        const rawSchema = Array.isArray(payload.schema) ? payload.schema : [];
-        const schema = rawSchema.map((col: any) => ({
-          name: String(col.name),
-          type: String(col.type || 'string'),
-          description: col.description ? String(col.description) : undefined,
-        }));
-
-        const result: GenerationResult = {
-          data: rows,
-          csv,
-          schema,
-          feedback: 'Loaded from backend CSV output',
-        };
-
-        setGenerationResult(result);
-        setIsGenerating(false);
-        setIsSubmitting(false);
-        setProgress(100);
-        setProgressLabel('CSV loaded from backend output');
-        setHasMirroredToBackend(false);
-        cancelled = true;
-      } catch {
-      }
-    };
-
-    void pollLatestCsv();
-    const intervalId = setInterval(() => {
-      if (!cancelled) {
-        void pollLatestCsv();
-      }
-    }, 5000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(intervalId);
-    };
-  }, [hasMirroredToBackend, setGenerationResult]);
 
   // Generate sample data based on prompt
   const generateSampleData = useCallback((prompt: string, numRows: number) => {
     const lowerPrompt = prompt.toLowerCase();
-    
+
     // Determine data type based on prompt keywords
     let schema: Array<{ name: string; type: string; description?: string }> = [];
     let data: Array<Record<string, any>> = [];
@@ -669,9 +594,9 @@ export function DataGenerationClient() {
   // Convert data to CSV format
   const convertToCSV = useCallback((data: Array<Record<string, any>>, schema: Array<{ name: string; type: string }>) => {
     if (!data || data.length === 0) return '';
-    
+
     const headers = schema.map(col => col.name);
-    const csvRows = data.map(row => 
+    const csvRows = data.map(row =>
       headers.map(header => {
         const value = row[header];
         // Escape CSV values properly
@@ -681,7 +606,7 @@ export function DataGenerationClient() {
         return value || '';
       }).join(',')
     );
-    
+
     return [headers.join(','), ...csvRows].join('\n');
   }, []);
 
@@ -728,17 +653,17 @@ export function DataGenerationClient() {
       }
 
       const result = await response.json();
-      
+
       if (result.success) {
-        const saveMessage = result.supabaseSave 
+        const saveMessage = result.supabaseSave
           ? `Dataset "${watchedValues.datasetName}" saved to both local storage and Supabase!`
           : `Dataset "${watchedValues.datasetName}" saved to local storage${result.supabaseError ? ` (Supabase: ${result.supabaseError})` : ''}`;
-        
+
         toast({
           title: "Dataset saved!",
           description: saveMessage,
         });
-        
+
         console.log('[Save Dataset] Result:', {
           localSave: result.localSave,
           supabaseSave: result.supabaseSave,
@@ -781,7 +706,7 @@ export function DataGenerationClient() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      
+
       toast({
         title: "Download started",
         description: "CSV file download has started.",
@@ -947,24 +872,24 @@ export function DataGenerationClient() {
 
             {/* Action Buttons */}
             <div className="flex gap-3">
-            <Button
-              type="submit"
-              disabled={isGenerating || isSubmitting || !form.formState.isValid || !watchedValues.prompt.trim()}
-              className="flex-1"
-            >
-              {isGenerating || isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isSubmitting ? 'Starting...' : 'Generating...'}
-                </>
-              ) : (
-                <>
-                  <Play className="mr-2 h-4 w-4" />
-                  Generate Data
-                </>
-              )}
-            </Button>
-              
+              <Button
+                type="submit"
+                disabled={isGenerating || isSubmitting || !form.formState.isValid || !watchedValues.prompt.trim()}
+                className="flex-1"
+              >
+                {isGenerating || isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {isSubmitting ? 'Starting...' : 'Generating...'}
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Generate Data
+                  </>
+                )}
+              </Button>
+
               <Button
                 type="button"
                 variant="outline"
@@ -1029,7 +954,7 @@ export function DataGenerationClient() {
               console.error('Generation error:', error);
               setIsGenerating(false);
               setIsSubmitting(false);
-              
+
               // Show user-friendly error message
               toast({
                 title: "Generation encountered issues",
@@ -1176,7 +1101,7 @@ export function DataGenerationClient() {
                   )}
                 </div>
               </TabsContent>
-              
+
               <TabsContent value="raw" className="space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1201,7 +1126,7 @@ export function DataGenerationClient() {
                 </div>
               </TabsContent>
             </Tabs>
-            
+
             {generationResult.feedback && (
               <div className="mt-4 p-3 bg-muted rounded-md">
                 <p className="text-sm">
@@ -1234,7 +1159,7 @@ export function DataGenerationClient() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-3">
-                      {item.content}
+                      {typeof item.content === 'string' ? item.content : JSON.stringify(item.content)}
                     </p>
                   </div>
                 ))}
