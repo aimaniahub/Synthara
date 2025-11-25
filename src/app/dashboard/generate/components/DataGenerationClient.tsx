@@ -65,6 +65,7 @@ export function DataGenerationClient() {
   const [showTerminal, setShowTerminal] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState('');
+  const [isAnalyzingScraped, setIsAnalyzingScraped] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -74,6 +75,7 @@ export function DataGenerationClient() {
 
   const terminalLoggerRef = useRef<any>(null);
   const jobStartAtRef = useRef<number | null>(null);
+  const streamedRowCountRef = useRef<number>(0);
 
   const isBackendCsvPhase = hasMirroredToBackend && isGenerating;
 
@@ -97,6 +99,7 @@ export function DataGenerationClient() {
       setIsGenerating(false);
       setProgress(0);
       setProgressLabel('');
+      setIsAnalyzingScraped(false);
     };
   }, []);
 
@@ -330,7 +333,9 @@ export function DataGenerationClient() {
     setScrapedContent([]);
     setProgress(0);
     setProgressLabel('');
+    setIsAnalyzingScraped(false);
     setShowTerminal(true);
+    streamedRowCountRef.current = 0;
 
     try {
       // Scroll to terminal
@@ -420,6 +425,10 @@ export function DataGenerationClient() {
                 if (!hasMirroredToBackend) {
                   setProgressLabel(parsedData.message || '');
                 }
+
+                if (parsedData.step === 'Scraped Analysis') {
+                  setIsAnalyzingScraped(true);
+                }
               } else if (parsedData.type === 'log' || parsedData.type === 'info') {
                 // Log messages are handled by the terminal logger
                 console.log('Generation log:', parsedData.message);
@@ -438,7 +447,37 @@ export function DataGenerationClient() {
                     }]);
                   }
                 }
+              } else if (parsedData.type === 'rows_chunk') {
+                // Receiving structured rows means analysis phase is over
+                setIsAnalyzingScraped(false);
+
+                const rowsArray = Array.isArray(parsedData.rows) ? parsedData.rows : [];
+                const rowsInChunk = rowsArray.length;
+                const requestedRows = typeof parsedData.requestedRows === 'number' && parsedData.requestedRows > 0
+                  ? parsedData.requestedRows
+                  : data.numRows;
+
+                if (rowsInChunk > 0 && requestedRows > 0) {
+                  streamedRowCountRef.current += rowsInChunk;
+                  const safeTotal = Math.max(requestedRows, streamedRowCountRef.current);
+                  const percentage = Math.min(100, Math.round((streamedRowCountRef.current / safeTotal) * 100));
+
+                  setProgress(percentage);
+                  setProgressLabel(
+                    `Received ${streamedRowCountRef.current}/${requestedRows} rows (chunk size ${rowsInChunk})`
+                  );
+
+                  console.log('[Client] rows_chunk event', {
+                    offset: parsedData.offset,
+                    rowsInChunk,
+                    streamedSoFar: streamedRowCountRef.current,
+                    requestedRows,
+                    totalRows: parsedData.totalRows,
+                  });
+                }
               } else if (parsedData.type === 'complete') {
+                setIsAnalyzingScraped(false);
+
                 if (parsedData.result && Array.isArray(parsedData.result.data)) {
                   setGenerationResult(parsedData.result);
                   setIsGenerating(false);
@@ -503,6 +542,7 @@ export function DataGenerationClient() {
       setIsSubmitting(false);
       setProgress(0);
       setProgressLabel('');
+      setIsAnalyzingScraped(false);
 
       toast({
         title: "Generation failed",
@@ -733,6 +773,7 @@ export function DataGenerationClient() {
     setIsSubmitting(false);
     setEnhancementInfo(null);
     setHasMirroredToBackend(false);
+    setIsAnalyzingScraped(false);
   }, [form]);
 
   return (
@@ -908,6 +949,19 @@ export function DataGenerationClient() {
       {isGenerating && (
         <Card>
           <CardContent className="pt-6 space-y-4">
+            {isAnalyzingScraped && (
+              <div className="rounded-md border border-dashed bg-muted/60 px-3 py-2 flex items-start gap-3">
+                <Loader2 className="h-4 w-4 mt-0.5 animate-spin text-primary" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Analyzing scraped content with Grok 4.1</p>
+                  <p className="text-xs text-muted-foreground">
+                    Weve sent the full scraped JSON snapshot to the OpenRouter Grok model. This step can take
+                    a little while as it extracts the exact rows you requested.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">{progressLabel}</span>

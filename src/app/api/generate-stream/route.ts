@@ -338,12 +338,19 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
                     if (!existsSync(filePath)) continue;
                     const text = readFileSync(filePath, 'utf8');
                     const parsed = JSON.parse(text);
+                    const fileRows = Array.isArray(parsed?.rows) ? parsed.rows : [];
+                    const rowsInChunk = fileRows.length;
+                    const requestedRowsFromFile = typeof parsed?.requestedRows === 'number' ? parsed.requestedRows : undefined;
                     const payload = JSON.stringify({
                       type: 'rows_chunk',
-                      rows: Array.isArray(parsed?.rows) ? parsed.rows : [],
+                      rows: fileRows,
                       schema: i === 0 ? (Array.isArray(parsed?.schema) ? parsed.schema : safeResult.schema) : undefined,
                       offset: typeof parsed?.offset === 'number' ? parsed.offset : i * (parsed?.rows?.length || 0),
                       totalRows: typeof parsed?.totalRows === 'number' ? parsed.totalRows : (safeResult.data?.length || 0),
+                      rowsInChunk,
+                      requestedRows: typeof safeResult.requestedRows === 'number'
+                        ? safeResult.requestedRows
+                        : (requestedRowsFromFile ?? (numRows || fileRows.length || (safeResult.data?.length || 0))),
                       timestamp: new Date().toISOString(),
                     });
                     if (isControllerActive()) controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
@@ -358,12 +365,17 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
                     if (totalRows > 0 && isControllerActive()) {
                       for (let offset = 0; offset < totalRows; offset += chunkSize) {
                         const chunkRows = rows.slice(offset, offset + chunkSize);
+                        const rowsInChunk = chunkRows.length;
                         const chunkPayload = JSON.stringify({
                           type: 'rows_chunk',
                           rows: chunkRows,
                           schema: offset === 0 ? safeResult.schema : undefined,
                           offset,
                           totalRows,
+                          rowsInChunk,
+                          requestedRows: typeof safeResult.requestedRows === 'number'
+                            ? safeResult.requestedRows
+                            : (numRows || totalRows),
                           timestamp: new Date().toISOString(),
                         });
                         controller.enqueue(encoder.encode(`data: ${chunkPayload}\n\n`));
@@ -383,12 +395,17 @@ async function createStreamResponse(body: any, requestKey: string): Promise<Resp
                   if (totalRows > 0 && isControllerActive()) {
                     for (let offset = 0; offset < totalRows; offset += chunkSize) {
                       const chunkRows = rows.slice(offset, offset + chunkSize);
+                      const rowsInChunk = chunkRows.length;
                       const chunkPayload = JSON.stringify({
                         type: 'rows_chunk',
                         rows: chunkRows,
                         schema: offset === 0 ? safeResult.schema : undefined,
                         offset,
                         totalRows,
+                        rowsInChunk,
+                        requestedRows: typeof safeResult.requestedRows === 'number'
+                          ? safeResult.requestedRows
+                          : (numRows || totalRows),
                         timestamp: new Date().toISOString(),
                       });
 

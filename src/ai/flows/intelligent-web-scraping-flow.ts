@@ -5,7 +5,6 @@ import { generateSearchUrls } from './generate-search-urls-flow';
 import { writeFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { SimpleAI } from '@/ai/simple-ai';
-import { GoogleGenAI } from '@google/genai';
 import { crawl4aiService } from '@/services/crawl4ai-service';
 
 // Input validation schema
@@ -113,6 +112,7 @@ function writeRowChunksToTemp(
   rows: Array<Record<string, any>>,
   schema: Array<{ name: string; type: string }>,
   sessionId: string | undefined,
+  requestedRows: number | undefined,
   logger?: WebScrapingLogger
 ): { dir: string; count: number; size: number } | null {
   try {
@@ -132,13 +132,14 @@ function writeRowChunksToTemp(
         offset: i,
         totalRows: rows.length,
         chunkIndex: count,
+        requestedRows: typeof requestedRows === 'number' ? requestedRows : rows.length,
       };
       const filePath = join(chunksDir, `${sid}-chunk-${count}.json`);
       writeFileSync(filePath, JSON.stringify(payload), 'utf8');
       count += 1;
     }
     logger?.log(`Chunked ${rows.length} rows into ${count} files @ ${chunksDir}`);
-    return { dir: chunksDir, count, size: 25 };
+    return { dir: chunksDir, count, size: chunkSize };
   } catch (e: any) {
     logger?.error(`Failed writing row chunks: ${e.message}`);
     return null;
@@ -321,18 +322,44 @@ export async function intelligentWebScraping(
     let usedFallback = false;
 
     if (extraction.success && Array.isArray(extraction.results) && extraction.results.length > 0) {
-      allRows = extraction.results.flatMap(result =>
-        Array.isArray(result.rows) ? result.rows : []
-      );
+      allRows = extraction.results.flatMap(result => {
+        if (!Array.isArray(result.rows)) return [];
+        return result.rows.map((row: Record<string, any>) => {
+          const out: Record<string, any> = { ...(row || {}) };
+          // Ensure each row carries a `source` column pointing to its originating URL
+          if (out.source === undefined || out.source === null || String(out.source).trim() === '') {
+            out.source = result.url || '';
+          }
+          return out;
+        });
+      });
     }
 
     // Fallback: If Crawl4AI failed or returned no rows, try direct Gemini analysis
-    if (allRows.length === 0 && tempFilePath) {
-      const errorMsg = extraction.error || 'Crawl4AI extraction returned 0 rows';
-      logger?.error(`Primary extraction failed: ${errorMsg}. Attempting fallback to direct Gemini analysis...`);
-      logger?.progress('AI Structuring', 3, 6, 'Primary failed, using fallback AI analysis');
+    if (tempFilePath && allRows.length < validatedInput.numRows) {
+      const baseMsg =
+        allRows.length === 0
+          ? (extraction.error || 'Crawl4AI extraction returned 0 rows')
+          : `Crawl4AI extraction returned only ${allRows.length}/${validatedInput.numRows} rows`;
+
+      logger?.error(
+        `Primary extraction incomplete: ${baseMsg}. Attempting fallback to direct Gemini/OpenRouter analysis of scraped snapshot...`
+      );
+      logger?.progress('AI Structuring', 3, 6, 'Primary incomplete, using fallback AI analysis to augment rows');
 
       try {
+        let keepAlive: NodeJS.Timeout | undefined;
+        if (logger) {
+          keepAlive = setInterval(() => {
+            logger.progress(
+              'Scraped Analysis',
+              4,
+              7,
+              'Analyzing scraped content JSON with OpenRouter (Grok 4.1)'
+            );
+          }, 10000);
+        }
+
         const geminiResult = await analyzeScrapedFileWithGemini(
           tempFilePath,
           validatedInput.userQuery,
@@ -341,10 +368,26 @@ export async function intelligentWebScraping(
           validatedInput.sessionId
         );
 
+        if (keepAlive) {
+          clearInterval(keepAlive);
+        }
+
         if (geminiResult.rows.length > 0) {
-          allRows = geminiResult.rows;
           usedFallback = true;
-          logger?.success(`✅ Fallback analysis successful! Generated ${allRows.length} rows.`);
+
+          if (allRows.length === 0) {
+            allRows = geminiResult.rows;
+            logger?.success(
+              `✅ Fallback analysis successful! Generated ${allRows.length} rows from scraped snapshot.`
+            );
+          } else {
+            const deficit = Math.max(0, validatedInput.numRows - allRows.length);
+            const extraRows = deficit > 0 ? geminiResult.rows.slice(0, deficit) : [];
+            allRows.push(...extraRows);
+            logger?.success(
+              `✅ Fallback analysis added ${extraRows.length} rows from scraped snapshot (now ${allRows.length}/${validatedInput.numRows}).`
+            );
+          }
         } else {
           logger?.error('Fallback analysis also returned 0 rows.');
         }
@@ -364,7 +407,25 @@ export async function intelligentWebScraping(
       };
     }
 
-    const keys: string[] = Array.from(new Set(allRows.flatMap(row => Object.keys(row || {}))));
+    // Normalize rows to always include a string `source` column before inferring schema/keys
+    allRows = allRows.map((row: Record<string, any>) => {
+      const out: Record<string, any> = { ...(row || {}) };
+      if (out.source === undefined || out.source === null) {
+        if (typeof out.url === 'string' && out.url.trim() !== '') {
+          out.source = out.url;
+        } else {
+          out.source = '';
+        }
+      }
+      return out;
+    });
+
+    let keys: string[] = Array.from(new Set(allRows.flatMap(row => Object.keys(row || {}))));
+    // Ensure `source` column is the last column if present
+    if (keys.includes('source')) {
+      keys = keys.filter(k => k !== 'source');
+      keys.push('source');
+    }
     function inferTypeLocal(values: any[]): string {
       const nonNull = values.filter((v: any) => v !== null && v !== undefined);
       if (nonNull.length === 0) return 'string';
@@ -398,6 +459,14 @@ export async function intelligentWebScraping(
     logger?.log('Step 4: Saving CSV to output folder...');
     logger?.progress('Complete', 4, 6, 'Saving CSV file and finalizing');
 
+    const chunkInfo = writeRowChunksToTemp(
+      limitedRows,
+      schema,
+      validatedInput.sessionId,
+      validatedInput.numRows,
+      logger
+    );
+
     const outputDir = join(process.cwd(), 'output');
     if (!existsSync(outputDir)) {
       mkdirSync(outputDir, { recursive: true });
@@ -430,6 +499,10 @@ export async function intelligentWebScraping(
         csvFilePath,
         sessionId: validatedInput.sessionId,
         scrapedRawFilePath: tempFilePath,
+        chunkDir: chunkInfo?.dir,
+        chunkCount: chunkInfo?.count,
+        chunkSize: chunkInfo?.size,
+        requestedRows: validatedInput.numRows,
       },
     };
 
@@ -1357,143 +1430,77 @@ async function analyzeScrapedFileWithGemini(
   logger?: WebScrapingLogger,
   sessionId?: string
 ): Promise<GeminiStructuredResult> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY (or GOOGLE_GEMINI_API_KEY) is not configured');
-  }
-
-  const modelId = process.env.GEMINI_MODEL_ID || 'gemini-2.5-pro';
-
-  logger?.log(`Using Gemini model: ${modelId}`);
-
   const raw = readFileSync(scrapedFilePath, 'utf8');
-  let combinedContent = '';
-  try {
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.combinedContent === 'string') {
-      combinedContent = parsed.combinedContent;
-    } else if (Array.isArray(parsed?.sources)) {
-      combinedContent = parsed.sources
-        .map((item: any, index: number) => `Source ${index + 1}:\nURL: ${item.url}\nTitle: ${item.title}\nContent: ${item.content}`)
-        .join('\n\n');
-    } else {
-      combinedContent = raw;
-    }
-  } catch {
-    combinedContent = raw;
-  }
 
-  // Apply a soft character cap to avoid extreme prompts, but keep this as a single-call pipeline
-  const MAX_CHARS = 250_000;
-  if (combinedContent.length > MAX_CHARS) {
-    logger?.log(`Combined scraped content is large (${combinedContent.length} chars). Truncating to ${MAX_CHARS} chars for Gemini.`);
-    combinedContent = combinedContent.slice(0, MAX_CHARS);
-  }
+  logger?.log(
+    `Using OpenRouter (SimpleAI) to analyze full scraped JSON file: ${scrapedFilePath} with target ${numRows} rows`
+  );
+
+  const modelId = process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free';
+
+  const schemaShape = {
+    schema: [
+      {
+        name: 'column_name',
+        type: 'String|Number|Date|Boolean',
+        description: 'what this column represents',
+      },
+    ],
+    data: [
+      {
+        column1: 'value1',
+        column2: 'value2',
+      },
+    ],
+    reasoning: 'text',
+  };
 
   const prompt = `You are an expert at data structuring and schema design.\n\n` +
     `User Query: "${userQuery}"\n` +
     `Target Rows: ${numRows}\n\n` +
-    `You are given a combined corpus of scraped web content across many sources. Your job is to:\n` +
-    `1) Propose a useful tabular schema (columns) that best answers the user query.\n` +
-    `2) Extract as many grounded rows as possible from the corpus, up to Target Rows.\n` +
-    `3) Never invent entities that are not clearly supported by the text.\n` +
-    `4) It is OK if many cells are empty; do not drop rows just because of missing values.\n\n` +
-    `Return your answer as strict JSON with this exact shape (no markdown, no extra keys):\n` +
-    `{"schema":[{"name":"column_name","type":"String|Number|Date|Boolean","description":"what this column represents"}],` +
-    `"data":[{"column1":"value1","column2":"value2"}],` +
-    `"reasoning":"short explanation of schema design and extraction"}\n\n` +
-    `Combined Scraped Corpus:\n` +
-    combinedContent;
+    `You are given a scraped JSON snapshot that contains metadata and a list of sources with cleaned content.\n` +
+    `Your job is to:\n` +
+    `1) Design a useful tabular schema that best answers the user query.\n` +
+    `2) Extract as many grounded rows as possible from the JSON, up to Target Rows.\n` +
+    `3) Never invent entities that are not clearly supported by the JSON content.\n` +
+    `4) It is OK if many cells are empty; do not drop rows just because of missing values.\n` +
+    `5) Prefer clinically confirmed, human-relevant entities when applicable.\n\n` +
+    `Return your answer as strict JSON that matches the required schema.\n\n` +
+    `SCRAPED_JSON_START\n` +
+    raw +
+    `\nSCRAPED_JSON_END`;
 
-  const ai = new GoogleGenAI({ apiKey });
-  const tools = [
-    {
-      googleSearch: {},
-    },
-  ];
-  const config = {
-    tools,
-  };
-
-  logger?.log(`Calling ${modelId} for single-shot dataset structuring...`);
-
-  const stream = await ai.models.generateContentStream({
+  const dataset = await SimpleAI.generateWithSchema<{
+    schema: Array<{ name: string; type?: string; description?: string }>;
+    data: Array<Record<string, any>>;
+    reasoning?: string;
+    _rawFilePath?: string;
+  }>({
+    prompt,
+    schema: schemaShape,
     model: modelId,
-    config,
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: prompt,
-          },
-        ],
-      },
-    ],
+    maxTokens: 8000,
+    temperature: 0.25,
+    sessionId,
   });
 
-  let fullText = '';
-  for await (const chunk of stream) {
-    if ((chunk as any).text) {
-      fullText += String((chunk as any).text);
-    }
-  }
-
-  // Persist raw response for debugging and traceability
-  let rawAiFilePath: string | undefined;
-  try {
-    const tempDir = join(process.cwd(), 'temp');
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
-    }
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    rawAiFilePath = join(tempDir, `ai-raw-response-${timestamp}.json`);
-    writeFileSync(rawAiFilePath, fullText, 'utf8');
-    if (sessionId) {
-      const analyzedDir = join(tempDir, 'analyzed');
-      if (!existsSync(analyzedDir)) {
-        mkdirSync(analyzedDir, { recursive: true });
-      }
-      const analyzedPath = join(analyzedDir, `${sessionId}-ai-analysis.json`);
-      writeFileSync(analyzedPath, fullText, 'utf8');
-      rawAiFilePath = analyzedPath;
-    }
-  } catch (saveErr: any) {
-    logger?.error(`Failed to save raw Gemini response: ${saveErr?.message || saveErr}`);
-  }
-
-  const text = fullText.trim();
-  let parsed: any;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    // Best-effort salvage: extract first JSON object
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) {
-      throw new Error('Gemini returned non-JSON response');
-    }
-    parsed = JSON.parse(match[0]);
-  }
-
-  const schemaRaw = Array.isArray(parsed?.schema) ? parsed.schema : [];
-  const dataRaw = Array.isArray(parsed?.data) ? parsed.data : [];
-  const reasoning = typeof parsed?.reasoning === 'string' ? parsed.reasoning : '';
-
-  const schema: Array<{ name: string; type: string }> = schemaRaw
-    .map((col: any) => ({
-      name: String(col?.name || col?.column || col?.key || ''),
-      type: String(col?.type || 'string'),
-    }))
-    .filter((col: { name: string; type: string }) => col.name);
-
-  const rows: Array<Record<string, any>> = Array.isArray(dataRaw)
-    ? dataRaw.map((row: any) => (row && typeof row === 'object' ? row : {}))
+  const schema: Array<{ name: string; type: string }> = Array.isArray(dataset.schema)
+    ? dataset.schema.map(col => ({
+        name: String(col.name),
+        type: String(col.type || 'string'),
+      }))
     : [];
+
+  const rows: Array<Record<string, any>> = Array.isArray(dataset.data)
+    ? (dataset.data as Array<Record<string, any>>)
+    : [];
+
+  const rawAiFilePath = (dataset as any)?._rawFilePath as string | undefined;
 
   return {
     rows: rows || [],
     schema: schema || [],
-    reasoning,
+    reasoning: dataset.reasoning,
     rawAiFilePath,
     modelId,
   };

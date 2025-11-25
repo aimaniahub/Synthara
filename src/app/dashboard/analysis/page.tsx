@@ -199,25 +199,50 @@ export default function DataAnalysisPage() {
 
     try {
       // Map analysis types to cleaning schema types
-      const schema = analysisResult.profile.columns.map(col => ({
+      const baseSchema = analysisResult.profile.columns.map(col => ({
         name: col.name,
         type: col.type === 'numeric' ? 'number' as const : 'string' as const,
       }));
 
+      // Ensure schema is aware of a `source` column if it exists in the data but not in the profile
+      const hasSourceInProfile = baseSchema.some(col => col.name === 'source');
+      const hasSourceInRows = selectedData.some(row => Object.prototype.hasOwnProperty.call(row, 'source'));
+      const schema = hasSourceInProfile || !hasSourceInRows
+        ? baseSchema
+        : [...baseSchema, { name: 'source', type: 'string' as const }];
+
+      const userQuery = datasetMetadata?.name || 'Smart dataset cleaning';
+
       setCleaningMessage('Cleaning dataset with AI...');
       setCleaningSteps((s) => s.map((step, i) => i === 0 ? { ...step, status: 'done' } : i === 1 ? { ...step, status: 'running' } : step));
-      const res = await fetch('/api/train/clean', {
+      const res = await fetch('/api/analysis/smart-fix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schema, rows: selectedData })
+        body: JSON.stringify({ schema, rows: selectedData, userQuery })
       });
+
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.success || !Array.isArray(payload.cleanedRows)) {
         throw new Error(payload?.error || 'Failed to clean dataset');
       }
 
       const cleanedRows: Record<string, any>[] = payload.cleanedRows;
-      const newColumnsInOrder = analysisResult.profile.columns.map(c => c.name);
+
+      // Determine column order: start with analysis profile columns, then append any new ones (e.g., `source`)
+      const profileColumns = analysisResult.profile.columns.map(c => c.name);
+      const cleanedFirst = cleanedRows[0] || {};
+      const cleanedKeys = Object.keys(cleanedFirst);
+      const extraColumns = cleanedKeys.filter(k => !profileColumns.includes(k));
+
+      // Ensure `source` is appended last if present
+      const extraWithoutSource = extraColumns.filter(k => k !== 'source');
+      const hasSource = cleanedKeys.includes('source');
+      const newColumnsInOrder = [
+        ...profileColumns,
+        ...extraWithoutSource,
+        ...(hasSource ? ['source'] : []),
+      ];
+
       const before = selectedData;
       const after = cleanedRows;
       setCleaningSteps((s) => s.map((step, i) => i === 1 ? { ...step, status: 'done' } : i === 2 ? { ...step, status: 'running' } : step));
