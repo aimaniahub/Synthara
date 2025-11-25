@@ -29,14 +29,14 @@ export function SidebarNav({ navItems, groupLabel }: SidebarNavProps) {
   }
 
   return (
-    <SidebarGroup className="px-4 sm:px-6 py-3 sm:py-4">
+    <SidebarGroup className="px-3 py-1 sm:px-3">
       {groupLabel && (
-        <SidebarGroupLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 sm:mb-4 group-data-[collapsible=icon]:hidden">
+        <SidebarGroupLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 group-data-[collapsible=icon]:hidden">
           {groupLabel}
         </SidebarGroupLabel>
       )}
       <SidebarGroupContent>
-        <SidebarMenu className="space-y-1 sm:space-y-2">
+        <SidebarMenu className="space-y-0.5">
           {navItems.map((item, index) => (
             <SidebarMenuItem key={index}>
               <Link
@@ -53,7 +53,7 @@ export function SidebarNav({ navItems, groupLabel }: SidebarNavProps) {
                   disabled={item.disabled}
                   aria-disabled={item.disabled}
                   tooltip={sidebarState === 'collapsed' ? item.title : undefined}
-                  className="h-11 sm:h-12 px-3 sm:px-4 rounded-xl hover:bg-muted transition-all duration-200 group"
+                  className="px-2 py-1.5 rounded-lg hover:bg-muted transition-all duration-200 group"
                 >
                   <item.icon
                     aria-hidden="true"

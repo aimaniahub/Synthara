@@ -11,7 +11,7 @@ import { crawl4aiService } from '@/services/crawl4ai-service';
 const IntelligentWebScrapingInputSchema = z.object({
   userQuery: z.string().min(1, 'User query is required'),
   numRows: z.number().min(1).max(300).default(300),
-  maxUrls: z.number().min(1).max(15).default(15), // LIMITED TO 4 URLs MAX
+  maxUrls: z.number().min(1).max(15).default(8), // LIMITED TO 4 URLs MAX
   useAI: z.boolean().default(true),
   sessionId: z.string().optional(),
 });
@@ -350,12 +350,14 @@ export async function intelligentWebScraping(
       try {
         let keepAlive: NodeJS.Timeout | undefined;
         if (logger) {
+          let elapsedSeconds = 0;
           keepAlive = setInterval(() => {
+            elapsedSeconds += 10;
             logger.progress(
               'Scraped Analysis',
               4,
               7,
-              'Analyzing scraped content JSON with OpenRouter (Grok 4.1)'
+              `Analyzing scraped content JSON with OpenRouter (Grok 4.1) — still running (${elapsedSeconds}s elapsed)`
             );
           }, 10000);
         }
@@ -1465,6 +1467,12 @@ async function analyzeScrapedFileWithGemini(
     `3) Never invent entities that are not clearly supported by the JSON content.\n` +
     `4) It is OK if many cells are empty; do not drop rows just because of missing values.\n` +
     `5) Prefer clinically confirmed, human-relevant entities when applicable.\n\n` +
+    `TARGET ROWS & RECALL RULES (VERY IMPORTANT):\n` +
+    `- Always treat Target Rows as the main upper limit on how many rows to output.\n` +
+    `- Extract as many real, grounded rows as possible, up to Target Rows.\n` +
+    `- When the JSON clearly contains many entities (lists, tables, catalogs), avoid summarising them into a small sample. Prefer one row per entity.\n` +
+    `- It is fine for many fields in a row to be empty or null; do NOT discard a row just because some columns are missing.\n` +
+    `- Never hallucinate or invent entities that are not clearly supported by the JSON content.\n\n` +
     `Return your answer as strict JSON that matches the required schema.\n\n` +
     `SCRAPED_JSON_START\n` +
     raw +
@@ -1479,7 +1487,7 @@ async function analyzeScrapedFileWithGemini(
     prompt,
     schema: schemaShape,
     model: modelId,
-    maxTokens: 8000,
+    maxTokens: 12000,
     temperature: 0.25,
     sessionId,
   });
@@ -1491,9 +1499,11 @@ async function analyzeScrapedFileWithGemini(
       }))
     : [];
 
-  const rows: Array<Record<string, any>> = Array.isArray(dataset.data)
+  const rawRows: Array<Record<string, any>> = Array.isArray(dataset.data)
     ? (dataset.data as Array<Record<string, any>>)
     : [];
+
+  const rows: Array<Record<string, any>> = rawRows.slice(0, numRows);
 
   const rawAiFilePath = (dataset as any)?._rawFilePath as string | undefined;
 

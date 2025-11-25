@@ -430,11 +430,39 @@ Make sure the data is clean, consistent, and directly relevant to the user query
    * Generate free-form content and return raw text
    */
   async generateContent(prompt: string): Promise<{ text: string }> {
-    const response = await this.callGeminiAPI(prompt);
-    if (!response.success) {
-      throw new Error(response.error || 'Gemini API call failed');
+    const geminiResponse = await this.callGeminiAPI(prompt);
+
+    if (geminiResponse.success) {
+      return { text: geminiResponse.text };
     }
-    return { text: response.text };
+
+    const baseError = geminiResponse.error || 'Gemini API call failed';
+
+    const canFallbackToOpenRouter = this.shouldUseOpenRouter();
+    const looksLikeConfigOrQuotaIssue = /not configured|rate limited|quota|auth\/quota/i.test(baseError);
+
+    if (canFallbackToOpenRouter && looksLikeConfigOrQuotaIssue) {
+      const messages = [
+        {
+          role: 'system' as const,
+          content:
+            'You are a precise JSON-only assistant that mirrors Gemini cleaning logic. When the user provides a prompt, you MUST respond with ONLY valid JSON (no markdown, no prose).',
+        },
+        {
+          role: 'user' as const,
+          content: prompt,
+        },
+      ];
+
+      const openRouterResponse = await this.callOpenRouterAPI(messages);
+      if (openRouterResponse.success) {
+        return { text: openRouterResponse.text };
+      }
+
+      throw new Error(openRouterResponse.error || baseError);
+    }
+
+    throw new Error(baseError);
   }
 
   /**

@@ -228,8 +228,13 @@ Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] 
         console.log(`[GenerateSearchUrls] Found ${simpleSearch.results.length} results with simple queries`);
 
         // Rank and filter simple query results
-        const rankedUrls = await rankUrlsByRelevance(
+        let rankedUrls = await rankUrlsByRelevance(
           simpleSearch.results,
+          validatedInput.userQuery,
+          validatedInput.maxUrls
+        );
+        rankedUrls = injectSectorCuratedUrls(
+          rankedUrls,
           validatedInput.userQuery,
           validatedInput.maxUrls
         );
@@ -256,8 +261,13 @@ Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] 
 
     // Step 3: Rank and filter URLs by relevance
     console.log('[GenerateSearchUrls] Step 3: Ranking URLs by relevance...');
-    const rankedUrls = await rankUrlsByRelevance(
+    let rankedUrls = await rankUrlsByRelevance(
       searchResponse.results,
+      validatedInput.userQuery,
+      overfetchLimit
+    );
+    rankedUrls = injectSectorCuratedUrls(
+      rankedUrls,
       validatedInput.userQuery,
       overfetchLimit
     );
@@ -347,6 +357,235 @@ async function rankUrlsByRelevance(
       relevanceScore: 0.5, // Default score
       source: result.source,
     }));
+  }
+}
+
+function getSectorCuratedUrls(userQuery: string): Array<{
+  url: string;
+  title: string;
+  snippet: string;
+  source: string;
+}> {
+  const queryLower = userQuery.toLowerCase();
+  const urls: Array<{
+    url: string;
+    title: string;
+    snippet: string;
+    source: string;
+  }> = [];
+
+  if (/(\\b|\\s)(nse|stock|stocks|equity|fno|f&o|breakout|rsi|volume|sector|nifty|banknifty|share)(\\b|\\s)/i.test(queryLower)) {
+    urls.push(
+      {
+        url: 'https://www.nseindia.com/market-data/live-equity-market',
+        title: 'NSE Live Equity Market',
+        snippet: 'Official NSE India live equity market data and lists.',
+        source: 'nseindia.com',
+      },
+      {
+        url: 'https://www.bseindia.com/markets.html',
+        title: 'BSE India Markets',
+        snippet: 'Official Bombay Stock Exchange market data and information.',
+        source: 'bseindia.com',
+      },
+      {
+        url: 'https://www.moneycontrol.com/stocks/marketinfo/marketcap/bse/index.html',
+        title: 'Moneycontrol Market Cap Rankings',
+        snippet: 'Free market-cap based stock lists and sector data.',
+        source: 'moneycontrol.com',
+      },
+      {
+        url: 'https://www.screener.in/',
+        title: 'Screener.in – Stock Screener',
+        snippet: 'Open stock screener with fundamentals and sector classification.',
+        source: 'screener.in',
+      },
+      {
+        url: 'https://www.tickertape.in/stocks',
+        title: 'Tickertape India Stocks',
+        snippet: 'Indian stocks and sector/industry level data.',
+        source: 'tickertape.in',
+      },
+    );
+  }
+
+  if (queryLower.includes('charging') || queryLower.includes('ev') || queryLower.includes('electric vehicle')) {
+    urls.push(
+      {
+        url: 'https://openchargemap.org/site',
+        title: 'Open Charge Map',
+        snippet: 'Global open data registry of electric vehicle charging locations.',
+        source: 'openchargemap.org',
+      },
+      {
+        url: 'https://www.plugshare.com/',
+        title: 'PlugShare EV Charging Map',
+        snippet: 'Crowdsourced map of EV charging stations worldwide.',
+        source: 'plugshare.com',
+      },
+      {
+        url: 'https://www.evgo.com/',
+        title: 'EVgo Charging Network',
+        snippet: 'Public fast charging network information and locations.',
+        source: 'evgo.com',
+      },
+      {
+        url: 'https://data.gov.in/',
+        title: 'data.gov.in – Open Government Data (EV Datasets)',
+        snippet: 'Indian government open data portal, including EV/transport datasets.',
+        source: 'data.gov.in',
+      },
+      {
+        url: 'https://www.iea.org/data-and-statistics',
+        title: 'IEA Energy Data & Statistics',
+        snippet: 'International Energy Agency datasets including EV and charging.',
+        source: 'iea.org',
+      },
+    );
+  }
+
+  if (queryLower.includes('restaurant') || queryLower.includes('food') || queryLower.includes('dining')) {
+    urls.push(
+      {
+        url: 'https://www.zomato.com/',
+        title: 'Zomato Restaurant Listings',
+        snippet: 'Restaurant discovery and ratings platform.',
+        source: 'zomato.com',
+      },
+      {
+        url: 'https://www.swiggy.com/restaurants',
+        title: 'Swiggy Restaurant Directory',
+        snippet: 'Restaurant listings by location with ratings.',
+        source: 'swiggy.com',
+      },
+      {
+        url: 'https://www.yelp.com/search?find_desc=restaurants',
+        title: 'Yelp – Restaurants',
+        snippet: 'Crowdsourced reviews and ratings for restaurants.',
+        source: 'yelp.com',
+      },
+      {
+        url: 'https://www.tripadvisor.com/Restaurants',
+        title: 'Tripadvisor – Restaurants',
+        snippet: 'Global restaurant reviews and rankings.',
+        source: 'tripadvisor.com',
+      },
+      {
+        url: 'https://www.opentable.com/',
+        title: 'OpenTable',
+        snippet: 'Online restaurant reservations and discovery.',
+        source: 'opentable.com',
+      },
+    );
+  }
+
+  if (queryLower.includes('hotel') || queryLower.includes('accommodation') || queryLower.includes('stay')) {
+    urls.push(
+      {
+        url: 'https://www.booking.com/',
+        title: 'Booking.com – Hotels',
+        snippet: 'Global hotel and stay listings with reviews.',
+        source: 'booking.com',
+      },
+      {
+        url: 'https://www.agoda.com/',
+        title: 'Agoda – Hotels & Stays',
+        snippet: 'Hotel deals and accommodation data.',
+        source: 'agoda.com',
+      },
+      {
+        url: 'https://www.tripadvisor.com/Hotels',
+        title: 'Tripadvisor – Hotels',
+        snippet: 'Hotel reviews, rankings and traveler photos.',
+        source: 'tripadvisor.com',
+      },
+      {
+        url: 'https://www.hotels.com/',
+        title: 'Hotels.com',
+        snippet: 'Hotel reservations and deals with ratings.',
+        source: 'hotels.com',
+      },
+      {
+        url: 'https://www.makemytrip.com/hotels',
+        title: 'MakeMyTrip – Hotels in India',
+        snippet: 'Indian hotel listings and offers.',
+        source: 'makemytrip.com',
+      },
+    );
+  }
+
+  return urls;
+}
+
+function injectSectorCuratedUrls(
+  rankedUrls: Array<{
+    url: string;
+    title: string;
+    snippet: string;
+    relevanceScore: number;
+    source: string;
+  }>,
+  userQuery: string,
+  maxUrls: number
+): Array<{
+  url: string;
+  title: string;
+  snippet: string;
+  relevanceScore: number;
+  source: string;
+}> {
+  try {
+    const curated = getSectorCuratedUrls(userQuery);
+    if (!curated.length) {
+      return rankedUrls.slice(0, maxUrls);
+    }
+
+    const existing = new Set(rankedUrls.map(item => item.url));
+    const toInject: Array<{
+      url: string;
+      title: string;
+      snippet: string;
+      relevanceScore: number;
+      source: string;
+    }> = [];
+
+    for (const entry of curated) {
+      if (!existing.has(entry.url)) {
+        toInject.push({
+          url: entry.url,
+          title: entry.title,
+          snippet: entry.snippet,
+          relevanceScore: 1,
+          source: entry.source,
+        });
+        break;
+      }
+    }
+
+    if (!toInject.length) {
+      return rankedUrls.slice(0, maxUrls);
+    }
+
+    const merged = [...toInject, ...rankedUrls];
+    const seen = new Set<string>();
+    const deduped: Array<{
+      url: string;
+      title: string;
+      snippet: string;
+      relevanceScore: number;
+      source: string;
+    }> = [];
+
+    for (const item of merged) {
+      if (seen.has(item.url)) continue;
+      seen.add(item.url);
+      deduped.push(item);
+      if (deduped.length >= maxUrls) break;
+    }
+
+    return deduped;
+  } catch {
+    return rankedUrls.slice(0, maxUrls);
   }
 }
 

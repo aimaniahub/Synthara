@@ -7,7 +7,6 @@ import type { ChartSpec } from '@/types/dataviz';
 const ResponsiveLine = dynamic<any>(() => import('@nivo/line').then(m => m.ResponsiveLine), { ssr: false });
 const ResponsiveBar = dynamic<any>(() => import('@nivo/bar').then(m => m.ResponsiveBar), { ssr: false });
 const ResponsiveScatterPlot = dynamic<any>(() => import('@nivo/scatterplot').then(m => m.ResponsiveScatterPlot), { ssr: false });
-const ResponsiveGeoMap = dynamic<any>(() => import('@nivo/geo').then(m => (m as any).ResponsiveGeoMap), { ssr: false });
 
 type Props = {
   spec: ChartSpec;
@@ -38,96 +37,6 @@ const commonTheme = {
   },
 } as const;
 
-type MapPointsProps = {
-  spec: ChartSpec;
-  rows: Record<string, any>[];
-};
-
-function MapPointsChart({ spec, rows }: MapPointsProps) {
-  const [features, setFeatures] = useState<any[]>([]);
-  const [points, setPoints] = useState<Array<{ id: string; coordinates: [number, number] }>>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      try {
-        const topoModule = await import('world-atlas/countries-110m.json');
-        const topojson = await import('topojson-client');
-        const world: any = (topoModule as any).default || (topoModule as any);
-        const fc = (topojson as any).feature(world, world.objects.countries);
-        if (active) setFeatures(fc.features || []);
-
-        const g = spec.geo;
-        if (!g) return;
-        if (g.mode === 'latlon' && g.latField && g.lonField) {
-          const pts: Array<{ id: string; coordinates: [number, number] }> = [];
-          for (let i = 0; i < rows.length; i++) {
-            const r = rows[i];
-            const lat = Number(r[g.latField]);
-            const lon = Number(r[g.lonField]);
-            if (Number.isFinite(lat) && Number.isFinite(lon)) {
-              pts.push({ id: `${i}`, coordinates: [lon, lat] });
-            }
-          }
-          if (active) setPoints(pts.slice(0, 300));
-        } else if (g.mode === 'name' && g.locationField) {
-          const res = await fetch('/api/dataviz/geocode', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rows, locationField: g.locationField, countryField: g.countryField }),
-          });
-          const payload = await res.json().catch(() => null);
-          if (res.ok && payload?.points && active) {
-            const pts = (payload.points as Array<{ lat: number; lon: number }>).map((p, i) => ({
-              id: `${i}`,
-              coordinates: [Number(p.lon), Number(p.lat)] as [number, number],
-            }));
-            setPoints(pts);
-          }
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      active = false;
-    };
-  }, [rows, spec.geo]);
-
-  if (loading) return <div className="h-72 w-full" />;
-  if (!features.length) return null;
-
-  return (
-    <div className="h-72 w-full">
-      <ResponsiveGeoMap
-        features={features}
-        margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
-        projectionScale={140}
-        projectionTranslation={[0.5, 0.6]}
-        theme={commonTheme}
-        colors="#0b1220"
-        borderColor="#1f2937"
-        layers={['graticule', 'features', (ctx: any) => {
-          const { projection, context } = ctx;
-          if (!context || !projection) return; // in some renderers context may be undefined
-          context.save();
-          context.fillStyle = '#22c55e';
-          for (const m of points) {
-            const xy = projection(m.coordinates);
-            if (!xy) continue;
-            const [x, y] = xy;
-            context.beginPath();
-            context.arc(x, y, 3, 0, 2 * Math.PI);
-            context.fill();
-          }
-          context.restore();
-        }]}
-      />
-    </div>
-  );
-}
 
 function isFiniteNumber(v: any) {
   if (typeof v === 'number') return Number.isFinite(v);
@@ -327,10 +236,6 @@ export function NivoChartRenderer({ spec, rows }: Props) {
         />
       </div>
     );
-  }
-
-  if (spec.type === 'map_points') {
-    return <MapPointsChart spec={spec} rows={rows} />;
   }
 
   return null;

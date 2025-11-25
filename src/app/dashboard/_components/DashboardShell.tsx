@@ -51,10 +51,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         side="left"
         collapsible="offcanvas"
         className="md:hidden flex flex-col modern-card border-r border-border/80"
-        style={{
-          // @ts-ignore
-          "--sidebar-width": "22rem",
-        }}
       >
         <SidebarHeader className="p-4 h-16 flex items-center border-b border-slate-200/50 dark:border-slate-700/50">
           <div className="w-full text-center">
@@ -77,11 +73,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         side="left"
         collapsible="icon"
         className="hidden md:flex flex-col modern-card border-r border-border/80"
-        style={{
-          // @ts-ignore
-          "--sidebar-width": "16rem",
-          "--sidebar-width-icon": "4rem",
-        }}
       >
         <SidebarHeader className="p-4 h-16 flex items-center border-b border-slate-200/50 dark:border-slate-700/50">
           <div className="w-full text-center group-data-[collapsible=icon]:hidden">

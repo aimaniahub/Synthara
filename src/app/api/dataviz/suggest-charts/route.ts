@@ -45,6 +45,20 @@ function pickCharts(columns: ColumnInfo[]): ChartSpec[] {
     });
   }
 
+  // Fallback: if we still have capacity and at least one categorical column,
+  // add a simple row-count bar chart that works even without numeric fields.
+  if (cats.length && charts.length < 3) {
+    charts.push({
+      id: 'bar_count_1',
+      title: `Records per ${cats[0].name}`,
+      description: `Number of records for each ${cats[0].name}`,
+      type: 'bar',
+      xField: cats[0].name,
+      yField: '__count__',
+      aggregation: 'count',
+    });
+  }
+
   return charts.slice(0, 3);
 }
 
@@ -66,17 +80,10 @@ export async function POST(req: NextRequest) {
               id: 'chart_1',
               title: 'Title',
               description: 'optional',
-              type: 'line|bar|scatter|map_points',
-              xField: 'columnX (optional for map_points)',
-              yField: 'columnY (optional for map_points)',
+              type: 'line|bar|scatter',
+              xField: 'columnX',
+              yField: 'columnY',
               aggregation: 'sum|mean|count',
-              geo: {
-                mode: 'name|latlon',
-                locationField: 'columnWithCityOrAddress',
-                countryField: 'optionalCountryField',
-                latField: 'latCol',
-                lonField: 'lonCol'
-              }
             }
           ]
         };
@@ -87,16 +94,15 @@ export async function POST(req: NextRequest) {
 
         const available = Array.isArray(body.availableTypes) && body.availableTypes.length
           ? body.availableTypes.join(', ')
-          : 'bar, line, scatter, map_points';
+          : 'bar, line, scatter';
 
         const prompt = `You are a senior data visualization assistant.
 Given ONLY the dataset schema below, propose 1-3 useful charts that the user can render with Nivo. You may choose from: ${available}.
 
 Rules for allowed charts:
 - line: xField must be a date column; yField must be number; aggregation: sum (default) or mean.
-- bar: xField must be a categorical/boolean column; yField must be number; aggregation: mean (default) or sum.
+- bar: xField must be a categorical/boolean column; yField must be number or a synthesized count metric; aggregation: mean (default), sum, or count.
 - scatter: xField number; yField number; no aggregation preferred.
-- map_points: Use only when dataset contains either (a) textual location fields (e.g., city/address and optional country) or (b) latitude+longitude columns. For textual locations, set geo.mode="name" with locationField and optional countryField. For lat/lon, set geo.mode="latlon" with latField and lonField.
 
 Constraints:
 - Use only columns that exist in the schema.
@@ -134,68 +140,24 @@ Columns:\n${columnHints}`;
                 rawY = '__count__';
               }
 
-              const geo: ChartSpec['geo'] | undefined = (c as any).geo
-                ? {
-                    mode: (c as any).geo?.mode === 'latlon' ? 'latlon' : 'name',
-                    locationField: (c as any).geo?.locationField ? String((c as any).geo.locationField) : undefined,
-                    countryField: (c as any).geo?.countryField ? String((c as any).geo.countryField) : undefined,
-                    latField: (c as any).geo?.latField ? String((c as any).geo.latField) : undefined,
-                    lonField: (c as any).geo?.lonField ? String((c as any).geo.lonField) : undefined,
-                  }
-                : undefined;
-
               return {
                 id: String(c.id || `chart_${idx + 1}`),
                 title: String(c.title || `Chart ${idx + 1}`),
                 description: c.description ? String(c.description) : undefined,
-                type: type === 'line' || type === 'bar' || type === 'scatter' || type === 'map_points' ? type : 'bar',
+                type: type === 'line' || type === 'bar' || type === 'scatter' ? type : 'bar',
                 xField: rawX,
                 yField: rawY,
                 aggregation,
-                geo,
               } as ChartSpec;
             })
-            .filter(c => {
-              if (c.type === 'map_points') {
-                const g = c.geo;
-                if (!g) return false;
-                if (g.mode === 'name') return !!g.locationField;
-                if (g.mode === 'latlon') return !!g.latField && !!g.lonField;
-                return false;
-              }
-              return !!c.xField && !!c.yField;
-            });
+            .filter(c => !!c.xField && !!c.yField);
         }
       } catch (e) {
         // AI failed; will fallback below
       }
     }
 
-    let charts = (aiCharts && aiCharts.length) ? aiCharts.slice(0, 3) : pickCharts(body.columns);
-
-    // Heuristic: if location-like fields exist and map is allowed, add a map_points chart
-    const allowed = new Set((body.availableTypes && body.availableTypes.length ? body.availableTypes : ['bar','line','scatter','map_points']));
-    const strings = body.columns.filter(c => c.type === 'string').map(c => c.name.toLowerCase());
-    const hasLat = body.columns.some(c => c.name.toLowerCase().includes('lat'));
-    const hasLon = body.columns.some(c => c.name.toLowerCase().includes('lon')) || body.columns.some(c => c.name.toLowerCase().includes('lng'));
-    const findCol = (keys: string[]) => strings.find(n => keys.some(k => n.includes(k)));
-    if (allowed.has('map_points')) {
-      if (hasLat && hasLon) {
-        const latField = (body.columns.find(c => c.name.toLowerCase().includes('lat'))?.name)!;
-        const lonField = (body.columns.find(c => c.name.toLowerCase().includes('lon') || c.name.toLowerCase().includes('lng'))?.name)!;
-        const mapChart: ChartSpec = { id: 'map_1', title: 'Locations', type: 'map_points', geo: { mode: 'latlon', latField, lonField } };
-        charts = [mapChart, ...charts].slice(0, 3);
-      } else {
-        const locCol = findCol(['city','location','address','area','place','town']);
-        if (locCol) {
-          const countryCol = findCol(['country']);
-          const locationField = body.columns.find(c => c.name.toLowerCase() === locCol)!.name;
-          const countryField = countryCol ? body.columns.find(c => c.name.toLowerCase() === countryCol)!.name : undefined;
-          const mapChart: ChartSpec = { id: 'map_1', title: 'Locations', type: 'map_points', geo: { mode: 'name', locationField, countryField } };
-          charts = [mapChart, ...charts].slice(0, 3);
-        }
-      }
-    }
+    const charts = (aiCharts && aiCharts.length) ? aiCharts.slice(0, 3) : pickCharts(body.columns);
 
     const res: SuggestChartsResponse = { charts, meta: { aiUsed: !!aiCharts, model: aiModel } };
     return NextResponse.json(res);

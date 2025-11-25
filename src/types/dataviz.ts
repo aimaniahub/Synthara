@@ -7,7 +7,7 @@ export type ChartSpec = {
   id: string;
   title: string;
   description?: string;
-  type: 'line' | 'bar' | 'scatter' | 'map_points';
+  type: 'line' | 'bar' | 'scatter';
   xField?: string; // optional for maps
   yField?: string; // optional for maps
   aggregation?: 'sum' | 'mean' | 'count';
@@ -24,7 +24,7 @@ export type SuggestChartsRequest = {
   datasetName?: string;
   columns: ColumnInfo[];
   userGoal?: string;
-  availableTypes?: Array<'bar' | 'line' | 'scatter' | 'map_points'>;
+  availableTypes?: Array<'bar' | 'line' | 'scatter'>;
 };
 
 export type SuggestChartsResponse = {

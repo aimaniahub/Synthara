@@ -68,13 +68,16 @@ export default function DataVisualizationPage() {
       const res = await fetch('/api/dataviz/suggest-charts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ datasetName, columns, userGoal: 'explore correlations and key metrics', availableTypes: ['bar','line','scatter','map_points'] }),
+        body: JSON.stringify({ datasetName, columns, userGoal: 'explore correlations and key metrics', availableTypes: ['bar', 'line', 'scatter'] }),
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.charts) {
         throw new Error(payload?.error || 'Failed to get chart suggestions');
       }
-      setSpecs(payload.charts as ChartSpec[]);
+      const charts = (payload.charts as ChartSpec[]).filter(
+        (c) => c && (c.type === 'bar' || c.type === 'line' || c.type === 'scatter')
+      );
+      setSpecs(charts);
       setAiMeta(payload.meta);
     } catch (e: any) {
       setError(e?.message || 'Failed to suggest charts');
@@ -93,7 +96,10 @@ export default function DataVisualizationPage() {
         if (rawSpecs && rawRows) {
           const parsedSpecs = JSON.parse(rawSpecs) as ChartSpec[];
           const parsedRows = JSON.parse(rawRows) as Record<string, any>[];
-          setSpecs(Array.isArray(parsedSpecs) ? parsedSpecs : []);
+          const filteredSpecs = Array.isArray(parsedSpecs)
+            ? parsedSpecs.filter((c) => c && (c.type === 'bar' || c.type === 'line' || c.type === 'scatter'))
+            : [];
+          setSpecs(filteredSpecs);
           setRows(Array.isArray(parsedRows) ? parsedRows : []);
           if (rawName) setDatasetName(rawName);
         }

@@ -20,7 +20,7 @@ export interface SerpAPISearchResponse {
 
 export class SerpAPIService {
   private apiKey: string;
-  private baseUrl: string = 'https://serpapi.com/search';
+  private baseUrl: string = 'https://serpapi.com/search.json';
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.SERPAPI_KEY || process.env.SERPAPI_API_KEY || '';
