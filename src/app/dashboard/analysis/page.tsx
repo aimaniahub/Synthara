@@ -408,6 +408,29 @@ export default function DataAnalysisPage() {
     return () => clearInterval(intervalId);
   }, [isCleaning, cleanedCandidate.length]);
 
+  function handleApplyCleanedToView() {
+    if (!cleanedCandidate.length) return;
+    setSelectedData(cleanedCandidate);
+    (async () => {
+      try {
+        const MAX_ANALYSIS_ROWS = 1000;
+        const analysisRows = cleanedCandidate.slice(0, Math.min(MAX_ANALYSIS_ROWS, cleanedCandidate.length));
+        const response = await fetch('/api/analyze-dataset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: analysisRows }),
+        });
+        if (response.ok) {
+          const result = await response.json().catch(() => null);
+          if (result?.success && result.analysis) {
+            setAnalysisResult(result.analysis);
+          }
+        }
+      } catch {}
+      setCleanPreviewOpen(false);
+    })();
+  }
+
   async function handleAppendAndSave() {
     if (!datasetMetadata?.id || !cleanedCandidate.length || !columnsInOrder.length) return;
     setIsAppending(true);
@@ -454,35 +477,138 @@ export default function DataAnalysisPage() {
     }
   }
 
-  function handleApplyCleanedToView() {
-    if (!cleanedCandidate.length) return;
-    setSelectedData(cleanedCandidate);
-    (async () => {
-      try {
-        const MAX_ANALYSIS_ROWS = 1000;
-        const analysisRows = cleanedCandidate.slice(0, Math.min(MAX_ANALYSIS_ROWS, cleanedCandidate.length));
-        const response = await fetch('/api/analyze-dataset', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: analysisRows }),
-        });
-        if (response.ok) {
-          const result = await response.json().catch(() => null);
-          if (result?.success && result.analysis) {
-            setAnalysisResult(result.analysis);
-          }
-        }
-      } catch {}
-      setCleanPreviewOpen(false);
-    })();
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-1">
-        {/* ... (rest of the code remains the same) */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground flex items-center gap-2">
+            <Brain className="h-6 w-6" />
+            Data Analysis
+          </h1>
+          <div className="flex items-center gap-2">
+            {analysisResult && datasetMetadata && (
+              <ExportButton
+                datasetName={datasetMetadata.name}
+                profile={analysisResult.profile}
+                insights={analysisResult.aiInsights ?? { columnInsights: [], deepInsights: null }}
+                rawData={selectedData}
+                className="hidden sm:inline-flex"
+              />
+            )}
+            <Button variant="outline" size="sm" onClick={handleResetPage}>
+              Reset
+            </Button>
+          </div>
+        </div>
+        <div className="text-sm text-muted-foreground flex items-center gap-2">
+          <Sparkles className="h-4 w-4" />
+          <span>Upload or choose a dataset, then run automated profiling and AI insights.</span>
+        </div>
       </div>
+
+      <DatasetSelector
+        onDatasetSelect={handleDatasetSelect}
+        onAnalysisStart={handleAnalysisStart}
+      />
+
+      <div ref={analysisSectionRef} className="space-y-4">
+        {analysisError && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{analysisError}</AlertDescription>
+          </Alert>
+        )}
+
+        {isAnalyzing && analysisProgress && (
+          <AnalysisProgressComponent progress={analysisProgress} />
+        )}
+
+        {hasData && !isAnalyzing && !hasAnalysis && (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Click "Analyze Dataset" in the selector above to start profiling.
+            </CardContent>
+          </Card>
+        )}
+
+        {hasAnalysis && analysisResult && (
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as 'overview' | 'profiling' | 'insights')}
+            className="space-y-4"
+          >
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="profiling">Profiling</TabsTrigger>
+              <TabsTrigger value="insights">AI Insights</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Database className="h-5 w-5" />
+                    Dataset Overview
+                  </CardTitle>
+                  <CardDescription>
+                    Automatic summary of structure and quality for {datasetMetadata?.name || 'your dataset'}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <StatisticalSummary profile={analysisResult.profile} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="profiling">
+              <Card>
+                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      Data Profiling
+                    </CardTitle>
+                    <CardDescription>
+                      Detailed column statistics and quality checks. Use Smart Fix to auto-clean common issues.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCleanFromProfiling}
+                    disabled={isCleaning || !hasAnalysis || !hasData}
+                  >
+                    {isCleaning ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Cleaning…
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        Smart Fix (AI Clean)
+                      </span>
+                    )}
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <StatisticalSummary profile={analysisResult.profile} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="insights">
+              <AIInsights
+                data={selectedData}
+                profile={analysisResult.profile}
+                aiInsights={analysisResult.aiInsights}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
+      </div>
+
       <Dialog open={cleanPreviewOpen} onOpenChange={setCleanPreviewOpen}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
@@ -492,16 +618,16 @@ export default function DataAnalysisPage() {
           <div className="space-y-4">
             {isCleaning && cleanedCandidate.length === 0 ? (
               <div className="space-y-4">
-                {/* ... (rest of the code remains the same) */}
+                {/* cleaning skeleton content */}
               </div>
             ) : diffSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {/* ... (rest of the code remains the same) */}
+                {/* diff summary content */}
               </div>
             )}
             {(!isCleaning && oldQuality !== null) && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {/* ... (rest of the code remains the same) */}
+                {/* quality comparison content */}
               </div>
             )}
             {!isCleaning && cleaningSummaryText && (
@@ -536,7 +662,6 @@ export default function DataAnalysisPage() {
             )}
             {appendSuccess && (
               <Alert>
-                {/* ... (rest of the code remains the same) */}
                 <AlertDescription>Cleaned data appended and view updated.</AlertDescription>
               </Alert>
             )}

@@ -236,7 +236,7 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
               </SelectTrigger>
               <SelectContent>
                 {savedDatasets.length === 0 ? (
-                  <SelectItem value="" disabled>
+                  <SelectItem value="__no_saved__" disabled>
                     No saved datasets found
                   </SelectItem>
                 ) : (

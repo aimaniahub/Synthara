@@ -138,7 +138,7 @@ export default function DatasetPicker({ onChange }: Props) {
               </SelectTrigger>
               <SelectContent>
                 {saved.length === 0 ? (
-                  <SelectItem value="" disabled>No saved datasets</SelectItem>
+                  <SelectItem value="__no_saved__" disabled>No saved datasets</SelectItem>
                 ) : (
                   saved.map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.dataset_name} · {s.num_rows} rows</SelectItem>
