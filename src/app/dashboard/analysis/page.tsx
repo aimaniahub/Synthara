@@ -236,10 +236,13 @@ export default function DataAnalysisPage() {
       const profileColumns = analysisResult.profile.columns.map(c => c.name);
       const cleanedFirst = cleanedRows[0] || {};
       const cleanedKeys = Object.keys(cleanedFirst);
+      // Only keep profile columns that are still present after cleaning, so
+      // dropped columns (e.g. very sparse ones) do not appear in the preview.
+      const profileExisting = profileColumns.filter((name) => cleanedKeys.includes(name));
       const extraColumns = cleanedKeys.filter(k => !profileColumns.includes(k));
 
       // Ensure `source` is appended last if present
-      const profileWithoutSource = profileColumns.filter(c => c !== 'source');
+      const profileWithoutSource = profileExisting.filter(c => c !== 'source');
       const extraWithoutSource = extraColumns.filter(k => k !== 'source');
       const hasSource = cleanedKeys.includes('source');
       const newColumnsInOrder = [
@@ -610,48 +613,48 @@ export default function DataAnalysisPage() {
       </div>
 
       <Dialog open={cleanPreviewOpen} onOpenChange={setCleanPreviewOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl p-4 sm:p-5">
           <DialogHeader>
             <DialogTitle>Cleaned Dataset Preview</DialogTitle>
             <DialogDescription>Review fixes and choose how to apply them</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             {isCleaning && cleanedCandidate.length === 0 ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>{cleaningMessage || 'Running Smart Fix on your dataset…'}</span>
                 </div>
                 {/* cleaning skeleton content */}
               </div>
             ) : diffSummary && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="text-sm">
-                  <div className="font-medium">Rows</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm">
+                <div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Rows</div>
                   <div className="text-muted-foreground">
                     {diffSummary.afterRows} / {diffSummary.beforeRows}
                   </div>
                 </div>
-                <div className="text-sm">
-                  <div className="font-medium">Dropped rows</div>
+                <div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Dropped rows</div>
                   <div className="text-muted-foreground">{diffSummary.dropped}</div>
                 </div>
-                <div className="text-sm">
-                  <div className="font-medium">Changed cells</div>
+                <div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Changed cells</div>
                   <div className="text-muted-foreground">{diffSummary.changedCells}</div>
                 </div>
                 {/* diff summary content */}
               </div>
             )}
             {(!isCleaning && oldQuality !== null) && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="text-sm">
-                  <div className="font-medium">Quality before</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3 text-xs sm:text-sm">
+                <div>
+                  <div className="text-[11px] font-medium text-muted-foreground">Quality before</div>
                   <div className="text-muted-foreground">{oldQuality?.toFixed(1)}%</div>
                 </div>
                 {newQuality !== null && (
-                  <div className="text-sm">
-                    <div className="font-medium">Quality after</div>
+                  <div>
+                    <div className="text-[11px] font-medium text-muted-foreground">Quality after</div>
                     <div className="text-muted-foreground">{newQuality.toFixed(1)}%</div>
                   </div>
                 )}
@@ -660,23 +663,23 @@ export default function DataAnalysisPage() {
             )}
 
             {!isCleaning && cleaningSummaryText && (
-              <div className="border rounded-lg p-3 space-y-2 bg-background/40">
-                <div className="flex items-center gap-2 text-sm font-medium">
+              <div className="border rounded-lg p-2.5 space-y-1.5 bg-background/40">
+                <div className="flex items-center gap-2 text-xs font-medium">
                   <FileText className="h-4 w-4" />
                   <span>Cleaning summary</span>
                 </div>
-                <p className="text-xs text-muted-foreground whitespace-pre-line">
+                <p className="text-[11px] text-muted-foreground whitespace-pre-line">
                   {cleaningSummaryText}
                 </p>
               </div>
             )}
             {!isCleaning && columnCleaningSummaries.length > 0 && (
-              <div className="border rounded-lg p-3 space-y-2 bg-background/40">
-                <div className="text-xs font-medium text-muted-foreground">Top columns fixed</div>
-                <div className="space-y-1 max-h-40 overflow-auto">
+              <div className="border rounded-lg p-2.5 space-y-1.5 bg-background/40">
+                <div className="text-[11px] font-medium text-muted-foreground">Top columns fixed</div>
+                <div className="space-y-1 max-h-36 overflow-auto">
                   {columnCleaningSummaries.map((col) => (
-                    <div key={col.name} className="flex flex-col text-xs">
-                      <span className="font-semibold text-foreground">{col.name}</span>
+                    <div key={col.name} className="flex flex-col text-[11px]">
+                      <span className="font-semibold text-foreground truncate">{col.name}</span>
                       <span className="text-muted-foreground">{col.summary}</span>
                     </div>
                   ))}
@@ -702,13 +705,13 @@ export default function DataAnalysisPage() {
             )}
             {!isCleaning && cleanedCandidate.length > 0 && (
               <div className="border rounded-lg overflow-hidden">
-                <div className="bg-muted px-4 py-2 text-sm font-medium">Preview (first 10 rows)</div>
-                <div className="max-h-80 overflow-auto">
-                  <table className="w-full text-sm">
+                <div className="bg-muted px-3 py-2 text-xs sm:text-sm font-medium">Preview (first 10 rows)</div>
+                <div className="max-h-64 overflow-auto">
+                  <table className="w-full text-xs sm:text-sm">
                     <thead className="bg-muted/50">
                       <tr>
                         {columnsInOrder.map((key) => (
-                          <th key={key} className="px-3 py-2 text-left font-medium truncate max-w-32">{key}</th>
+                          <th key={key} className="px-2 py-1.5 text-left font-medium truncate max-w-32">{key}</th>
                         ))}
                       </tr>
                     </thead>
@@ -716,7 +719,7 @@ export default function DataAnalysisPage() {
                       {cleanedCandidate.slice(0, 10).map((row, index) => (
                         <tr key={index} className="border-t">
                           {columnsInOrder.map((key) => (
-                            <td key={key} className="px-3 py-2 truncate max-w-32">{row[key] === null || row[key] === undefined ? (
+                            <td key={key} className="px-2 py-1.5 truncate max-w-32">{row[key] === null || row[key] === undefined ? (
                               <span className="text-muted-foreground italic">null</span>
                             ) : (
                               String(row[key])

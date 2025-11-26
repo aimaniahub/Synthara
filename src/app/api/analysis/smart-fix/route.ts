@@ -76,8 +76,32 @@ function applyPlan(rows: any[], schema: SchemaCol[], plan: CleaningPlan) {
     (plan.columns || []).map((c) => [c.name, c])
   );
 
+  const totalRows = rows.length || 1;
+  const missingCounts: Record<string, number> = {};
+  for (const sc of schema) {
+    missingCounts[sc.name] = 0;
+  }
+  for (const row of rows) {
+    for (const sc of schema) {
+      const v = row?.[sc.name];
+      if (isMissing(v)) {
+        missingCounts[sc.name] = (missingCounts[sc.name] || 0) + 1;
+      }
+    }
+  }
+
+  const sparseCols = new Set(
+    schema
+      .filter((sc) => (missingCounts[sc.name] || 0) / totalRows >= 0.6)
+      .map((sc) => sc.name)
+  );
+
+  const cleaned: any[] = [];
   const fillMap: Record<string, any> = {};
   for (const sc of schema) {
+    if (sparseCols.has(sc.name)) {
+      continue;
+    }
     const pl = planByName[sc.name] || { name: sc.name, type: sc.type };
     const values = rows.map((r) => r?.[sc.name]).filter((v) => !isMissing(v));
     const parsedNums: number[] = [];
@@ -129,11 +153,14 @@ function applyPlan(rows: any[], schema: SchemaCol[], plan: CleaningPlan) {
       fillMap[sc.name] = '';
   }
 
-  const cleaned: any[] = [];
   for (const row of rows) {
     const out: any = { ...row };
     for (const sc of schema) {
       const name = sc.name;
+      if (sparseCols.has(name)) {
+        delete out[name];
+        continue;
+      }
       const pl = planByName[name] || { name, type: sc.type };
       let v = out[name];
       if (pl.trim && typeof v === 'string') v = v.trim();
