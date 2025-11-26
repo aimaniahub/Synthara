@@ -473,8 +473,11 @@ Make sure the data is clean, consistent, and directly relevant to the user query
     if (totalKeys === 0) {
       return { success: false, text: '', error: 'Gemini API key not configured' };
     }
+
     let triedKeys = 0;
     let lastError = '';
+    const networkErrorRegex = /fetch failed|ENOTFOUND|EAI_AGAIN|ECONNRESET|ECONNREFUSED|ETIMEDOUT|network/i;
+
     while (triedKeys < totalKeys) {
       const currentKey = this.getCurrentApiKey();
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -529,7 +532,16 @@ Make sure the data is clean, consistent, and directly relevant to the user query
           }
           return { success: true, text };
         } catch (error: any) {
-          console.warn(`[Gemini] Attempt ${attempt} with current key failed:`, error.message);
+          const message = String(error?.message || 'Unknown error');
+          console.warn(`[Gemini] Attempt ${attempt} with current key failed:`, message);
+
+          // For obvious network failures, bail out quickly so callers can fall back
+          if (networkErrorRegex.test(message)) {
+            lastError = message;
+            triedKeys = totalKeys; // stop outer loop as well
+            break;
+          }
+
           if (attempt < maxRetries) {
             const baseDelay = Math.pow(2, attempt) * 1000;
             const jitter = Math.random() * 1000;
@@ -538,12 +550,18 @@ Make sure the data is clean, consistent, and directly relevant to the user query
             await new Promise(r => setTimeout(r, waitTime));
             continue;
           }
-          lastError = error.message;
+          lastError = message;
         }
       }
+
+      if (triedKeys >= totalKeys || networkErrorRegex.test(lastError)) {
+        break;
+      }
+
       this.rotateApiKey();
       triedKeys++;
     }
+
     return { success: false, text: '', error: lastError || 'All API keys exhausted' };
   }
 

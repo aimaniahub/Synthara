@@ -618,18 +618,47 @@ export default function DataAnalysisPage() {
           <div className="space-y-4">
             {isCleaning && cleanedCandidate.length === 0 ? (
               <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{cleaningMessage || 'Running Smart Fix on your dataset…'}</span>
+                </div>
                 {/* cleaning skeleton content */}
               </div>
             ) : diffSummary && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="text-sm">
+                  <div className="font-medium">Rows</div>
+                  <div className="text-muted-foreground">
+                    {diffSummary.afterRows} / {diffSummary.beforeRows}
+                  </div>
+                </div>
+                <div className="text-sm">
+                  <div className="font-medium">Dropped rows</div>
+                  <div className="text-muted-foreground">{diffSummary.dropped}</div>
+                </div>
+                <div className="text-sm">
+                  <div className="font-medium">Changed cells</div>
+                  <div className="text-muted-foreground">{diffSummary.changedCells}</div>
+                </div>
                 {/* diff summary content */}
               </div>
             )}
             {(!isCleaning && oldQuality !== null) && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="text-sm">
+                  <div className="font-medium">Quality before</div>
+                  <div className="text-muted-foreground">{oldQuality?.toFixed(1)}%</div>
+                </div>
+                {newQuality !== null && (
+                  <div className="text-sm">
+                    <div className="font-medium">Quality after</div>
+                    <div className="text-muted-foreground">{newQuality.toFixed(1)}%</div>
+                  </div>
+                )}
                 {/* quality comparison content */}
               </div>
             )}
+
             {!isCleaning && cleaningSummaryText && (
               <div className="border rounded-lg p-3 space-y-2 bg-background/40">
                 <div className="flex items-center gap-2 text-sm font-medium">
@@ -663,6 +692,12 @@ export default function DataAnalysisPage() {
             {appendSuccess && (
               <Alert>
                 <AlertDescription>Cleaned data appended and view updated.</AlertDescription>
+              </Alert>
+            )}
+            {cleaningError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{cleaningError}</AlertDescription>
               </Alert>
             )}
             {!isCleaning && cleanedCandidate.length > 0 && (
