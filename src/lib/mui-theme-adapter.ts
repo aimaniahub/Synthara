@@ -13,7 +13,7 @@ const getCSSVariable = (variable: string): string => {
 const hslToMuiColor = (hslVar: string): string => {
   const value = getCSSVariable(hslVar);
   if (!value) return '#000000';
-  
+
   // Convert "hue sat% light%" to "hsl(hue, sat%, light%)"
   const parts = value.split(' ');
   if (parts.length === 3) {
@@ -26,7 +26,7 @@ const hslToMuiColor = (hslVar: string): string => {
 // Create MUI theme that adapts to the current theme mode
 export const createAdaptiveMuiTheme = (isDark: boolean): ThemeOptions => {
   const mode = isDark ? 'dark' : 'light';
-  
+
   // Get theme colors from CSS variables
   const primary = hslToMuiColor('--primary');
   const secondary = hslToMuiColor('--secondary');
@@ -35,7 +35,7 @@ export const createAdaptiveMuiTheme = (isDark: boolean): ThemeOptions => {
   const textPrimary = hslToMuiColor('--foreground');
   const textSecondary = hslToMuiColor('--muted-foreground');
   const divider = hslToMuiColor('--border');
-  
+
   // Chart colors from CSS variables
   const chartColors = [
     hslToMuiColor('--chart-1'),
@@ -73,7 +73,7 @@ export const createAdaptiveMuiTheme = (isDark: boolean): ThemeOptions => {
         quaternary: chartColors[3],
         quinary: chartColors[4],
       },
-    },
+    } as any,
     typography: {
       fontFamily: [
         'var(--font-inter)',
@@ -171,12 +171,12 @@ export const createAdaptiveMuiTheme = (isDark: boolean): ThemeOptions => {
 export const useMuiTheme = () => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
-  
+
   // Return a default theme during SSR
   if (typeof window === 'undefined') {
     return createAdaptiveMuiTheme(false); // Default to light theme during SSR
   }
-  
+
   return createAdaptiveMuiTheme(isDark);
 };
 

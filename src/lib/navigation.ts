@@ -17,7 +17,6 @@ export const mainNavItems: NavItem[] = [
   { title: 'Data Generation', href: '/dashboard/generate', icon: DatabaseZap },
   { title: 'Data Preview', href: '/dashboard/preview', icon: FileText, label: 'New' },
   { title: 'Data Analysis', href: '/dashboard/analysis', icon: BarChartBig },
-  { title: 'AI Chart Suggestions', href: '/dashboard/ai-charts', icon: Brain },
   { title: 'Data Visualization', href: '/dashboard/datavisualization', icon: BarChartBig },
   { title: 'Dataset Market', href: '/dashboard/market', icon: Globe },
 ];

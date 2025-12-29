@@ -13,15 +13,17 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Upload, 
-  Database, 
-  FileText, 
-  CheckCircle, 
+import {
+  Upload,
+  Database,
+  FileText,
+  CheckCircle,
   AlertCircle,
   Loader2,
-  X
+  X,
+  Sparkles
 } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { getUserDatasets, type SavedDataset } from '@/lib/supabase/actions';
 
 interface DatasetSelectorProps {
@@ -31,7 +33,7 @@ interface DatasetSelectorProps {
 }
 
 const parseCSV = async (csvText: string): Promise<Record<string, any>[]> => {
-    // Dynamically import Papa Parse only when we actually need to parse
+  // Dynamically import Papa Parse only when we actually need to parse
   const Papa = (await import('papaparse')).default;
 
   const result = Papa.parse(csvText, {
@@ -46,7 +48,7 @@ const parseCSV = async (csvText: string): Promise<Record<string, any>[]> => {
       if (row[key] === '') row[key] = null;
     }
   }
-    return rows;
+  return rows;
 };
 
 export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeButton = false }: DatasetSelectorProps) {
@@ -54,7 +56,7 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
   const autoLoadedRef = useRef(false);
-  
+
   const [savedDatasets, setSavedDatasets] = useState<SavedDataset[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -111,8 +113,8 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
 
     try {
       const text = await file.text();
-            const data = await parseCSV(text);
-      
+      const data = await parseCSV(text);
+
       if (data.length === 0) {
         throw new Error('No data found in CSV file');
       }
@@ -120,7 +122,7 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
       setParsedData(data);
       setPreviewData(data.slice(0, 5)); // Show first 5 rows for preview
       setSelectedDatasetId(''); // Clear saved dataset selection
-      
+
       toast({
         title: "File Uploaded",
         description: `Successfully parsed ${data.length} rows from ${file.name}`,
@@ -156,11 +158,11 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
       }
 
       const dataset = await response.json();
-            const csvData = await parseCSV(dataset.data_csv);
-      
+      const csvData = await parseCSV(dataset.data_csv);
+
       setParsedData(csvData);
       setPreviewData(csvData.slice(0, 5));
-      
+
       toast({
         title: "Dataset Loaded",
         description: `Loaded ${csvData.length} rows from ${dataset.dataset_name}`,
@@ -187,7 +189,7 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
 
     const metadata = {
       id: selectedDatasetId || undefined,
-      name: selectedDatasetId 
+      name: selectedDatasetId
         ? savedDatasets.find(ds => ds.id === selectedDatasetId)?.dataset_name || 'Unknown Dataset'
         : uploadedFile?.name || 'Uploaded Dataset',
       source: selectedDatasetId ? 'saved' as const : 'uploaded' as const
@@ -210,104 +212,99 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
   const hasData = parsedData.length > 0;
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-5 w-5" />
-          Select Dataset for Analysis
-        </CardTitle>
-        <CardDescription>
-          Choose from your saved datasets or upload a new CSV file
-        </CardDescription>
+    <Card className="modern-card border-none shadow-sm overflow-hidden">
+      <CardHeader className="pb-4 pt-6 px-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+            <Database className="h-4 w-4" />
+          </div>
+          <CardTitle className="text-lg font-bold tracking-tight">Dataset Selection</CardTitle>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Saved Datasets */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Saved Datasets</Label>
-          {isLoadingDatasets ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Loading datasets...
-            </div>
-          ) : (
-            <Select value={selectedDatasetId} onValueChange={handleSavedDatasetSelect}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a saved dataset" />
-              </SelectTrigger>
-              <SelectContent>
-                {savedDatasets.length === 0 ? (
-                  <SelectItem value="__no_saved__" disabled>
-                    No saved datasets found
-                  </SelectItem>
-                ) : (
-                  savedDatasets.map((dataset) => (
-                    <SelectItem key={dataset.id} value={dataset.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span className="truncate">{dataset.dataset_name}</span>
-                        <Badge variant="secondary" className="ml-2">
-                          {dataset.num_rows} rows
-                        </Badge>
-                      </div>
+      <CardContent className="px-6 pb-6 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Saved Datasets */}
+          <div className="space-y-3">
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Saved Intelligence</Label>
+            {isLoadingDatasets ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground h-10">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Retrieving...
+              </div>
+            ) : (
+              <Select value={selectedDatasetId} onValueChange={handleSavedDatasetSelect}>
+                <SelectTrigger className="h-10 rounded-lg bg-secondary/30 border-border/50 focus:ring-primary/20 transition-all text-sm">
+                  <SelectValue placeholder="Chose a saved dataset" />
+                </SelectTrigger>
+                <SelectContent>
+                  {savedDatasets.length === 0 ? (
+                    <SelectItem value="__no_saved__" disabled>
+                      No saved datasets
                     </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <Separator className="w-full" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">Or</span>
-          </div>
-        </div>
-
-        {/* File Upload */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Upload CSV File</Label>
-          <div className="flex items-center gap-3">
-            <Input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              disabled={isParsingFile}
-              className="flex-1"
-            />
-            {isParsingFile && (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    savedDatasets.map((dataset) => (
+                      <SelectItem key={dataset.id} value={dataset.id}>
+                        <div className="flex items-center justify-between w-full">
+                          <span className="truncate">{dataset.dataset_name}</span>
+                          <Badge variant="secondary" className="ml-2 text-[8px] h-4">
+                            {dataset.num_rows} rows
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             )}
+          </div>
+
+          {/* File Upload */}
+          <div className="space-y-3">
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">External Protocol (CSV)</Label>
+            <div className="relative group">
+              <Input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileUpload}
+                disabled={isParsingFile}
+                className="h-10 rounded-lg bg-secondary/30 border-border/50 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 text-xs transition-all cursor-pointer"
+              />
+              {isParsingFile && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Data Preview */}
         {hasData && (
-          <div className="space-y-3">
+          <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Data Preview</Label>
+              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Payload Preview</Label>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={clearSelection}
-                className="h-8 w-8 p-0"
+                className="h-6 px-2 text-[10px] font-bold text-destructive hover:bg-destructive/5"
               >
-                <X className="h-4 w-4" />
+                <X className="h-3 w-3 mr-1" /> Clear
               </Button>
             </div>
-            
-            <div className="border rounded-lg overflow-hidden">
-              <div className="bg-muted px-4 py-2 text-sm font-medium">
-                {selectedDatasetId ? 'Saved Dataset' : 'Uploaded File'}: {previewData.length > 0 ? Object.keys(previewData[0]).length : 0} columns, {parsedData.length} rows
+
+            <div className="border border-border/50 rounded-xl overflow-hidden bg-secondary/10">
+              <div className="bg-secondary/20 px-4 py-2 text-xs font-bold text-muted-foreground flex items-center justify-between">
+                <span>{selectedDatasetId ? 'REPOSITORY SOURCE' : 'UPLOADED STREAM'}</span>
+                <span className="text-primary">{previewData.length > 0 ? Object.keys(previewData[0]).length : 0} FIELDS | {parsedData.length} RECORDS</span>
               </div>
-              <div className="max-h-32 overflow-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50">
+              <ScrollArea className="h-64 w-full">
+                <table className="w-full text-xs">
+                  <thead className="bg-secondary/10 sticky top-0">
                     <tr>
                       {previewData.length > 0 && Object.keys(previewData[0]).map((key) => (
-                        <th key={key} className="px-3 py-2 text-left font-medium truncate max-w-32">
+                        <th key={key} className="px-4 py-3 text-left font-bold text-muted-foreground/70 truncate max-w-48 border-b border-border/30">
                           {key}
                         </th>
                       ))}
@@ -315,11 +312,11 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
                   </thead>
                   <tbody>
                     {previewData.map((row, index) => (
-                      <tr key={index} className="border-t">
+                      <tr key={index} className="border-b border-border/20 last:border-0 hover:bg-white/5 transition-colors">
                         {Object.values(row).map((value, cellIndex) => (
-                          <td key={cellIndex} className="px-3 py-2 truncate max-w-32">
+                          <td key={cellIndex} className="px-4 py-3 truncate max-w-48 text-muted-foreground font-medium">
                             {value === null || value === undefined ? (
-                              <span className="text-muted-foreground italic">null</span>
+                              <span className="opacity-30 italic">null</span>
                             ) : (
                               String(value)
                             )}
@@ -329,43 +326,42 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollArea>
             </div>
           </div>
         )}
 
-        {/* Analyze Button (hidden in some contexts) */}
-        {!hideAnalyzeButton && (
-          <div className="flex justify-end">
-            <Button 
+        <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+          {!hideAnalyzeButton && (
+            <Button
               onClick={handleAnalyze}
               disabled={!hasData}
-              className="min-w-32"
+              className="w-full sm:w-auto min-w-40 h-11 rounded-xl text-sm font-bold shadow-md shadow-emerald-500/10 hover:translate-y-[-1px] transition-all active:translate-y-0"
+              variant={hasData ? "default" : "secondary"}
             >
               {hasData ? (
                 <>
-                  <CheckCircle className="h-4 w-4 mr-2" />
+                  <Sparkles className="h-4 w-4 mr-2" />
                   Analyze Dataset
                 </>
               ) : (
                 <>
                   <AlertCircle className="h-4 w-4 mr-2" />
-                  Select Dataset First
+                  Select Dataset
                 </>
               )}
             </Button>
-          </div>
-        )}
+          )}
 
-        {/* Help Text */}
-        <Alert>
-          <FileText className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Supported formats:</strong> CSV files with headers. 
-            <br />
-            <strong>Data types:</strong> Numeric, categorical, date, and text columns will be automatically detected.
-          </AlertDescription>
-        </Alert>
+          <div className="flex-1 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10 flex items-center gap-3">
+            <div className="p-1.5 rounded-md bg-blue-500/10 text-blue-600">
+              <FileText className="h-3 w-3" />
+            </div>
+            <p className="text-[9px] text-muted-foreground leading-tight font-medium">
+              <strong className="text-blue-600">Automatic Detection:</strong> CSV headers, numeric ranges, categorical patterns, and missing values are identified instantly.
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

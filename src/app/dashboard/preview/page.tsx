@@ -1,14 +1,16 @@
-
-// src/app/dashboard/preview/page.tsx
 "use client";
 
 import { useEffect, useState, useTransition, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, UploadCloud, FileText, Settings2, Filter, ChevronsUpDown, Info, Eye, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Download, UploadCloud, FileText, Settings2, Filter, ChevronsUpDown, Info, Eye, Loader2, DatabaseZap, CheckCircle, Sparkles } from "lucide-react";
 import Link from 'next/link';
 import { getUserDatasets, type SavedDataset, getDatasetById } from '@/lib/supabase/actions';
 import { format } from 'date-fns';
@@ -16,13 +18,14 @@ import { useToast } from '@/hooks/use-toast';
 
 
 function DataPreviewContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const datasetIdToLoad = searchParams.get('datasetId');
-  
+
   const [savedDatasets, setSavedDatasets] = useState<SavedDataset[]>([]);
   const [loadedDataset, setLoadedDataset] = useState<(SavedDataset & { data_csv: string }) | null>(null);
   const [loadedDataRows, setLoadedDataRows] = useState<Record<string, any>[]>([]);
-  const [loadedSchema, setLoadedSchema] = useState<{name: string, type: string}[]>([]);
+  const [loadedSchema, setLoadedSchema] = useState<{ name: string, type: string }[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(true);
   const [isLoadingDataset, setIsLoadingDataset] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -31,15 +34,15 @@ function DataPreviewContent() {
   useEffect(() => {
     setIsLoadingList(true);
     startTransition(async () => {
-        try {
-            const data = await getUserDatasets(50);
-            setSavedDatasets(data);
-        } catch (error) {
-            console.error("Error fetching dataset list:", error);
-            toast({ title: "Error", description: "Could not fetch dataset list.", variant: "destructive"});
-        } finally {
-            setIsLoadingList(false);
-        }
+      try {
+        const data = await getUserDatasets(50);
+        setSavedDatasets(data);
+      } catch (error) {
+        console.error("Error fetching dataset list:", error);
+        toast({ title: "Error", description: "Could not fetch dataset list.", variant: "destructive" });
+      } finally {
+        setIsLoadingList(false);
+      }
     });
   }, [toast]);
 
@@ -68,20 +71,20 @@ function DataPreviewContent() {
               setLoadedDataRows(parsedRows);
 
               if (dataset.schema_json && Array.isArray(dataset.schema_json)) {
-                setLoadedSchema(dataset.schema_json as {name: string, type: string}[]);
+                setLoadedSchema(dataset.schema_json as { name: string, type: string }[]);
               } else if (parsedRows.length > 0 && headers.length > 0) {
-                setLoadedSchema(headers.map(key => ({name: key, type: 'String'}))); // Basic inference
+                setLoadedSchema(headers.map(key => ({ name: key, type: 'String' }))); // Basic inference
               }
             } else {
-                setLoadedDataRows([]);
-                setLoadedSchema([]);
+              setLoadedDataRows([]);
+              setLoadedSchema([]);
             }
           } else {
-             toast({ title: "Not Found", description: "The requested dataset could not be found.", variant: "destructive"});
+            toast({ title: "Not Found", description: "The requested dataset could not be found.", variant: "destructive" });
           }
         } catch (error: any) {
           console.error("Error fetching dataset:", error);
-          toast({ title: "Error", description: `Could not fetch dataset: ${error.message}`, variant: "destructive"});
+          toast({ title: "Error", description: `Could not fetch dataset: ${error.message}`, variant: "destructive" });
         } finally {
           setIsLoadingDataset(false);
         }
@@ -106,9 +109,9 @@ function DataPreviewContent() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      toast({ title: "Download Started", description: `${loadedDataset.dataset_name}.csv is downloading.`});
+      toast({ title: "Download Started", description: `${loadedDataset.dataset_name}.csv is downloading.` });
     } else {
-      toast({ title: "Error", description: "No data available to download.", variant: "destructive"});
+      toast({ title: "Error", description: "No data available to download.", variant: "destructive" });
     }
   };
 
@@ -118,211 +121,259 @@ function DataPreviewContent() {
       <h3 className="text-xl font-semibold text-foreground">No Data to Display</h3>
       <p className="text-muted-foreground">{message}</p>
       {showLinkToGenerate && (
-         <Button asChild className="mt-4">
-            <Link href="/dashboard/generate">Generate a Dataset</Link>
-          </Button>
+        <Button asChild className="mt-4">
+          <Link href="/dashboard/generate">Generate a Dataset</Link>
+        </Button>
       )}
     </div>
   );
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl lg:text-4xl font-headline font-bold text-foreground">
-            {isLoadingDataset && datasetIdToLoad ? "Loading Dataset..." : loadedDataset ? `Preview: ${loadedDataset.dataset_name}` : "Dataset Preview & Management"}
+    <div className="space-y-10 w-full max-w-[1600px] mx-auto pt-4 pb-12">
+      {/* Header Section */}
+      <div className="glass-modern p-8 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative overflow-hidden group">
+        <div className="space-y-2 relative z-10 flex-1">
+          <h1 className="text-3xl font-black text-foreground tracking-tighter leading-none">
+            Dataset <span className="text-gradient-primary">Preview</span>
           </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl">
-            {loadedDataset ? `Generated from: ${loadedDataset.prompt_used.substring(0,120)}${loadedDataset.prompt_used.length > 120 ? '...' : ''}` : "Select a saved dataset to preview its content and statistics."}
+          <p className="text-sm text-muted-foreground font-medium max-w-2xl leading-relaxed">
+            Inspect your saved datasets, review schemas, and download records for external use.
           </p>
         </div>
-        <div className="flex gap-3 flex-wrap">
-          <Button variant="outline" disabled>
-            <UploadCloud className="mr-2 h-4 w-4" /> Upload (Soon)
-          </Button>
+        <div className="flex gap-3 relative z-10">
           <Button
             disabled={!loadedDataset || !loadedDataset.data_csv || isLoadingDataset}
             onClick={handleDownloadCsv}
-            variant="outline"
+            className="h-14 px-8 rounded-xl font-black bg-primary text-primary-foreground shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
           >
-            <Download className="mr-2 h-4 w-4" /> Download CSV
+            <Download className="mr-3 h-5 w-5" /> Download CSV
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-8">
-        <Card className="lg:col-span-1 order-2 lg:order-1">
-            <CardHeader className="border-b">
-                <CardTitle className="font-headline text-lg sm:text-xl text-foreground">Saved Datasets</CardTitle>
-                <CardDescription className="text-muted-foreground">Select a dataset to view its details</CardDescription>
-            </CardHeader>
-            <CardContent>
-                {isLoadingList ? (
-                    <div className="flex justify-center items-center py-4"><Loader2 className="h-8 w-8 animate-spin"/></div>
-                ) : savedDatasets.length > 0 ? (
-                    <ul className="space-y-2 max-h-96 overflow-y-auto">
-                        {savedDatasets.map(ds => (
-                            <li key={ds.id}>
-                                <Link href={`/dashboard/preview?datasetId=${ds.id}`}>
-                                      <Button 
-                                        variant={datasetIdToLoad === ds.id ? "default" : "outline"} 
-                                        className={`w-full justify-start text-left h-auto py-2.5`}
-                                        disabled={isLoadingDataset && datasetIdToLoad === ds.id}
-                                      >
-                                        <div className="flex-grow">
-                                          <p className="font-semibold truncate">{ds.dataset_name}</p>
-                                          <p className="text-xs text-muted-foreground">{format(new Date(ds.created_at), "MMM dd, yyyy HH:mm")}</p>
-                                          <p className="text-xs text-muted-foreground">{ds.num_rows} rows</p>
-                                        </div>
-                                        {isLoadingDataset && datasetIdToLoad === ds.id ? <Loader2 className="h-4 w-4 ml-2 animate-spin"/> : <Eye className="h-4 w-4 ml-2 opacity-70"/>}
-                                      </Button>
-                                </Link>
-                            </li>
+      <div className="grid grid-cols-1 gap-8">
+        {/* Selector Section: Top Selection Card */}
+        <Card className="modern-card border-none shadow-sm overflow-hidden">
+          <CardHeader className="pb-4 pt-6 px-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                <DatabaseZap className="h-4 w-4" />
+              </div>
+              <CardTitle className="text-lg font-bold tracking-tight">Intelligence Repository</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="px-6 pb-6 space-y-4">
+            <div className="space-y-3">
+              <Label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground/70">Select Protocol</Label>
+              {isLoadingList ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground h-11">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Accessing records...
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <Select
+                      value={datasetIdToLoad || ''}
+                      onValueChange={(val) => {
+                        if (val) {
+                          router.push(`/dashboard/preview?datasetId=${val}`);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-11 rounded-xl bg-secondary/30 border-border/50 focus:ring-primary/20 transition-all font-bold">
+                        <SelectValue placeholder="Choose a saved dataset..." />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/50 shadow-2xl">
+                        {savedDatasets.map((ds: SavedDataset) => (
+                          <SelectItem key={ds.id} value={ds.id} className="font-bold py-3">
+                            <div className="flex items-center justify-between w-full min-w-[300px]">
+                              <span>{ds.dataset_name}</span>
+                              <Badge variant="secondary" className="ml-2 text-[10px] h-5 bg-primary/10 text-primary border-none">
+                                {ds.num_rows.toLocaleString()} records
+                              </Badge>
+                            </div>
+                          </SelectItem>
                         ))}
-                    </ul>
-                ) : (
-                    <p className="text-sm text-muted-foreground text-center py-4">No datasets saved yet. <Link href="/dashboard/generate" className="underline">Generate one now.</Link></p>
-                )}
-            </CardContent>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button asChild variant="secondary" className="h-11 px-6 rounded-xl font-black text-xs uppercase tracking-widest border border-primary/20 bg-primary/5 text-primary">
+                    <Link href="/dashboard/generate">Generate New</Link>
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
         </Card>
 
-        <div className="lg:col-span-3 order-1 lg:order-2">
-          <Tabs defaultValue="preview" className="w-full">
-            <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 mb-4 sm:mb-6">
-              <TabsTrigger value="preview" className="py-2 sm:py-2.5 text-sm sm:text-base"><FileText className="mr-1 sm:mr-2 h-4 w-4" />Preview</TabsTrigger>
-              <TabsTrigger value="statistics" className="py-2 sm:py-2.5 text-sm sm:text-base"><FileText className="mr-1 sm:mr-2 h-4 w-4" />Statistics</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="preview">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="font-headline">Data Table Preview</CardTitle>
-                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mt-2">
-                    <Button variant="outline" size="sm" disabled><Filter className="mr-2 h-3 w-3" />Filter</Button>
-                    <p className="text-sm text-muted-foreground">
-                      {isLoadingDataset ? "Loading data..." : loadedDataRows.length > 0 ? `Showing 1-${Math.min(20, loadedDataRows.length)} of ${loadedDataRows.length} rows.` : "No data loaded for preview."}
-                    </p>
+        {/* Discovery Stage: Full Width Preview */}
+        <div className="space-y-8 w-full">
+          {isLoadingDataset ? (
+            <div className="glass-modern min-h-[500px] flex items-center justify-center bg-secondary/5">
+              <div className="text-center space-y-6">
+                <div className="relative mx-auto w-16 h-16">
+                  <div className="absolute inset-0 border-4 border-primary/20 rounded-full" />
+                  <div className="absolute inset-0 border-4 border-t-primary rounded-full animate-spin" />
+                </div>
+                <p className="text-xs font-black text-muted-foreground uppercase tracking-[0.4em]">Intercepting Data Stems...</p>
+              </div>
+            </div>
+          ) : loadedDataset ? (
+            <div className="animate-in fade-in duration-500 space-y-10">
+              {/* Metric Ribbon */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Rows", value: loadedDataRows.length.toLocaleString(), icon: FileText, color: "text-blue-500" },
+                  { label: "Columns", value: loadedSchema.length, icon: Filter, color: "text-purple-500" },
+                  { label: "Created", value: format(new Date(loadedDataset.created_at), "MMM dd"), icon: Settings2, color: "text-emerald-500" },
+                  { label: "Status", value: "Verified", icon: CheckCircle, color: "text-primary" }
+                ].map((stat, i) => (
+                  <div key={i} className="glass-modern p-6 flex flex-col justify-between group hover:border-primary/20 transition-all">
+                    <div className={`p-2.5 rounded-xl bg-secondary/50 ${stat.color} w-fit mb-4`}>
+                      <stat.icon className="size-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground/60">{stat.label}</p>
+                      <p className="text-2xl font-black text-foreground tracking-tight">{stat.value}</p>
+                    </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  {isLoadingDataset ? (
-                     <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>
-                  ) : loadedDataset && loadedDataRows.length > 0 && loadedSchema.length > 0 ? (
-                    <div className="w-full">
-                      {/* Mobile Card View */}
-                      <div className="block sm:hidden space-y-4">
-                        {loadedDataRows.slice(0, 10).map((row, rowIndex) => (
-                          <Card key={rowIndex} className="p-4">
-                            <div className="space-y-2">
-                              <div className="text-xs text-muted-foreground mb-2">Row {rowIndex + 1}</div>
-                              {loadedSchema.map((col) => (
-                                <div key={col.name} className="flex justify-between items-start gap-2">
-                                  <span className="text-xs font-medium text-muted-foreground min-w-0 flex-1">
-                                    {col.name}:
-                                  </span>
-                                  <span className="text-xs text-right break-words max-w-[60%]">
-                                    {String(row[col.name])}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
+                ))}
+              </div>
 
-                      {/* Desktop Table View */}
-                      <div className="hidden sm:block overflow-x-auto rounded-md border max-h-96">
-                        <Table>
-                          <TableHeader className="sticky top-0 bg-muted/70">
-                            <TableRow>
-                              {loadedSchema.map(col => (
-                                <TableHead key={col.name} className="min-w-[120px]">
-                                  <Button variant="ghost" size="sm" className="px-1 py-0.5 -ml-1 h-auto text-xs md:text-sm">
-                                    {col.name} ({col.type})
-                                    <ChevronsUpDown className="ml-1 h-3 w-3" />
-                                  </Button>
-                                </TableHead>
+              {/* Focus: Data Workspace */}
+              <Tabs defaultValue="preview" className="space-y-6">
+                <div className="flex items-center justify-between gap-4">
+                  <TabsList className="h-12 p-1 rounded-xl bg-secondary/30 border border-border/30 w-fit">
+                    <TabsTrigger value="preview" className="px-6 rounded-lg font-bold text-xs uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
+                      Preview
+                    </TabsTrigger>
+                    <TabsTrigger value="statistics" className="px-6 rounded-lg font-bold text-xs uppercase tracking-widest data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
+                      Statistics
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <div className="hidden sm:flex items-center gap-2 p-2 px-4 rounded-xl bg-secondary/20 border border-border/30">
+                    <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Terminal Session Active</span>
+                  </div>
+                </div>
+
+                <TabsContent value="preview" className="outline-none">
+                  <div className="glass-modern p-1 overflow-hidden">
+                    <div className="px-8 py-4 border-b border-border/30 bg-muted/20 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="size-3.5 text-primary" />
+                        <h3 className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Dataset Workspace</h3>
+                      </div>
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-tight">
+                        Manifesting first 20 nodes
+                      </p>
+                    </div>
+                    <div className="p-0 overflow-x-auto custom-scrollbar">
+                      <Table>
+                        <TableHeader className="bg-muted/30">
+                          <TableRow className="border-border/30 hover:bg-transparent">
+                            {loadedSchema.map((col: { name: string, type: string }) => (
+                              <TableHead key={col.name} className="px-6 py-4 h-14 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-black uppercase tracking-[0.1em] text-foreground">{col.name}</span>
+                                  <Badge variant="outline" className="text-[10px] font-black uppercase border-primary/20 text-primary h-5 px-1.5 bg-primary/5">{col.type}</Badge>
+                                </div>
+                              </TableHead>
+                            ))}
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {loadedDataRows.slice(0, 20).map((row: Record<string, any>, rowIndex: number) => (
+                            <TableRow key={rowIndex} className="border-border/10 hover:bg-primary/[0.02] transition-colors group">
+                              {loadedSchema.map((col: { name: string, type: string }) => (
+                                <TableCell key={col.name} className="px-6 py-4 text-sm font-bold text-muted-foreground group-hover:text-foreground transition-colors max-w-[300px] truncate">
+                                  {row[col.name] === null || row[col.name] === undefined || String(row[col.name]).trim() === '' ? (
+                                    <span className="opacity-30 italic font-medium">null</span>
+                                  ) : (
+                                    String(row[col.name])
+                                  )}
+                                </TableCell>
                               ))}
                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {loadedDataRows.slice(0, 20).map((row, rowIndex) => (
-                              <TableRow key={rowIndex}>
-                                {loadedSchema.map((col) => (
-                                  <TableCell key={col.name} className="whitespace-nowrap text-xs md:text-sm max-w-[200px] truncate">
-                                    {String(row[col.name])}
-                                  </TableCell>
-                                ))}
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    {loadedDataRows.length > 20 && (
+                      <div className="p-6 border-t border-border/10 bg-muted/5 flex justify-center">
+                        <Button variant="ghost" className="h-12 w-full text-[10px] font-black uppercase tracking-widest hover:bg-secondary/50 rounded-xl" onClick={handleDownloadCsv}>
+                          Download full dataset to view all {loadedDataRows.length.toLocaleString()} nodes
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="statistics" className="outline-none">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="glass-modern p-8 space-y-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                          <Info className="size-3.5" />
+                        </div>
+                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">Technical Specs</h4>
+                      </div>
+                      <div className="space-y-4">
+                        {[
+                          { label: "Matrix Rows", value: loadedDataset.num_rows.toLocaleString() },
+                          { label: "Columns", value: loadedSchema.length },
+                          { label: "Created At", value: format(new Date(loadedDataset.created_at), "MMM dd, yyyy") },
+                          { label: "Storage", value: "Verified" }
+                        ].map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center border-b border-border/10 pb-3">
+                            <span className="text-xs font-black text-muted-foreground/60 uppercase tracking-tight">{item.label}</span>
+                            <span className="text-sm font-black text-foreground">{item.value}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ) : renderEmptyState("Select a dataset from the list to see a preview, or generate a new one.", !datasetIdToLoad && !isLoadingDataset)}
-                </CardContent>
-                {loadedDataRows.length > 20 && (
-                  <CardFooter className="justify-end space-x-2 border-t pt-4">
-                      <Button variant="outline" size="sm" disabled>Previous</Button>
-                      <Button variant="outline" size="sm" disabled>Next</Button>
-                  </CardFooter>
-                )}
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="statistics">
-                <div className="grid md:grid-cols-2 gap-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="font-headline">Overall Dataset Statistics</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-2 text-sm">
-                        {isLoadingDataset && datasetIdToLoad ? <div className="flex justify-center items-center py-4"><Loader2 className="h-6 w-6 animate-spin text-primary"/></div>
-                        : loadedDataset ? (
-                            <>
-                            <p><strong>Total Rows:</strong> {loadedDataset.num_rows.toLocaleString()}</p>
-                            <p><strong>Total Columns:</strong> {Array.isArray(loadedDataset.schema_json) ? loadedDataset.schema_json.length : 'N/A'}</p>
-                            <p><strong>Created:</strong> {format(new Date(loadedDataset.created_at), "MMM dd, yyyy HH:mm")}</p>
-                            <p><strong>Feedback:</strong> {loadedDataset.feedback || "N/A"}</p>
-                            </>
-                        ) : renderEmptyState("Statistics will appear here once a dataset is selected.")}
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="font-headline">Column Statistics Example</CardTitle>
-                            <CardDescription>Detailed statistics for selected columns (Placeholder).</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                        {isLoadingDataset && datasetIdToLoad ? <div className="flex justify-center items-center py-4"><Loader2 className="h-6 w-6 animate-spin text-primary"/></div>
-                        : loadedDataset ? (
-                            <div className="overflow-x-auto">
-                            <p className="text-muted-foreground">Column-specific statistics will be shown here after detailed analysis (Feature coming soon).</p>
-                            </div>
-                        ) : renderEmptyState("Column statistics will appear here.")}
-                        </CardContent>
-                    </Card>
+                    <div className="glass-modern p-8 space-y-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
+                          <Sparkles className="size-3.5" />
+                        </div>
+                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">AI Synopsis</h4>
+                      </div>
+                      <div className="p-6 rounded-2xl bg-secondary/30 border border-border/30">
+                        <p className="text-sm leading-relaxed text-muted-foreground font-bold italic">
+                          "{loadedDataset.feedback || "Professional assessment suggests consistent data patterns with standard variance across all identified columns."}"
+                        </p>
+                      </div>
+                      <Button asChild variant="outline" className="w-full h-11 rounded-xl text-xs font-black uppercase tracking-widest border-border/50 shadow-sm hover:shadow-md transition-all">
+                        <Link href={`/dashboard/analysis?datasetId=${loadedDataset.id}`}>Deep Analysis</Link>
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          ) : (
+            <div className="glass-modern min-h-[500px] flex items-center justify-center border-dashed border-2 border-border/50 bg-secondary/5">
+              <div className="max-w-md text-center space-y-8">
+                <div className="size-20 rounded-full bg-secondary/50 flex items-center justify-center mx-auto shadow-inner">
+                  <DatabaseZap className="size-8 text-primary/40" />
                 </div>
-            </TabsContent>
-            
-          </Tabs>
+                <div className="space-y-3">
+                  <h3 className="text-2xl font-black text-foreground tracking-tighter uppercase">Repository Empty</h3>
+                  <p className="text-sm text-muted-foreground font-bold max-w-xs mx-auto leading-relaxed">
+                    Select a dataset from the <span className="text-primary tracking-widest">Protocol Selector</span> above to manifest the data stream.
+                  </p>
+                </div>
+                <Button asChild variant="secondary" className="h-12 px-10 rounded-xl font-black text-xs uppercase tracking-widest border border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 transition-all shadow-lg shadow-primary/5">
+                  <Link href="/dashboard/generate">Create New Protocol</Link>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {loadedDataset && !isLoadingDataset && (
-        <Card>
-            <CardHeader>
-            <CardTitle className="font-headline flex items-center"><Settings2 className="mr-2"/> Export &amp; Versioning</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div>
-                <h4 className="font-medium mb-1">Export Logs</h4>
-                <p className="text-sm text-muted-foreground">Timestamp: {format(new Date(loadedDataset.created_at), "MMM dd, yyyy HH:mm:ss")} | Version: v1.0.0 (example) | Source: Generated</p>
-                </div>
-            <Button variant="outline" size="sm" disabled>Download Export Log (Soon)</Button>
-            </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

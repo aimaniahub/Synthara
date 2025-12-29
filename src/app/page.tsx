@@ -1,12 +1,13 @@
-
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { CheckCircle, Users, Code, Activity, School, Database, BarChart3, Zap, ShieldCheck, Settings2, ArrowRight, LogIn, Briefcase, Sparkles } from 'lucide-react';
 
 import { SyntharaLogo } from '@/components/icons/SyntharaLogo';
 import { Footer } from '@/components/layout/Footer';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { withTimeout } from '@/lib/utils/timeout';
 
 const features = [
   { name: 'Intelligent Data Generation', icon: Database, description: 'Create realistic synthetic datasets tailored to your needs using advanced AI models.' },
@@ -41,12 +42,6 @@ const teamMembers = [
 
 export default async function HomePage() {
   const supabase = await createSupabaseServerClient();
-  async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
-    return Promise.race([
-      p,
-      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-    ]) as Promise<T>;
-  }
   const { data: { user } = { user: null } } = supabase
     ? await withTimeout<any>(supabase.auth.getUser(), 2000, { data: { user: null } })
     : ({ data: { user: null } } as any);
@@ -83,13 +78,13 @@ export default async function HomePage() {
             </Button>
 
             {user ? (
-                <Button asChild variant="default">
-                    <Link href="/dashboard">Go to Dashboard</Link>
-                </Button>
+              <Button asChild variant="default">
+                <Link href="/dashboard">Go to Dashboard</Link>
+              </Button>
             ) : (
-                <Button asChild variant="default">
-                    <Link href="/auth">Start for Free →</Link>
-                </Button>
+              <Button asChild variant="default">
+                <Link href="/auth">Start for Free →</Link>
+              </Button>
             )}
 
             {!user && (
@@ -102,62 +97,63 @@ export default async function HomePage() {
           {/* Mobile Navigation */}
           <div className="flex md:hidden items-center space-x-2">
             {user ? (
-                <Button size="sm" asChild>
-                    <Link href="/dashboard">Dashboard</Link>
-                </Button>
+              <Button size="sm" asChild>
+                <Link href="/dashboard">Dashboard</Link>
+              </Button>
             ) : (
-                <Button size="sm" asChild>
-                    <Link href="/auth">Start Free</Link>
-                </Button>
+              <Button size="sm" asChild>
+                <Link href="/auth">Start Free</Link>
+              </Button>
             )}
           </div>
         </nav>
       </header>
 
       <main className="flex-grow relative z-10">
-        {/* Hero Section */}
-        <section className="relative py-16 sm:py-20 md:py-24 lg:py-32 overflow-hidden">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-              {/* Left Content */}
-              <div className="text-left">
-                <h1 className="font-headline text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold mb-6 text-foreground leading-tight">
-                  Secure secrets.<br />
-                  Prevent breaches.<br />
-                  Keep teams moving.
-                </h1>
-                <p className="text-lg sm:text-xl text-muted-foreground mb-8 max-w-2xl leading-relaxed">
-                  Securely manage, orchestrate, and govern your secrets and non-human identities at scale with Synthara's cloud platform integrated with your favorite DevOps tools for secure workflows.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Button size="lg" asChild variant="default" className="px-8 py-4 text-lg font-semibold">
-                    <Link href={user ? "/dashboard/generate" : "/auth"}>
-                      Start for Free →
-                    </Link>
-                  </Button>
-                </div>
+        {/* Hero Section with Premium Background */}
+        <section className="relative py-20 sm:py-28 md:py-32 lg:py-40 overflow-hidden">
+          {/* Animated Background Blobs */}
+          <div className="absolute top-0 -left-4 w-72 h-72 bg-primary/30 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse-glow" />
+          <div className="absolute top-0 -right-4 w-72 h-72 bg-purple-500/30 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse-glow" style={{ animationDelay: '2s' }} />
+          <div className="absolute -bottom-8 left-20 w-72 h-72 bg-blue-400/30 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse-glow" style={{ animationDelay: '4s' }} />
+
+          <div className="absolute inset-0 bg-grid-black dark:bg-grid-white opacity-[0.2]" />
+
+          <div className="container-responsive relative z-10">
+            <div className="flex flex-col items-center text-center max-w-4xl mx-auto">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold mb-8 animate-bounce">
+                <Sparkles className="w-3 h-3" />
+                <span>Next Generation AI Scraper</span>
               </div>
 
-              {/* Right Content - CTA */}
-              <div className="relative">
-                <div className="relative rounded-2xl overflow-hidden border p-8 text-center bg-card">
-                  <div className="space-y-6">
-                    <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto bg-muted">
-                      <Sparkles className="w-8 h-8" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-foreground">Ready to Get Started?</h3>
-                    <p className="text-muted-foreground">
-                      Join thousands of developers and data scientists who trust Synthara for their synthetic data needs.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                      <Button asChild size="lg" variant="default">
-                        <Link href="/auth">Get Started Free</Link>
-                      </Button>
-                      <Button asChild variant="outline" size="lg">
-                        <Link href="/help">Learn More</Link>
-                      </Button>
-                    </div>
-                  </div>
+              <h1 className="font-headline text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black mb-8 leading-[1.1] tracking-tight">
+                <span className="text-foreground">Turn Web Noise into </span>
+                <span className="text-gradient-primary">Structured Intelligence</span>
+              </h1>
+
+              <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground mb-12 max-w-2xl leading-relaxed">
+                Transform any natural language query into high-quality, structured CSV datasets.
+                Synthara automates search, scraping, and AI-driven cleaning at scale.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-6 w-full sm:w-auto">
+                <Button size="lg" asChild className="h-14 px-10 text-lg font-bold rounded-full shadow-lg shadow-primary/20 hover:scale-105 transition-transform">
+                  <Link href={user ? "/dashboard/generate" : "/auth"}>
+                    Start Generating Free <ArrowRight className="ml-2 w-5 h-5" />
+                  </Link>
+                </Button>
+                <Button size="lg" variant="outline" asChild className="h-14 px-10 text-lg font-bold rounded-full border-2 hover:bg-secondary">
+                  <Link href="/help">View Documentation</Link>
+                </Button>
+              </div>
+
+              {/* Trust Badge / Proof */}
+              <div className="mt-20 pt-8 border-t border-border/50 w-full">
+                <p className="text-sm font-semibold uppercase tracking-widest text-muted-foreground/60 mb-8">Powering modern data workflows</p>
+                <div className="flex flex-wrap justify-center gap-8 md:gap-16 opacity-50 grayscale transition-all hover:grayscale-0">
+                  <div className="flex items-center gap-2 font-bold text-xl"><Zap className="w-6 h-6 border-none" /> FAST</div>
+                  <div className="flex items-center gap-2 font-bold text-xl"><ShieldCheck className="w-6 h-6 border-none" /> SECURE</div>
+                  <div className="flex items-center gap-2 font-bold text-xl"><Database className="w-6 h-6 border-none" /> ACCURATE</div>
                 </div>
               </div>
             </div>
@@ -165,26 +161,26 @@ export default async function HomePage() {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="py-16 md:py-24">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12 md:mb-16">
-              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-foreground">
-                Powerful Platform Features
+        <section id="features" className="py-24 md:py-32 bg-secondary/30">
+          <div className="container-responsive">
+            <div className="text-center mb-16 md:mb-24">
+              <h2 className="font-headline text-4xl sm:text-5xl md:text-6xl font-black mb-6 text-foreground tracking-tight">
+                Enterprise-Grade <span className="text-primary">Extraction</span>
               </h2>
-              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-                Everything you need to generate, manage, and deploy synthetic data at scale with enterprise-grade security and performance.
+              <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+                Everything you need to generate, manage, and deploy synthetic data with state-of-the-art AI.
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {features.map((feature) => (
-                <div key={feature.name} className="group rounded-xl p-6 border hover:bg-muted transition-colors">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 rounded-lg bg-muted">
-                      <feature.icon className="w-6 h-6" />
+                <div key={feature.name} className="modern-card group p-8 hover:-translate-y-2 transition-all">
+                  <div className="flex flex-col items-start gap-6">
+                    <div className="p-4 rounded-2xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors shadow-inner">
+                      <feature.icon className="w-8 h-8" />
                     </div>
                     <div>
-                      <h3 className="font-headline text-lg font-semibold mb-2 text-foreground">{feature.name}</h3>
-                      <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
+                      <h3 className="font-headline text-2xl font-bold mb-3 text-foreground tracking-tight">{feature.name}</h3>
+                      <p className="text-muted-foreground text-base leading-relaxed">{feature.description}</p>
                     </div>
                   </div>
                 </div>
@@ -194,25 +190,32 @@ export default async function HomePage() {
         </section>
 
         {/* Solutions Section */}
-        <section id="solutions" className="py-16 md:py-24">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12 md:mb-16">
-              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-foreground">
-                Built For Every Use Case
-              </h2>
-              <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-                From AI training to compliance testing, Synthara adapts to your specific needs with intelligent data generation.
-              </p>
+        <section id="solutions" className="py-24 md:py-32">
+          <div className="container-responsive">
+            <div className="flex flex-col lg:flex-row justify-between items-end gap-8 mb-16 md:mb-24">
+              <div className="max-w-2xl">
+                <h2 className="font-headline text-4xl sm:text-5xl md:text-6xl font-black mb-6 text-foreground tracking-tight">
+                  Tailored Intelligence for <span className="text-gradient-purple">Every Industry</span>
+                </h2>
+                <p className="text-xl text-muted-foreground leading-relaxed">
+                  Synthara adapts to your specific needs with industry-leading accuracy and performance.
+                </p>
+              </div>
+              <Button size="lg" variant="link" className="text-primary font-bold group">
+                Explore All Use Cases <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </Button>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
               {useCases.map((useCase) => (
-                <div key={useCase.title} className="rounded-xl p-6 border">
-                  <h3 className="font-headline text-xl font-semibold mb-4 text-foreground">{useCase.title}</h3>
-                  <ul className="space-y-3">
+                <div key={useCase.title} className="glass-modern p-10 hover:border-primary/50 transition-colors">
+                  <h3 className="font-headline text-2xl font-bold mb-6 text-foreground tracking-tight">{useCase.title}</h3>
+                  <ul className="space-y-4">
                     {useCase.items.map((item, index) => (
                       <li key={index} className="flex items-start">
-                        <CheckCircle className="w-5 h-5 mr-3 mt-0.5 shrink-0" />
-                        <span className="text-muted-foreground text-sm">{item}</span>
+                        <div className="mt-1 mr-4 rounded-full p-1 bg-primary/20 text-primary">
+                          <CheckCircle className="w-4 h-4 shrink-0" />
+                        </div>
+                        <span className="text-muted-foreground text-base">{item}</span>
                       </li>
                     ))}
                   </ul>
@@ -248,27 +251,35 @@ export default async function HomePage() {
         </section>
 
         {/* Team Section */}
-        <section id="team" className="py-16 md:py-24">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-8">
-              <div className="inline-block rounded-full px-4 py-2 mb-4 border">
-                <span className="font-semibold text-sm">AIML • Government Engineering College Challakere</span>
+        <section id="team" className="py-24 md:py-32 bg-secondary/30 relative overflow-hidden">
+          <div className="absolute inset-0 bg-grid-black opacity-[0.03]" />
+          <div className="container-responsive relative z-10">
+            <div className="text-center mb-16 md:mb-24">
+              <div className="inline-block rounded-full px-6 py-2 mb-6 bg-background border shadow-sm">
+                <span className="font-bold text-sm tracking-widest text-primary uppercase">Meet The Visionaries</span>
               </div>
-              <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold text-foreground mb-6">
-                Meet the Team
+              <h2 className="font-headline text-4xl sm:text-5xl md:text-6xl font-black text-foreground mb-6 tracking-tight">
+                Engineering <span className="text-primary">Future</span>
               </h2>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Built by passionate students dedicated to advancing AI and synthetic data technology.
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+                Passionate student developers from Govt. Eng. College Challakere (AIML) pushing the boundaries of AI.
               </p>
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
               {teamMembers.map((member) => (
-                <div key={member.name} className="text-center rounded-xl p-6 border hover:bg-muted transition-colors">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center border mx-auto mb-4">
-                    <div className="text-2xl">👤</div>
+                <div key={member.name} className="modern-card group p-8 flex flex-col items-center text-center">
+                  <div className="relative mb-8">
+                    <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl group-hover:blur-2xl transition-all" />
+                    <Avatar className="h-32 w-32 border-4 border-background shadow-xl">
+                      <AvatarImage src="" alt={member.name} />
+                      <AvatarFallback className="bg-muted text-primary text-3xl font-black">
+                        {member.name.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
                   </div>
-                  <h3 className="font-headline text-lg font-semibold text-foreground mb-1">{member.name}</h3>
-                  <p className="text-sm font-medium text-muted-foreground">{member.role}</p>
+                  <h3 className="font-headline text-2xl font-bold text-foreground mb-2 tracking-tight">{member.name}</h3>
+                  <p className="text-primary font-bold text-sm mb-4 uppercase tracking-tighter">{member.role}</p>
+                  <p className="text-muted-foreground text-sm leading-relaxed">{member.college}</p>
                 </div>
               ))}
             </div>
@@ -276,26 +287,25 @@ export default async function HomePage() {
         </section>
 
         {/* Call to Action Section */}
-        <section className="py-20 md:py-32 text-center border-t">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="font-headline text-3xl sm:text-4xl md:text-5xl font-bold mb-6 text-foreground">
-              Ready to Transform Your Data Strategy?
+        <section className="py-32 md:py-48 text-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-primary/5 -z-10" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-primary/20 rounded-full blur-[120px] -z-10 opacity-30" />
+
+          <div className="container-responsive">
+            <h2 className="font-headline text-5xl sm:text-6xl md:text-7xl font-black mb-8 text-foreground tracking-tight">
+              Ready to Scale Your <span className="text-gradient-primary">Intelligence?</span>
             </h2>
-            <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
-              Join thousands of innovators building the future with Synthara AI. Get started today and experience the next generation of synthetic data.
+            <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-3xl mx-auto leading-relaxed font-medium">
+              Join the innovators building the future with Synthara. Get started today and experience the next generation of data scraping.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              {user ? (
-                <Button size="lg" asChild variant="default" className="px-8 py-4 text-lg font-semibold">
-                  <Link href="/dashboard">Access Your Dashboard</Link>
-                </Button>
-              ) : (
-                <Button size="lg" asChild variant="default" className="px-8 py-4 text-lg font-semibold">
-                  <Link href="/auth">Get Started for Free</Link>
-                </Button>
-              )}
-              <Button size="lg" variant="outline" asChild className="px-8 py-4 text-lg font-semibold">
-                <Link href="/help">Schedule Demo</Link>
+            <div className="flex flex-col sm:flex-row gap-6 justify-center">
+              <Button size="lg" asChild className="h-14 px-12 text-lg font-bold rounded-full shadow-xl shadow-primary/25 hover:scale-105 transition-transform">
+                <Link href={user ? "/dashboard" : "/auth"}>
+                  {user ? "Go to Dashboard" : "Start for Free"}
+                </Link>
+              </Button>
+              <Button size="lg" variant="outline" asChild className="h-14 px-12 text-lg font-bold rounded-full border-2 hover:bg-secondary">
+                <Link href="/help">Schedule a Demo</Link>
               </Button>
             </div>
           </div>
@@ -303,48 +313,61 @@ export default async function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div className="md:col-span-1">
-              <Link href="/" className="inline-block mb-4">
-                <SyntharaLogo className="h-8 w-auto text-foreground" />
+      <footer className="border-t bg-background pt-24 pb-12">
+        <div className="container-responsive">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-16 mb-24">
+            <div className="space-y-8">
+              <Link href="/" className="inline-block transform hover:scale-105 transition-transform">
+                <SyntharaLogo className="h-10 w-auto text-foreground" />
               </Link>
-              <p className="text-muted-foreground text-sm mb-4">
-                Generate Synthetic Data with Intelligence.
+              <p className="text-muted-foreground text-lg leading-relaxed max-w-xs">
+                Empowering teams with high-fidelity synthetic data and intelligent web extraction.
               </p>
-              <p className="text-muted-foreground text-xs">
-                © 2024 Synthara AI. All rights reserved.
-              </p>
+              <div className="flex gap-4">
+                {/* Social links could go here */}
+              </div>
             </div>
 
-            <div>
-              <h3 className="font-semibold text-foreground mb-4">Platform</h3>
-              <ul className="space-y-2">
-                <li><Link href="#features" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Features</Link></li>
-                <li><Link href="/dashboard" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Dashboard</Link></li>
-                <li><Link href="/dashboard/generate" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Data Generation</Link></li>
-                <li><Link href="/dashboard/analysis" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Analytics</Link></li>
-              </ul>
-            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:col-span-3 gap-12">
+              <div>
+                <h3 className="font-bold text-foreground text-sm uppercase tracking-widest mb-8">Platform</h3>
+                <ul className="space-y-4">
+                  <li><Link href="#features" className="text-muted-foreground hover:text-primary transition-colors">Features</Link></li>
+                  <li><Link href="/dashboard" className="text-muted-foreground hover:text-primary transition-colors">Dashboard</Link></li>
+                  <li><Link href="/dashboard/generate" className="text-muted-foreground hover:text-primary transition-colors">Data Generation</Link></li>
+                  <li><Link href="/dashboard/analysis" className="text-muted-foreground hover:text-primary transition-colors">Analytics</Link></li>
+                </ul>
+              </div>
 
-            <div>
-              <h3 className="font-semibold text-foreground mb-4">Resources</h3>
-              <ul className="space-y-2">
-                <li><Link href="/help" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Documentation</Link></li>
-                <li><Link href="/help" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Help Center</Link></li>
-                <li><Link href="#team" className="text-muted-foreground hover:text-foreground text-sm transition-colors">About Team</Link></li>
-                <li><Link href="/help" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Contact</Link></li>
-              </ul>
-            </div>
+              <div>
+                <h3 className="font-bold text-foreground text-sm uppercase tracking-widest mb-8">Resources</h3>
+                <ul className="space-y-4">
+                  <li><Link href="/help" className="text-muted-foreground hover:text-primary transition-colors">Documentation</Link></li>
+                  <li><Link href="/help" className="text-muted-foreground hover:text-primary transition-colors">Guides</Link></li>
+                  <li><Link href="#team" className="text-muted-foreground hover:text-primary transition-colors">Community</Link></li>
+                  <li><Link href="/help" className="text-muted-foreground hover:text-primary transition-colors">Support</Link></li>
+                </ul>
+              </div>
 
-            <div>
-              <h3 className="font-semibold text-foreground mb-4">Legal</h3>
-              <ul className="space-y-2">
-                <li><Link href="#" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Privacy Policy</Link></li>
-                <li><Link href="#" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Terms of Service</Link></li>
-                <li><Link href="#" className="text-muted-foreground hover:text-foreground text-sm transition-colors">Security</Link></li>
-              </ul>
+              <div>
+                <h3 className="font-bold text-foreground text-sm uppercase tracking-widest mb-8">Company</h3>
+                <ul className="space-y-4">
+                  <li><Link href="#" className="text-muted-foreground hover:text-primary transition-colors">About Us</Link></li>
+                  <li><Link href="#" className="text-muted-foreground hover:text-primary transition-colors">Privacy</Link></li>
+                  <li><Link href="#" className="text-muted-foreground hover:text-primary transition-colors">Terms</Link></li>
+                  <li><Link href="#" className="text-muted-foreground hover:text-primary transition-colors">Contact</Link></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-12 border-t flex flex-col md:flex-row justify-between items-center gap-6">
+            <p className="text-muted-foreground text-sm">
+              © 2024 Synthara AI. All rights reserved.
+            </p>
+            <div className="flex gap-8">
+              <Link href="#" className="text-xs text-muted-foreground hover:text-foreground">Status</Link>
+              <Link href="#" className="text-xs text-muted-foreground hover:text-foreground">Incident History</Link>
             </div>
           </div>
         </div>

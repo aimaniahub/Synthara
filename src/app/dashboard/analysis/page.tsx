@@ -1,29 +1,40 @@
 'use client';
 
 import React, { useState, useRef, useEffect, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 
-import { 
-  BarChart3, 
-  Database, 
-  Brain, 
+import {
+  BarChart3,
+  Database,
+  DatabaseZap,
+  Brain,
   FileText,
   AlertCircle,
+  AlertTriangle,
+  CheckCircle,
   Loader2,
   Sparkles
 } from 'lucide-react';
 import { DatasetSelector } from './components/DatasetSelector';
 import { StatisticalSummary } from './components/StatisticalSummary';
 
-import { AIInsights } from './components/AIInsights';
-import { ExportButton } from './components/ExportButton';
 import { type AnalysisResult, type AnalysisProgress, analysisService } from '@/services/analysis-service';
 import { AnalysisProgress as AnalysisProgressComponent } from './components/AnalysisProgress';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+
+const AIInsights = dynamic(() => import('./components/AIInsights').then(m => m.AIInsights), {
+  ssr: false,
+});
+
+const ExportButton = dynamic(() => import('./components/ExportButton').then(m => m.ExportButton), {
+  ssr: false,
+});
 
 export default function DataAnalysisPage() {
   const [selectedData, setSelectedData] = useState<Record<string, any>[]>([]);
@@ -71,7 +82,7 @@ export default function DataAnalysisPage() {
         setAnalysisResult(saved.analysisResult || null);
         setActiveTab(saved.activeTab || 'overview');
       }
-    } catch {}
+    } catch { }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -79,13 +90,13 @@ export default function DataAnalysisPage() {
     try {
       const payload = JSON.stringify({ selectedData, datasetMetadata, analysisResult, activeTab });
       if (typeof window !== 'undefined') sessionStorage.setItem(CACHE_KEY, payload);
-    } catch {}
+    } catch { }
   }, [selectedData, datasetMetadata, analysisResult, activeTab]);
 
   const handleResetPage = () => {
     try {
       if (typeof window !== 'undefined') sessionStorage.removeItem(CACHE_KEY);
-    } catch {}
+    } catch { }
     setSelectedData([]);
     setDatasetMetadata(null);
     setAnalysisResult(null);
@@ -116,9 +127,9 @@ export default function DataAnalysisPage() {
 
     // Auto-scroll to analysis section
     setTimeout(() => {
-      analysisSectionRef.current?.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
+      analysisSectionRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
       });
     }, 100);
 
@@ -133,7 +144,7 @@ export default function DataAnalysisPage() {
       // Update progress through stages
       for (const stage of stages) {
         setAnalysisProgress(stage);
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate processing time
+        await new Promise(resolve => setTimeout(resolve, 7000)); // Simulate processing time (7s per step)
       }
 
       // Use server-side API for analysis
@@ -156,7 +167,7 @@ export default function DataAnalysisPage() {
       }
 
       const result = await response.json();
-      
+
       if (result.success) {
         setAnalysisResult(result.analysis);
         setAnalysisProgress({
@@ -367,7 +378,7 @@ export default function DataAnalysisPage() {
         } else {
           setColumnCleaningSummaries([]);
         }
-      } catch {}
+      } catch { }
       setCleaningSteps((s) => s.map((step, i) => i === 3 ? { ...step, status: 'done' } : step));
       setCleaningMessage(null);
     } catch (e: any) {
@@ -429,7 +440,7 @@ export default function DataAnalysisPage() {
             setAnalysisResult(result.analysis);
           }
         }
-      } catch {}
+      } catch { }
       setCleanPreviewOpen(false);
     })();
   }
@@ -465,7 +476,7 @@ export default function DataAnalysisPage() {
             setAnalysisResult(result.analysis);
           }
         }
-      } catch {}
+      } catch { }
       if (oldQuality !== null && newQuality !== null) {
         toast({ title: 'Saved', description: `Cleaned data appended. Data quality improved from ${oldQuality.toFixed(1)}% to ${newQuality.toFixed(1)}%.` });
       } else {
@@ -481,43 +492,15 @@ export default function DataAnalysisPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground flex items-center gap-2">
-            <Brain className="h-6 w-6" />
-            Data Analysis
-          </h1>
-          <div className="flex items-center gap-2">
-            {analysisResult && datasetMetadata && (
-              <ExportButton
-                datasetName={datasetMetadata.name}
-                profile={analysisResult.profile}
-                insights={analysisResult.aiInsights ?? { columnInsights: [], deepInsights: null }}
-                rawData={selectedData}
-                className="hidden sm:inline-flex"
-              />
-            )}
-            <Button variant="outline" size="sm" onClick={handleResetPage}>
-              Reset
-            </Button>
-          </div>
-        </div>
-        <div className="text-sm text-muted-foreground flex items-center gap-2">
-          <Sparkles className="h-4 w-4" />
-          <span>Upload or choose a dataset, then run automated profiling and AI insights.</span>
-        </div>
-      </div>
-
+    <div className="space-y-10 w-full max-w-[1600px] mx-auto pt-4 pb-12">
       <DatasetSelector
         onDatasetSelect={handleDatasetSelect}
         onAnalysisStart={handleAnalysisStart}
       />
 
-      <div ref={analysisSectionRef} className="space-y-4">
+      <div ref={analysisSectionRef} className="space-y-8">
         {analysisError && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="rounded-2xl border-destructive/50 animate-in fade-in slide-in-from-top-2">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{analysisError}</AlertDescription>
           </Alert>
@@ -527,88 +510,132 @@ export default function DataAnalysisPage() {
           <AnalysisProgressComponent progress={analysisProgress} />
         )}
 
-        {hasData && !isAnalyzing && !hasAnalysis && (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              Click "Analyze Dataset" in the selector above to start profiling.
-            </CardContent>
-          </Card>
-        )}
-
+        {/* Results Area (Triggered only after analysis) */}
         {hasAnalysis && analysisResult && (
-          <Tabs
-            value={activeTab}
-            onValueChange={(value) => setActiveTab(value as 'overview' | 'profiling' | 'insights')}
-            className="space-y-4"
-          >
-            <TabsList>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="profiling">Profiling</TabsTrigger>
-              <TabsTrigger value="insights">AI Insights</TabsTrigger>
-            </TabsList>
+          <div className="animate-in fade-in zoom-in-95 duration-700 space-y-8">
+            {/* Analysis Actions & Export */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-primary/5 border border-primary/10">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  <CheckCircle className="size-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Synthesis Complete</h3>
+                  <p className="text-[10px] text-muted-foreground font-medium">Full intelligence report generated for protocol execution.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {datasetMetadata && (
+                  <ExportButton
+                    datasetName={datasetMetadata.name}
+                    profile={analysisResult.profile}
+                    insights={analysisResult.aiInsights ?? { columnInsights: [], deepInsights: null }}
+                    rawData={selectedData}
+                    className="h-10 px-4 rounded-xl text-xs font-bold shadow-lg shadow-primary/10"
+                  />
+                )}
+                <Button
+                  variant="outline"
+                  onClick={handleResetPage}
+                  className="h-10 px-4 rounded-xl text-xs font-bold border-border/50"
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
 
-            <TabsContent value="overview">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Database className="h-5 w-5" />
-                    Dataset Overview
-                  </CardTitle>
-                  <CardDescription>
-                    Automatic summary of structure and quality for {datasetMetadata?.name || 'your dataset'}.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <StatisticalSummary profile={analysisResult.profile} />
-                </CardContent>
-              </Card>
-            </TabsContent>
+            <Tabs defaultValue="intelligence" className="w-full space-y-8">
+              <div className="flex items-center justify-center">
+                <TabsList className="bg-secondary/20 p-1 rounded-xl border border-border/30 h-11">
+                  <TabsTrigger value="intelligence" className="rounded-lg px-6 text-xs font-bold uppercase tracking-widest data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    Intelligence
+                  </TabsTrigger>
+                  <TabsTrigger value="relationships" className="rounded-lg px-6 text-xs font-bold uppercase tracking-widest data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    Relationships
+                  </TabsTrigger>
+                  <TabsTrigger value="profiling" className="rounded-lg px-6 text-xs font-bold uppercase tracking-widest data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                    Profiling
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
-            <TabsContent value="profiling">
-              <Card>
-                <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <BarChart3 className="h-5 w-5" />
-                      Data Profiling
-                    </CardTitle>
-                    <CardDescription>
-                      Detailed column statistics and quality checks. Use Smart Fix to auto-clean common issues.
-                    </CardDescription>
+              {/* Intelligence Tab */}
+              <TabsContent value="intelligence" className="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                {/* Metric Ribbon */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: "Total Rows", value: analysisResult.profile.totalRows.toLocaleString(), icon: DatabaseZap, color: "text-blue-500" },
+                    { label: "Total Columns", value: analysisResult.profile.totalColumns, icon: BarChart3, color: "text-emerald-500" },
+                    { label: "Data Quality", value: `${analysisResult.profile.overallQuality.toFixed(1)}%`, icon: CheckCircle, color: "text-primary" },
+                    { label: "Gaps Found", value: analysisResult.profile.missingDataPattern.length, icon: AlertTriangle, color: "text-orange-500" }
+                  ].map((stat, i) => (
+                    <div key={i} className="modern-card p-4 flex items-center justify-between group hover:border-primary/20 transition-all border-none shadow-sm">
+                      <div className="space-y-0.5">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50">{stat.label}</p>
+                        <p className="text-xl font-black text-foreground tracking-tight">{stat.value}</p>
+                      </div>
+                      <div className={`p-2.5 rounded-lg bg-secondary/50 ${stat.color} group-hover:scale-105 transition-transform`}>
+                        <stat.icon className="size-4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 ml-1">
+                    <Sparkles className="size-3.5 text-primary" />
+                    <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Discovery Insights</h2>
+                  </div>
+                  <AIInsights
+                    data={selectedData}
+                    profile={analysisResult.profile}
+                    aiInsights={analysisResult.aiInsights}
+                    view="summary"
+                    className="p-0 border-none shadow-none bg-transparent"
+                  />
+                </div>
+              </TabsContent>
+
+              {/* Relationships Tab */}
+              <TabsContent value="relationships" className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="flex items-center gap-2 ml-1">
+                  <Brain className="size-3.5 text-blue-500" />
+                  <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Network Analysis</h2>
+                </div>
+                <AIInsights
+                  data={selectedData}
+                  profile={analysisResult.profile}
+                  aiInsights={analysisResult.aiInsights}
+                  view="correlations"
+                  className="p-0 border-none shadow-none bg-transparent"
+                />
+              </TabsContent>
+
+              {/* Profiling Tab */}
+              <TabsContent value="profiling" className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                <div className="flex items-center justify-between gap-2 ml-1">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="size-3.5 text-emerald-500" />
+                    <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Feature Distribution</h2>
                   </div>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     onClick={handleCleanFromProfiling}
-                    disabled={isCleaning || !hasAnalysis || !hasData}
+                    disabled={isCleaning}
+                    className="h-8 px-4 rounded-xl text-[10px] font-bold uppercase tracking-wider text-primary hover:bg-primary/5 border border-primary/10 shadow-sm"
                   >
-                    {isCleaning ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Cleaning…
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        <Sparkles className="h-4 w-4" />
-                        Smart Fix (AI Clean)
-                      </span>
-                    )}
+                    {isCleaning ? <Loader2 className="size-3 animate-spin mr-2" /> : <Sparkles className="size-3 mr-2" />}
+                    Optimize Schema
                   </Button>
-                </CardHeader>
-                <CardContent>
-                  <StatisticalSummary profile={analysisResult.profile} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="insights">
-              <AIInsights
-                data={selectedData}
-                profile={analysisResult.profile}
-                aiInsights={analysisResult.aiInsights}
-              />
-            </TabsContent>
-          </Tabs>
+                </div>
+                <StatisticalSummary
+                  profile={analysisResult.profile}
+                  className="space-y-4"
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
         )}
       </div>
 
@@ -755,6 +782,6 @@ export default function DataAnalysisPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }

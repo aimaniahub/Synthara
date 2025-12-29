@@ -283,12 +283,31 @@ Sample rows (first ${limited.length}): ${JSON.stringify(limited).slice(0, 11000)
     try {
       const gemini = new GeminiService();
       const { text } = await gemini.generateContent(prompt);
-      const parsed = JSON.parse(text);
+
+      // Extract JSON from potential markdown code blocks
+      let jsonText = text.trim();
+      if (jsonText.startsWith('```json')) {
+        jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      // Remove trailing commas before closing brackets/braces (common AI mistake)
+      jsonText = jsonText.replace(/,(\s*[\]}])/g, '$1').trim();
+
+      // Try to find JSON object if still not valid
+      if (!jsonText.startsWith('{')) {
+        const match = jsonText.match(/\{[\s\S]*\}/);
+        if (match) {
+          jsonText = match[0];
+        }
+      }
+
+      const parsed = JSON.parse(jsonText);
       if (parsed && typeof parsed === 'object' && Array.isArray(parsed.columns)) {
         plan = parsed as CleaningPlan;
       }
-    } catch (err) {
-      console.error('[SmartFix] Gemini planning failed, falling back to default plan:', err);
+    } catch (err: any) {
+      console.error('[SmartFix] Gemini planning failed, falling back to default plan:', err?.message || err);
     }
 
     if (!plan) plan = buildDefaultPlan(schema, target);

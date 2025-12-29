@@ -6,6 +6,8 @@ import { writeFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 
 import { join } from 'path';
 import { SimpleAI } from '@/ai/simple-ai';
 import { crawl4aiService } from '@/services/crawl4ai-service';
+import { inferSchema } from '@/lib/data-processing/schema-inference';
+import { generateCSV } from '@/lib/data-processing/csv-generator';
 
 // Input validation schema
 const IntelligentWebScrapingInputSchema = z.object({
@@ -409,43 +411,7 @@ export async function intelligentWebScraping(
       };
     }
 
-    // Normalize rows to always include a string `source` column before inferring schema/keys
-    allRows = allRows.map((row: Record<string, any>) => {
-      const out: Record<string, any> = { ...(row || {}) };
-      if (out.source === undefined || out.source === null) {
-        if (typeof out.url === 'string' && out.url.trim() !== '') {
-          out.source = out.url;
-        } else {
-          out.source = '';
-        }
-      }
-      return out;
-    });
-
-    let keys: string[] = Array.from(new Set(allRows.flatMap(row => Object.keys(row || {}))));
-    // Ensure `source` column is the last column if present
-    if (keys.includes('source')) {
-      keys = keys.filter(k => k !== 'source');
-      keys.push('source');
-    }
-    function inferTypeLocal(values: any[]): string {
-      const nonNull = values.filter((v: any) => v !== null && v !== undefined);
-      if (nonNull.length === 0) return 'string';
-      const boolCount = nonNull.filter(
-        (v: any) => typeof v === 'boolean' || v === 'true' || v === 'false'
-      ).length;
-      if (boolCount === nonNull.length) return 'boolean';
-      const numCount = nonNull.filter(
-        (v: any) =>
-          typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))
-      ).length;
-      if (numCount === nonNull.length) return 'number';
-      const dateCount = nonNull.filter((v: any) => !isNaN(new Date(v as any).getTime())).length;
-      if (dateCount === nonNull.length) return 'date';
-      return 'string';
-    }
-
-    const schema = keys.map(k => ({ name: k, type: inferTypeLocal(allRows.map(r => (r ? r[k] : undefined))) }));
+    const schema = inferSchema(allRows);
 
     const normalizedRows = allRows.map((row: Record<string, any>) => {
       const obj: Record<string, any> = {};
@@ -1494,9 +1460,9 @@ async function analyzeScrapedFileWithGemini(
 
   const schema: Array<{ name: string; type: string }> = Array.isArray(dataset.schema)
     ? dataset.schema.map(col => ({
-        name: String(col.name),
-        type: String(col.type || 'string'),
-      }))
+      name: String(col.name),
+      type: String(col.type || 'string'),
+    }))
     : [];
 
   const rawRows: Array<Record<string, any>> = Array.isArray(dataset.data)
@@ -1514,37 +1480,5 @@ async function analyzeScrapedFileWithGemini(
     rawAiFilePath,
     modelId,
   };
-}
-
-/**
- * Generate CSV from structured data
- */
-function generateCSV(data: any[], schema: Array<{ name: string; type: string }>): string {
-  if (!data || data.length === 0) {
-    return '';
-  }
-
-  // Create header row
-  const headers = schema.map(col => col.name);
-  const csvRows = [headers.join(',')];
-
-  // Create data rows
-  for (const row of data) {
-    const values = headers.map(header => {
-      const value = row[header];
-      // Escape CSV values (handle quotes and commas)
-      if (value === null || value === undefined) {
-        return '';
-      }
-      const stringValue = String(value);
-      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
-        return `"${stringValue.replace(/"/g, '""')}"`;
-      }
-      return stringValue;
-    });
-    csvRows.push(values.join(','));
-  }
-
-  return csvRows.join('\n');
 }
 

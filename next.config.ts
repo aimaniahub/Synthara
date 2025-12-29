@@ -3,10 +3,10 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   // Build configuration
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
 
   // Image optimization for Vercel (enable optimization)
@@ -48,6 +48,7 @@ const nextConfig: NextConfig = {
       '@radix-ui/react-toast',
       '@radix-ui/react-tooltip',
     ],
+    // Note: optimizeCss requires critters and is not compatible with Turbopack
   },
 
   // Server external packages for Vercel
@@ -70,7 +71,7 @@ const nextConfig: NextConfig = {
 
 
   // Webpack optimizations
-  webpack: (config, { isServer, webpack }) => {
+  webpack: (config, { dev, isServer, webpack }) => {
     // Fix for Supabase module resolution
     config.resolve.alias = {
       ...config.resolve.alias,
@@ -84,6 +85,50 @@ const nextConfig: NextConfig = {
       /Module not found: Can't resolve 'next\/document'/,
       /Failed to parse source map/,
     ];
+
+    // Client-side bundle splitting for better caching and smaller initial payloads
+    if (!dev && !isServer) {
+      config.optimization = {
+        ...config.optimization,
+        moduleIds: 'deterministic',
+        splitChunks: {
+          chunks: 'all',
+          cacheGroups: {
+            default: false,
+            vendors: false,
+            // Vendor chunk
+            vendor: {
+              name: 'vendor',
+              chunks: 'all',
+              test: /node_modules/,
+              priority: 20,
+            },
+            // Commons chunk
+            common: {
+              name: 'common',
+              minChunks: 2,
+              chunks: 'all',
+              priority: 10,
+              reuseExistingChunk: true,
+              enforce: true,
+            },
+            // Separate heavy libs
+            nivo: {
+              test: /@nivo/,
+              name: 'nivo',
+              chunks: 'async',
+              priority: 30,
+            },
+            tensorflow: {
+              test: /@tensorflow/,
+              name: 'tensorflow',
+              chunks: 'async',
+              priority: 30,
+            },
+          },
+        },
+      };
+    }
 
     return config;
   },

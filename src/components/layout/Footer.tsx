@@ -3,52 +3,64 @@ import { SyntharaLogo } from '@/components/icons/SyntharaLogo';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
-  const footerNavItems = [
-    { name: 'About', href: '#' },
-    { name: 'Documentation', href: '#' },
-    { name: 'Contact Us', href: '#' },
-    { name: 'Privacy Policy', href: '#' },
-    { name: 'Terms of Service', href: '#' },
-  ];
 
   return (
-    <footer className="bg-card border-t border-border mt-auto">
-      <div className="container mx-auto px-4 py-8 md:py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-          <div>
-            <Link href="/" className="inline-block mb-4">
-              <SyntharaLogo className="h-10 w-auto" />
+    <footer className="border-t bg-background pt-24 pb-12">
+      <div className="container-responsive">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-16 mb-24">
+          <div className="space-y-8">
+            <Link href="/" className="inline-block transform hover:scale-105 transition-transform">
+              <SyntharaLogo className="h-10 w-auto text-foreground" />
             </Link>
-            <p className="text-muted-foreground text-sm">
-              Generate Synthetic Data with Intelligence.
+            <p className="text-muted-foreground text-lg leading-relaxed max-w-xs">
+              Empowering teams with high-fidelity synthetic data and intelligent web extraction.
             </p>
+            <div className="flex gap-4">
+              {/* Social links could go here */}
+            </div>
           </div>
-          <div>
-            <h3 className="font-headline text-lg font-semibold mb-3 text-foreground">Quick Links</h3>
-            <ul className="space-y-2">
-              {footerNavItems.map((item) => (
-                <li key={item.name}>
-                  <Link href={item.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                    {item.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h3 className="font-headline text-lg font-semibold mb-3 text-foreground">Stay Connected</h3>
-            <p className="text-sm text-muted-foreground mb-3">
-              Get the latest updates and news from Synthara AI.
-            </p>
-            {/* Newsletter placeholder - can be implemented later */}
-            {/* <form className="flex gap-2">
-              <Input type="email" placeholder="Enter your email" className="flex-grow" />
-              <Button type="submit" variant="default">Subscribe</Button>
-            </form> */}
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:col-span-3 gap-12">
+            <div>
+              <h3 className="font-bold text-foreground text-sm uppercase tracking-widest mb-8">Platform</h3>
+              <ul className="space-y-4">
+                <li><Link href="/#features" className="text-muted-foreground hover:text-primary transition-colors">Features</Link></li>
+                <li><Link href="/dashboard" className="text-muted-foreground hover:text-primary transition-colors">Dashboard</Link></li>
+                <li><Link href="/dashboard/generate" className="text-muted-foreground hover:text-primary transition-colors">Data Generation</Link></li>
+                <li><Link href="/dashboard/analysis" className="text-muted-foreground hover:text-primary transition-colors">Analytics</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-foreground text-sm uppercase tracking-widest mb-8">Resources</h3>
+              <ul className="space-y-4">
+                <li><Link href="/help" className="text-muted-foreground hover:text-primary transition-colors">Documentation</Link></li>
+                <li><Link href="/help" className="text-muted-foreground hover:text-primary transition-colors">Guides</Link></li>
+                <li><Link href="/#team" className="text-muted-foreground hover:text-primary transition-colors">Community</Link></li>
+                <li><Link href="/help" className="text-muted-foreground hover:text-primary transition-colors">Support</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-foreground text-sm uppercase tracking-widest mb-8">Company</h3>
+              <ul className="space-y-4">
+                <li><Link href="#" className="text-muted-foreground hover:text-primary transition-colors">About Us</Link></li>
+                <li><Link href="#" className="text-muted-foreground hover:text-primary transition-colors">Privacy</Link></li>
+                <li><Link href="#" className="text-muted-foreground hover:text-primary transition-colors">Terms</Link></li>
+                <li><Link href="#" className="text-muted-foreground hover:text-primary transition-colors">Contact</Link></li>
+              </ul>
+            </div>
           </div>
         </div>
-        <div className="border-t border-border pt-8 text-center text-sm text-muted-foreground">
-          <p>&copy; {currentYear} Synthara AI. All rights reserved.</p>
+
+        <div className="pt-12 border-t flex flex-col md:flex-row justify-between items-center gap-6">
+          <p className="text-muted-foreground text-sm">
+            © {currentYear} Synthara AI. All rights reserved.
+          </p>
+          <div className="flex gap-8">
+            <Link href="#" className="text-xs text-muted-foreground hover:text-foreground">Status</Link>
+            <Link href="#" className="text-xs text-muted-foreground hover:text-foreground">Incident History</Link>
+          </div>
         </div>
       </div>
     </footer>

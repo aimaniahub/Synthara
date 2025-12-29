@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { DatasetSelector } from "@/app/dashboard/analysis/components/DatasetSelector";
-import { Download, Play, Pause, Database, Loader2, Sparkles, SlidersHorizontal, Info, BookOpen } from "lucide-react";
+import { Download, Play, Database, Loader2, Sparkles, SlidersHorizontal, Brain, FileText, TrendingUp, CheckCircle } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -52,7 +52,7 @@ export function ModelTrainingClient() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [artifactPathState, setArtifactPathState] = useState<string | null>(null);
   const [showTrainDialog, setShowTrainDialog] = useState<boolean>(false);
-  const [epochEvents, setEpochEvents] = useState<Array<{epoch:number;progress:number;metrics?:Record<string,number>;message?:string;ts:string}>>([]);
+  const [epochEvents, setEpochEvents] = useState<Array<{ epoch: number; progress: number; metrics?: Record<string, number>; message?: string; ts: string }>>([]);
 
   const [metrics, setMetrics] = useState<Record<string, number> | null>(null);
   const [labelCardinality, setLabelCardinality] = useState<number>(0);
@@ -217,7 +217,7 @@ export function ModelTrainingClient() {
               setTrainProgress(last.progress || 0);
             }
           }
-        } catch {}
+        } catch { }
       }, 1000);
 
       statusPollRef.current = setInterval(async () => {
@@ -234,7 +234,7 @@ export function ModelTrainingClient() {
               setIsTraining(false);
             }
           }
-        } catch {}
+        } catch { }
       }, 1500);
 
       return true;
@@ -246,7 +246,7 @@ export function ModelTrainingClient() {
     }
   }, [rows, target, featureColumns, modelType, testSplit, epochs, batchSize, columns, datasetMeta, toast, stopPolling, convertToCSV]);
 
-  const onAnalysisStart = useCallback(() => {}, []);
+  const onAnalysisStart = useCallback(() => { }, []);
 
   const ensureTf = useCallback(async () => {
     if (!tfRef.current) {
@@ -452,7 +452,7 @@ export function ModelTrainingClient() {
             setJobId(createdJobId);
           }
         }
-      } catch {}
+      } catch { }
 
       const { catMaps, labelCats } = buildEncoders(rows, featureColumns, target);
       const { X, y } = vectorize(rows, featureColumns, target, catMaps, labelCats);
@@ -526,7 +526,7 @@ export function ModelTrainingClient() {
                     message: `Epoch ${epoch + 1}/${epochs}`,
                   })
                 });
-              } catch {}
+              } catch { }
             }
           },
         },
@@ -625,11 +625,11 @@ export function ModelTrainingClient() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ jobId: createdJobId, status: "COMPLETED", metrics: outMetrics, artifactPath: null, message: "Training completed (artifact upload failed)" })
             });
-          } catch {}
+          } catch { }
         }
       }
 
-      toast({ title: "Training complete", description: `Metrics: ${Object.entries(outMetrics).map(([k,v]) => `${k}=${v}`).join(", ")}` });
+      toast({ title: "Training complete", description: `Metrics: ${Object.entries(outMetrics).map(([k, v]) => `${k}=${v}`).join(", ")}` });
 
       xTrainT.dispose();
       yTrainT.dispose();
@@ -646,7 +646,7 @@ export function ModelTrainingClient() {
             body: JSON.stringify({ jobId, status: "FAILED", message: e?.message || "Training failed" })
           });
         }
-      } catch {}
+      } catch { }
       toast({ title: "Training failed", description: e?.message || "Unknown error", variant: "destructive" });
     } finally {
       setIsTraining(false);
@@ -837,325 +837,332 @@ export function ModelTrainingClient() {
   return (
     <div className="space-y-6">
       {/* Header with steps */}
-      <div className="rounded-xl border bg-card p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-semibold">Train a Model</h1>
-            <p className="text-muted-foreground mt-1 text-sm">Choose a dataset, configure parameters, and run training with transparent feedback and artifacts.</p>
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="flex items-center gap-3 rounded-lg border p-3">
-            <Database className="h-4 w-4"/>
-            <div className="text-sm">
-              <div className="font-medium">Step 1</div>
-              <div className="text-muted-foreground">Select Dataset</div>
+      <div className="space-y-6">
+        {/* Model Configuration Area */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+          {/* Left Wing: Configuration Dock */}
+          <div className="xl:col-span-4 space-y-6">
+            <div className="glass-modern p-1 overflow-hidden">
+              <div className="px-6 py-4 border-b border-border/30 bg-muted/20">
+                <div className="flex items-center gap-3">
+                  <Database className="size-4 text-primary" />
+                  <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-foreground">Dataset Selection</h3>
+                </div>
+              </div>
+              <div className="p-4">
+                <DatasetSelector onDatasetSelect={onDatasetSelect} onAnalysisStart={onAnalysisStart} />
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-lg border p-3">
-            <SlidersHorizontal className="h-4 w-4"/>
-            <div className="text-sm">
-              <div className="font-medium">Step 2</div>
-              <div className="text-muted-foreground">Configure Training</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-lg border p-3">
-            <Play className="h-4 w-4"/>
-            <div className="text-sm">
-              <div className="font-medium">Step 3</div>
-              <div className="text-muted-foreground">Run & Monitor</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main column */}
-        <div className="lg:col-span-8 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5"/> Select Dataset</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DatasetSelector onDatasetSelect={onDatasetSelect} onAnalysisStart={onAnalysisStart} />
-            </CardContent>
-          </Card>
-
-          {rows.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><SlidersHorizontal className="h-5 w-5"/> Configure Training</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <Label className="flex items-center gap-2"><Sparkles className="h-4 w-4"/> AI Auto-Configure</Label>
-                    <div className="text-xs text-muted-foreground">Automatically selects target, features, and training params based on the dataset.</div>
+            {rows.length > 0 && (
+              <div className="glass-modern p-1 overflow-hidden">
+                <div className="px-6 py-4 border-b border-border/30 bg-muted/20 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <SlidersHorizontal className="size-4 text-blue-500" />
+                    <h3 className="font-black text-[10px] uppercase tracking-[0.2em] text-foreground">Training Parameters</h3>
                   </div>
-                  <Switch checked={autoConfigure} onCheckedChange={setAutoConfigure} />
-                </div>
-
-                {isAutoConfigRunning && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> {autoConfigMsg || "Model is selecting best params for this dataset..."}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Target Column</Label>
-                    <Select value={target} onValueChange={(v) => {
-                      setTarget(v);
-                      const uniq = new Set(rows.map((r) => r[v])).size;
-                      setLabelCardinality(uniq);
-                      setModelType(uniq > 0 && uniq <= 20 ? "classification" : "regression");
-                      setFeatures(columns.filter((c) => c !== v));
-                    }}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select target" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {columns.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="text-xs text-muted-foreground">Unique values: {labelCardinality}</div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Model Type</Label>
-                    <Select value={modelType} onValueChange={(v: ModelType) => setModelType(v)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="classification">Classification</SelectItem>
-                        <SelectItem value="regression">Regression</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Test Split (0.05 - 0.5)</Label>
-                    <Input type="number" min={0.05} max={0.5} step={0.05} value={testSplit}
-                      onChange={(e) => setTestSplit(Math.min(0.5, Math.max(0.05, Number(e.target.value) || 0.2)))} />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-primary/70 uppercase">Auto-Pilot</span>
+                    <Switch checked={autoConfigure} onCheckedChange={setAutoConfigure} className="scale-75" />
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Feature Columns</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {columns.filter((c) => c !== target).map((c) => {
-                      const active = featureColumns.includes(c);
-                      return (
-                        <Button key={c} variant={active ? "default" : "secondary"} size="sm" onClick={() => {
-                          setFeatures((prev) => active ? prev.filter((x) => x !== c) : [...prev, c]);
-                        }}>
-                          {c}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Epochs</Label>
-                    <Input type="number" min={1} max={100} value={epochs} onChange={(e) => setEpochs(Math.min(100, Math.max(1, Number(e.target.value) || 20)))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Batch Size</Label>
-                    <Input type="number" min={8} max={256} step={8} value={batchSize} onChange={(e) => setBatchSize(Math.min(256, Math.max(8, Number(e.target.value) || 32)))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Rows Used</Label>
-                    <div className="h-10 flex items-center"><Badge variant="outline">{rows.length}</Badge></div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col md:flex-row gap-3 pt-2">
-                  <Button className="flex-1" onClick={onRunPipeline} disabled={disableTrain || isTraining || isGeneratingPlan || isCleaning || isPipeline}>
-                    {isPipeline ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Run Full Pipeline
-                  </Button>
-                  <Button variant="secondary" onClick={onCleanDataset} disabled={disableTrain || isTraining || isGeneratingPlan || isCleaning}>
-                    {isCleaning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />} Clean Dataset (AI)
-                  </Button>
-                  <Button variant="outline" onClick={onGeneratePlan} disabled={disableTrain || isTraining || isGeneratingPlan}>
-                    {isGeneratingPlan ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Generate Training Plan
-                  </Button>
-                  <Button variant="outline" disabled={disableTrain || isTraining} onClick={async () => {
-                    await doBackendTrain();
-                  }}>
-                    {isTraining ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />} Start Training
-                  </Button>
-                </div>
-
-                {isTraining && (
-                  <div className="space-y-2">
-                    <Label>Training Progress</Label>
-                    <div className="text-sm font-medium">Metrics</div>
-                    <div className="flex flex-wrap gap-2">
-                      {metrics ? (
-                        Object.entries(metrics).map(([k, v]) => (
-                          <Badge key={k} variant="secondary">{k}: {v}</Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground">Waiting for first metrics...</span>
-                      )}
+                <div className="p-6 space-y-6">
+                  {isAutoConfigRunning && (
+                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 flex items-center gap-3">
+                      <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                      <p className="text-[10px] font-black text-primary uppercase">{autoConfigMsg || "Optimizing Settings..."}</p>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
+                  )}
 
-        {/* Sidebar column */}
-        <div className="lg:col-span-4 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><BookOpen className="h-5 w-5"/> Training Basics</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Target</span> — the column you want to predict.</div></div>
-              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Features</span> — input columns used to learn patterns.</div></div>
-              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Model Type</span> — classification for labels, regression for numbers.</div></div>
-              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Test Split</span> — portion of data held out for evaluation.</div></div>
-              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Epochs</span> — passes over the training data.</div></div>
-              <div className="flex items-start gap-2"><Info className="h-4 w-4 mt-0.5 text-muted-foreground"/><div><span className="font-medium">Batch Size</span> — samples per optimization step.</div></div>
-            </CardContent>
-          </Card>
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground">Predict (Target)</Label>
+                      <Select value={target} onValueChange={(v) => {
+                        setTarget(v);
+                        const uniq = new Set(rows.map((r) => r[v])).size;
+                        setLabelCardinality(uniq);
+                        setModelType(uniq > 0 && uniq <= 20 ? "classification" : "regression");
+                        setFeatures(columns.filter((c) => c !== v));
+                      }}>
+                        <SelectTrigger className="h-10 rounded-xl bg-secondary/30 border-border/50 font-bold">
+                          <SelectValue placeholder="Select target" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {columns.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-          {rows.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Current Settings</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <div className="flex items-center justify-between"><span className="text-muted-foreground">Dataset</span><span>{datasetMeta?.name || '-'}</span></div>
-                <div className="flex items-center justify-between"><span className="text-muted-foreground">Target</span><span>{target || '-'}</span></div>
-                <div className="flex items-center justify-between"><span className="text-muted-foreground">Model</span><span className="capitalize">{modelType}</span></div>
-                <div className="flex items-center justify-between"><span className="text-muted-foreground">Features</span><Badge variant="secondary">{featureColumns.length}</Badge></div>
-                <div className="flex items-center justify-between"><span className="text-muted-foreground">Rows</span><Badge variant="outline">{rows.length}</Badge></div>
-                <Separator className="my-2" />
-                <div className="flex items-center justify-between"><span className="text-muted-foreground">Epochs</span><span>{epochs}</span></div>
-                <div className="flex items-center justify-between"><span className="text-muted-foreground">Batch</span><span>{batchSize}</span></div>
-                <div className="flex items-center justify-between"><span className="text-muted-foreground">Test Split</span><span>{testSplit}</span></div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      <Dialog open={showTrainDialog} onOpenChange={setShowTrainDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Model Training</DialogTitle>
-            <DialogDescription>
-              {isTraining ? "Live epoch logs and progress" : "Training finished. Summary below."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>Progress</Label>
-              <Progress value={trainProgress} />
-            </div>
-            <div>
-              <Label>Live Logs</Label>
-              <ScrollArea className="h-48 w-full rounded-md border p-3">
-                <div className="space-y-2 text-sm">
-                  {epochEvents.length === 0 && <div className="text-muted-foreground">Waiting for first epoch...</div>}
-                  {epochEvents.map((e) => (
-                    <div key={`${e.epoch}-${e.ts}`} className="flex justify-between">
-                      <div>
-                        <span className="font-medium">Epoch {e.epoch}</span>
-                        {e.message ? <span className="text-muted-foreground"> — {e.message}</span> : null}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Model Type</Label>
+                        <Select value={modelType} onValueChange={(v: ModelType) => setModelType(v)} disabled={autoConfigure}>
+                          <SelectTrigger className="h-10 rounded-xl bg-secondary/30 border-border/50 font-bold">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="classification">Classification</SelectItem>
+                            <SelectItem value="regression">Regression</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <div className="text-muted-foreground">{e.progress}%</div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Validation Split</Label>
+                        <Input type="number" min={0.05} max={0.5} step={0.05} value={testSplit}
+                          className="h-10 rounded-xl bg-secondary/30 border-border/50 font-bold"
+                          onChange={(e) => setTestSplit(Math.min(0.5, Math.max(0.05, Number(e.target.value) || 0.2)))} />
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </div>
-
-            {metrics && (
-              <div className="space-y-2">
-                <Separator />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">Parameters</div>
-                    <div className="text-sm text-muted-foreground">Dataset: {datasetMeta?.name || "-"}</div>
-                    <div className="text-sm text-muted-foreground">Model: {modelType}</div>
-                    <div className="text-sm text-muted-foreground">Target: {target || "-"}</div>
-                    <div className="text-sm text-muted-foreground">Features: {featureColumns.join(", ") || "-"}</div>
-                    <div className="text-sm text-muted-foreground">Epochs: {epochs} • Batch: {batchSize} • Test split: {testSplit}</div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-medium">Metrics</div>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(metrics).map(([k, v]) => (
-                        <Badge key={k} variant="secondary">{k}: {v}</Badge>
-                      ))}
+
+                  <div className="space-y-3">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground">Input Columns</Label>
+                    <div className="flex flex-wrap gap-1.5 h-32 overflow-y-auto p-2 rounded-xl bg-secondary/20 border border-border/20 content-start">
+                      {columns.filter((c) => c !== target).map((c) => {
+                        const active = featureColumns.includes(c);
+                        return (
+                          <Badge
+                            key={c}
+                            variant={active ? "default" : "outline"}
+                            className={`cursor-pointer h-7 px-3 text-[10px] font-black uppercase tracking-tight transition-all ${active ? 'bg-primary' : 'bg-transparent text-muted-foreground hover:bg-muted/50'}`}
+                            onClick={() => {
+                              setFeatures((prev) => active ? prev.filter((x) => x !== c) : [...prev, c]);
+                            }}
+                          >
+                            {c}
+                          </Badge>
+                        );
+                      })}
                     </div>
-                    {artifactPathState && (
-                      <div className="text-xs text-muted-foreground break-all">Artifact: {artifactPathState}</div>
-                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground">Training Iterations</Label>
+                      <Input type="number" min={1} max={100} value={epochs} className="h-10 rounded-xl bg-secondary/30 border-border/50 font-bold" onChange={(e) => setEpochs(Math.min(100, Math.max(1, Number(e.target.value) || 20)))} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase text-muted-foreground">Batch Size</Label>
+                      <Input type="number" min={8} max={256} step={8} value={batchSize} className="h-10 rounded-xl bg-secondary/30 border-border/50 font-bold" onChange={(e) => setBatchSize(Math.min(256, Math.max(8, Number(e.target.value) || 32)))} />
+                    </div>
+                  </div>
+
+                  <Separator className="bg-border/20" />
+
+                  <div className="space-y-3">
+                    <Button
+                      className="w-full h-12 rounded-xl font-black bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                      onClick={onRunPipeline}
+                      disabled={disableTrain || isTraining || isGeneratingPlan || isCleaning || isPipeline}
+                    >
+                      {isPipeline ? <Loader2 className="size-4 animate-spin mr-2" /> : <Play className="size-4 mr-2" />}
+                      Start Training
+                    </Button>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-10 rounded-xl font-bold text-[10px] uppercase tracking-widest border border-primary/20 bg-primary/5 text-primary"
+                        onClick={onCleanDataset}
+                        disabled={disableTrain || isTraining || isGeneratingPlan || isCleaning}
+                      >
+                        {isCleaning ? <Loader2 className="size-3 animate-spin mr-2" /> : <Sparkles className="size-3 mr-2" />} Optimize Data
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-10 rounded-xl font-bold text-[10px] uppercase tracking-widest border-border/50"
+                        onClick={onGeneratePlan}
+                        disabled={disableTrain || isTraining || isGeneratingPlan}
+                      >
+                        Training Plan
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button onClick={() => setShowTrainDialog(false)} disabled={isTraining}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>AI Training Plan</DialogTitle>
-            <DialogDescription>{plan ? "Review the proposed parameters and script" : planError || "Unable to load plan"}</DialogDescription>
-          </DialogHeader>
-          {plan && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1 text-sm">
-                  <div className="font-medium">Parameters</div>
-                  <div className="text-muted-foreground">Target: {plan.targetColumn}</div>
-                  <div className="text-muted-foreground">Model: {plan.modelType}</div>
-                  <div className="text-muted-foreground">Features: {plan.features.join(", ")}</div>
-                  <div className="text-muted-foreground">Epochs: {plan.params.epochs} • Batch: {plan.params.batchSize} • Test split: {plan.params.testSplit}</div>
-                </div>
-                <div className="space-y-1 text-sm">
-                  <div className="font-medium">Notes</div>
-                  <div className="text-muted-foreground break-words">{plan.rationale || ""}</div>
+          {/* Right Wing: Training Stage */}
+          <div className="xl:col-span-8 space-y-6">
+            {rows.length === 0 ? (
+              <div className="glass-modern min-h-[600px] flex items-center justify-center border-dashed border-2 bg-transparent text-center border-border/50">
+                <div className="max-w-md space-y-8">
+                  <div className="size-20 rounded-full bg-secondary flex items-center justify-center mx-auto">
+                    <Play className="size-8 text-muted-foreground/40" />
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-2xl font-black text-foreground tracking-tighter">Waiting for Data</h3>
+                    <p className="text-sm text-muted-foreground font-medium leading-relaxed max-w-xs mx-auto">
+                      Select a dataset to begin training your AI model. The system will automatically assist with target selection and parameter optimization.
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Script ({plan.scriptLanguage})</Label>
-                <ScrollArea className="h-64 w-full rounded-md border p-3">
-                  <pre className="font-mono text-xs whitespace-pre-wrap">{plan.script}</pre>
-                </ScrollArea>
+            ) : (
+              <div className="animate-in fade-in duration-500 space-y-6">
+                {/* Real-time Monitor */}
+                <div className="glass-modern p-1 overflow-hidden">
+                  <div className="px-6 py-4 border-b border-border/30 flex items-center justify-between bg-muted/20">
+                    <div className="flex items-center gap-3">
+                      <Brain className="size-5 text-primary" />
+                      <h3 className="font-black text-[10px] uppercase tracking-widest text-foreground">Training Progress</h3>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className={`size-2 rounded-full ${isTraining ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/30'}`} />
+                        <span className="text-[10px] font-black text-muted-foreground uppercase">{isTraining ? 'Training...' : 'Standby'}</span>
+                      </div>
+                      {isTraining && <Badge variant="secondary" className="bg-primary text-primary-foreground font-black text-[10px]">{trainProgress}%</Badge>}
+                    </div>
+                  </div>
+                  <div className="p-8 space-y-8">
+                    {isTraining ? (
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-black uppercase text-muted-foreground tracking-widest">Progress</p>
+                          <p className="text-xl font-black font-mono text-primary">{trainProgress}%</p>
+                        </div>
+                        <Progress value={trainProgress} className="h-3 rounded-full bg-secondary/50" />
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="glass-modern p-6 space-y-4">
+                            <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Training Metrics</p>
+                            <div className="flex flex-wrap gap-2">
+                              {metrics ? (
+                                Object.entries(metrics).map(([k, v]) => (
+                                  <div key={k} className="p-4 rounded-xl bg-secondary/50 border border-border/50 flex-1 min-w-[120px]">
+                                    <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">{k}</p>
+                                    <p className="text-lg font-black text-foreground">{v}</p>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="p-4 rounded-xl border border-dashed text-[10px] font-black text-muted-foreground/30 uppercase italic text-center w-full">Waiting for metrics...</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="glass-modern p-1 overflow-hidden">
+                            <div className="px-4 py-2 border-b border-border/10 bg-muted/10">
+                              <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Training Logs</p>
+                            </div>
+                            <ScrollArea className="h-[120px] p-4 font-mono text-[10px] leading-relaxed">
+                              {epochEvents.map((e, idx) => (
+                                <div key={idx} className="flex gap-4 border-b border-border/5 py-1">
+                                  <span className="text-primary/70">[{new Date(e.ts).toLocaleTimeString()}]</span>
+                                  <span className="font-bold">E:{e.epoch}</span>
+                                  <span className="text-muted-foreground flex-1">{e.message || 'Processing...'}</span>
+                                </div>
+                              ))}
+                            </ScrollArea>
+                          </div>
+                        </div>
+                      </div>
+                    ) : metrics ? (
+                      <div className="glass-modern border-emerald-500/30 bg-emerald-500/5 p-12 text-center space-y-6 animate-in zoom-in-95 duration-500">
+                        <div className="size-20 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
+                          <CheckCircle className="size-10 text-emerald-500" />
+                        </div>
+                        <div className="space-y-3">
+                          <h3 className="text-3xl font-black text-foreground tracking-tighter">Training Completed</h3>
+                          <p className="text-sm text-muted-foreground font-medium max-w-sm mx-auto">The model has finished training successfully. Metrics and model files are ready for review.</p>
+                        </div>
+                        <div className="flex justify-center flex-wrap gap-4 pt-4">
+                          {Object.entries(metrics).map(([k, v]) => (
+                            <div key={k} className="px-8 py-4 rounded-2xl bg-white/5 border border-emerald-500/20">
+                              <p className="text-[10px] font-black text-emerald-600/70 uppercase mb-1">{k}</p>
+                              <p className="text-2xl font-black text-foreground tracking-tight">{v}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {artifactPathState && (
+                          <div className="pt-8">
+                            <Button onClick={downloadWeightsBin} className="bg-emerald-600 hover:bg-emerald-700 h-14 px-10 rounded-xl font-black shadow-2xl shadow-emerald-600/20 transition-all">
+                              <Download className="mr-3 size-5" /> Download Model (.bin)
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-16 text-center space-y-8">
+                        <div className="p-8 rounded-full bg-secondary inline-block">
+                          <Play className="size-12 text-muted-foreground/20" />
+                        </div>
+                        <p className="text-sm text-muted-foreground font-medium max-w-xs mx-auto">Select parameters with the <span className="text-primary font-bold">Configuration</span> and click <span className="text-foreground font-bold">Start Training</span> to begin.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Training Info Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { title: "Predict (Target)", desc: "The column you want the AI to predict.", icon: FileText },
+                    { title: "Model Type", desc: "Classification for categories, Regression for numbers.", icon: Brain },
+                    { title: "Training Status", desc: "Monitored via accuracy and error metrics.", icon: TrendingUp }
+                  ].map((item, i) => (
+                    <div key={i} className="glass-modern p-6 flex gap-4 items-start border-none bg-muted/5 group hover:bg-muted/10 transition-all">
+                      <div className="p-2.5 rounded-xl bg-secondary text-muted-foreground group-hover:text-primary transition-colors">
+                        <item.icon className="size-4" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[11px] font-black text-foreground uppercase tracking-tight">{item.title}</p>
+                        <p className="text-[10px] leading-relaxed text-muted-foreground font-medium">{item.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
+          </div>
+        </div>
+
+        <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
+          <DialogContent className="max-w-3xl glass-modern p-1 overflow-hidden border-none shadow-2xl">
+            <div className="px-8 py-6 border-b border-border/30 bg-muted/20">
+              <DialogTitle className="text-xl font-black text-foreground tracking-tight">Model Training Plan</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground font-medium">Review the proposed model structure and parameters.</DialogDescription>
             </div>
-          )}
-          <DialogFooter>
-            <div className="w-full flex gap-2 justify-end">
-              {!plan && !isGeneratingPlan && (
-                <Button variant="secondary" onClick={() => { setPlanDialogOpen(false); setTimeout(() => { doTrain(); }, 0); }}>
-                  Train with Auto-Config
+            {plan && (
+              <div className="p-8 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-primary uppercase tracking-widest">Proposed Architecture</h4>
+                    <div className="p-6 rounded-2xl bg-secondary/30 space-y-3 border border-border/50">
+                      <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-muted-foreground uppercase tracking-tight">Mode</span><Badge variant="secondary" className="font-black text-primary uppercase">{plan.modelType}</Badge></div>
+                      <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-muted-foreground uppercase tracking-tight">Target</span><span className="text-[11px] font-black">{plan.targetColumn}</span></div>
+                      <div className="flex justify-between items-center"><span className="text-[11px] font-bold text-muted-foreground uppercase tracking-tight">Epochs</span><span className="text-[11px] font-black">{plan.params.epochs}</span></div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Plan Rationale</h4>
+                    <div className="p-6 h-full rounded-2xl bg-secondary/20 border border-border/30">
+                      <p className="text-[11px] text-muted-foreground font-medium leading-relaxed italic">"{plan.rationale || "Automated training strategy optimized for this dataset structure."}"</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground">Internal Logic ({plan.scriptLanguage})</Label>
+                  <ScrollArea className="h-48 rounded-2xl bg-[#0d1117] border border-border/30 p-6">
+                    <pre className="font-mono text-[10px] text-blue-300 leading-relaxed overflow-x-auto whitespace-pre-wrap">{plan.script}</pre>
+                  </ScrollArea>
+                </div>
+              </div>
+            )}
+            <DialogFooter className="px-8 py-6 bg-muted/20 border-t border-border/30">
+              <div className="w-full flex gap-3 justify-end">
+                <Button variant="ghost" onClick={() => setPlanDialogOpen(false)} className="rounded-xl font-bold text-xs uppercase tracking-widest">Decline</Button>
+                <Button variant="outline" onClick={onGeneratePlan} disabled={isGeneratingPlan} className="rounded-xl font-bold text-xs uppercase tracking-widest border-border/50">
+                  {isGeneratingPlan ? <Loader2 className="size-3 animate-spin mr-2" /> : null} New Plan
                 </Button>
-              )}
-              <Button variant="secondary" onClick={onGeneratePlan} disabled={isGeneratingPlan}>
-                {isGeneratingPlan ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null} Regenerate
-              </Button>
-              <Button onClick={onAcceptPlanAndTrain} disabled={!plan}>Accept & Train</Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                <Button onClick={onAcceptPlanAndTrain} disabled={!plan} className="h-10 px-8 rounded-xl font-black bg-primary text-primary-foreground shadow-lg shadow-primary/20 uppercase tracking-widest text-xs">Accept & Start</Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 }

@@ -57,7 +57,12 @@ export interface ColumnInsight {
 
 export interface DeepInsight {
   summary: string;
-  correlations: string[];
+  correlations: Array<{
+    columnA: string;
+    columnB: string;
+    strength: string;
+    insight: string;
+  }>;
   recommendations: string[];
 }
 
@@ -73,42 +78,42 @@ export class AnalysisService {
    */
   detectDataTypes(data: Record<string, any>[]): Record<string, 'numeric' | 'categorical' | 'date' | 'text'> {
     if (!data.length) return {};
-    
+
     const columnTypes: Record<string, 'numeric' | 'categorical' | 'date' | 'text'> = {};
     const columns = Object.keys(data[0]);
-    
+
     for (const column of columns) {
       const values = data.map(row => row[column]).filter(val => val !== null && val !== undefined && val !== '');
-      
+
       if (values.length === 0) {
         columnTypes[column] = 'text';
         continue;
       }
-      
+
       // Check if it's a date
       if (this.isDateColumn(values)) {
         columnTypes[column] = 'date';
         continue;
       }
-      
+
       // Check if it's numeric
       if (this.isNumericColumn(values)) {
         columnTypes[column] = 'numeric';
         continue;
       }
-      
+
       // Check if it's categorical (limited unique values)
       const uniqueValues = new Set(values).size;
       const totalValues = values.length;
       const uniqueRatio = uniqueValues / totalValues;
-      
+
       if (uniqueRatio < 0.1 || uniqueValues < 20) {
         columnTypes[column] = 'categorical';
       } else {
         columnTypes[column] = 'text';
       }
     }
-    
+
     return columnTypes;
   }
 
@@ -122,7 +127,7 @@ export class AnalysisService {
       /^\d{2}-\d{2}-\d{4}$/, // MM-DD-YYYY
       /^\d{1,2}\/\d{1,2}\/\d{4}$/, // M/D/YYYY
     ];
-    
+
     let dateCount = 0;
     for (const value of values.slice(0, Math.min(10, values.length))) {
       const str = String(value).trim();
@@ -130,7 +135,7 @@ export class AnalysisService {
         dateCount++;
       }
     }
-    
+
     return dateCount / Math.min(10, values.length) > 0.7;
   }
 
@@ -144,7 +149,7 @@ export class AnalysisService {
         numericCount++;
       }
     }
-    
+
     return numericCount / Math.min(20, values.length) > 0.8;
   }
 
@@ -158,7 +163,7 @@ export class AnalysisService {
   ): ColumnStatistics {
     const values = data.map(row => row[columnName]);
     const nonNullValues = values.filter(val => val !== null && val !== undefined && val !== '');
-    
+
     const stats: ColumnStatistics = {
       name: columnName,
       type,
@@ -170,18 +175,18 @@ export class AnalysisService {
 
     if (type === 'numeric') {
       const numericValues = nonNullValues.map(v => Number(v)).filter(n => !isNaN(n));
-      
+
       if (numericValues.length > 0) {
         stats.mean = this.calculateMean(numericValues);
         stats.median = this.calculateMedian(numericValues);
         stats.std = this.calculateStandardDeviation(numericValues);
         stats.min = Math.min(...numericValues);
         stats.max = Math.max(...numericValues);
-        
+
         const sorted = [...numericValues].sort((a, b) => a - b);
         stats.q1 = this.calculatePercentile(sorted, 25);
         stats.q3 = this.calculatePercentile(sorted, 75);
-        
+
         // Detect outliers using IQR method
         const iqr = stats.q3! - stats.q1!;
         const lowerBound = stats.q1! - 1.5 * iqr;
@@ -193,7 +198,7 @@ export class AnalysisService {
       nonNullValues.forEach(val => {
         valueCounts.set(val, (valueCounts.get(val) || 0) + 1);
       });
-      
+
       const total = nonNullValues.length;
       stats.topValues = Array.from(valueCounts.entries())
         .map(([value, count]) => ({
@@ -203,7 +208,7 @@ export class AnalysisService {
         }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 10);
-      
+
       // Mode is the most frequent value
       if (stats.topValues.length > 0) {
         stats.mode = stats.topValues[0].value;
@@ -226,8 +231,8 @@ export class AnalysisService {
   private calculateMedian(values: number[]): number {
     const sorted = [...values].sort((a, b) => a - b);
     const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0 
-      ? (sorted[mid - 1] + sorted[mid]) / 2 
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
       : sorted[mid];
   }
 
@@ -249,7 +254,7 @@ export class AnalysisService {
     const lower = Math.floor(index);
     const upper = Math.ceil(index);
     const weight = index % 1;
-    
+
     if (upper >= sortedValues.length) return sortedValues[sortedValues.length - 1];
     return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
   }
@@ -259,9 +264,9 @@ export class AnalysisService {
    */
   calculateCorrelationMatrix(data: Record<string, any>[], numericColumns: string[]): number[][] {
     if (numericColumns.length === 0) return [];
-    
+
     const matrix: number[][] = Array(numericColumns.length).fill(null).map(() => Array(numericColumns.length).fill(0));
-    
+
     for (let i = 0; i < numericColumns.length; i++) {
       for (let j = 0; j < numericColumns.length; j++) {
         if (i === j) {
@@ -274,7 +279,7 @@ export class AnalysisService {
         }
       }
     }
-    
+
     return matrix;
   }
 
@@ -283,17 +288,17 @@ export class AnalysisService {
    */
   private calculateCorrelation(x: number[], y: number[]): number {
     if (x.length !== y.length || x.length === 0) return 0;
-    
+
     const n = x.length;
     const sumX = x.reduce((a, b) => a + b, 0);
     const sumY = y.reduce((a, b) => a + b, 0);
     const sumXY = x.reduce((sum, xi, i) => sum + xi * y[i], 0);
     const sumX2 = x.reduce((sum, xi) => sum + xi * xi, 0);
     const sumY2 = y.reduce((sum, yi) => sum + yi * yi, 0);
-    
+
     const numerator = n * sumXY - sumX * sumY;
     const denominator = Math.sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
-    
+
     return denominator === 0 ? 0 : numerator / denominator;
   }
 
@@ -308,24 +313,24 @@ export class AnalysisService {
     const columnTypes = this.detectDataTypes(data);
     const columns = Object.keys(data[0]);
     const columnStats: ColumnStatistics[] = [];
-    
+
     // Calculate statistics for each column
     for (const column of columns) {
       const stats = this.calculateColumnStatistics(data, column, columnTypes[column]);
       columnStats.push(stats);
     }
-    
+
     const numericColumns = columnStats.filter(col => col.type === 'numeric').map(col => col.name);
     const categoricalColumns = columnStats.filter(col => col.type === 'categorical').map(col => col.name);
-    
+
     // Calculate correlation matrix for numeric columns
     const correlationMatrix = this.calculateCorrelationMatrix(data, numericColumns);
-    
+
     // Calculate overall data quality score
     const totalCells = data.length * columns.length;
     const missingCells = columnStats.reduce((sum, col) => sum + col.missing, 0);
     const overallQuality = ((totalCells - missingCells) / totalCells) * 100;
-    
+
     // Missing data pattern
     const missingDataPattern = columnStats
       .filter(col => col.missing > 0)
@@ -335,7 +340,7 @@ export class AnalysisService {
         missingPercentage: col.missingPercentage
       }))
       .sort((a, b) => b.missingPercentage - a.missingPercentage);
-    
+
     const profile: DatasetProfile = {
       totalRows: data.length,
       totalColumns: columns.length,
@@ -346,10 +351,10 @@ export class AnalysisService {
       numericColumns,
       categoricalColumns
     };
-    
+
     // Generate insights
     const insights = this.generateInsights(profile);
-    
+
     return {
       profile,
       insights
@@ -376,7 +381,7 @@ export class AnalysisService {
     if (profile.overallQuality < 80) {
       insights.dataQuality.push(`Data completeness is ${profile.overallQuality.toFixed(1)}% - consider addressing missing values`);
     }
-    
+
     const highMissingColumns = profile.missingDataPattern.filter(col => col.missingPercentage > 20);
     if (highMissingColumns.length > 0) {
       insights.dataQuality.push(`High missing data in: ${highMissingColumns.map(col => col.column).join(', ')}`);
@@ -404,11 +409,11 @@ export class AnalysisService {
     if (profile.numericColumns.length > 1) {
       insights.recommendations.push('Consider correlation analysis for numeric variables');
     }
-    
+
     if (profile.categoricalColumns.length > 0) {
       insights.recommendations.push('Categorical variables could benefit from encoding for ML models');
     }
-    
+
     if (profile.overallQuality < 95) {
       insights.recommendations.push('Data cleaning recommended to improve quality');
     }
@@ -422,10 +427,10 @@ export class AnalysisService {
   parseCSV(csvText: string): Record<string, any>[] {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return [];
-    
+
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     const data: Record<string, any>[] = [];
-    
+
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
       if (values.length === headers.length) {
@@ -442,7 +447,7 @@ export class AnalysisService {
         data.push(row);
       }
     }
-    
+
     return data;
   }
 }

@@ -13,6 +13,7 @@ import { DatabaseZap, Brain, FileText, Search, Download, CalendarDays, Filter, I
 import Link from "next/link";
 import { getUserActivities, type ActivityLog } from '@/lib/supabase/actions';
 import { format } from 'date-fns';
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 
 function getActivityIcon(activityType: string) {
   switch (activityType) {
@@ -68,12 +69,7 @@ export default function HistoryPage() {
           <h1 className="text-2xl sm:text-3xl font-headline font-bold text-foreground">History &amp; Activity Logs</h1>
           <p className="text-muted-foreground">Review your past activities, generated datasets, and trained models.</p>
         </div>
-        <Card>
-          <CardContent className="flex items-center justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="ml-2">Loading activities...</span>
-          </CardContent>
-        </Card>
+        <TableSkeleton />
       </div>
     );
   }

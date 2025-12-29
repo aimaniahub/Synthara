@@ -3,19 +3,20 @@ import { createServerClient } from '@supabase/ssr';
 
 export const runtime = 'nodejs';
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
     if (!url || !anon) {
       return NextResponse.json({ success: false, error: 'Supabase not configured' }, { status: 500 });
     }
-    const supabase = createServerClient(url, anon, { cookies: { get() { return undefined; }, set() {}, remove() {} } });
+    const supabase = createServerClient(url, anon, { cookies: { get() { return undefined; }, set() { }, remove() { } } });
 
     const { data, error } = await supabase
       .from('generated_datasets')
       .select('id, created_at, dataset_name, prompt_used, num_rows, schema_json, data_csv, user_id, is_public')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('is_public', true)
       .single();
 

@@ -1,18 +1,37 @@
-import type { ImgHTMLAttributes } from 'react';
+import type { SVGProps } from 'react';
 
-// IMPORTANT: Ensure the logo image provided by the user has been saved as
-// 'synthara-logo.png' in the 'public' directory of your project.
-
-export function SyntharaLogo(props: ImgHTMLAttributes<HTMLImageElement>) {
+export function SyntharaLogo(props: SVGProps<SVGSVGElement>) {
   const { className, ...rest } = props;
   return (
-    <img
-      src="/synthara-logo.png" // This path assumes the image is in YOUR_PROJECT_ROOT/public/synthara-logo.png
-      alt="Synthara AI Logo"
-      width={282} // Intrinsic width of the provided image, helps with aspect ratio
-      height={300} // Intrinsic height of the provided image, helps with aspect ratio
-      className={className} // Allows existing Tailwind size classes (e.g., h-10 w-auto) to control the display size
+    <svg
+      viewBox="0 0 282 100"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
       {...rest}
-    />
+    >
+      {/* Abstract "S" / Data Block Icon */}
+      <rect x="10" y="20" width="20" height="20" rx="4" fill="currentColor" fillOpacity="0.2" />
+      <rect x="35" y="20" width="20" height="20" rx="4" fill="currentColor" fillOpacity="0.4" />
+      <rect x="10" y="45" width="20" height="20" rx="4" fill="currentColor" fillOpacity="0.6" />
+      <rect x="35" y="45" width="20" height="20" rx="4" fill="currentColor" />
+      <rect x="10" y="70" width="20" height="20" rx="4" fill="currentColor" fillOpacity="0.4" />
+      <rect x="35" y="70" width="20" height="20" rx="4" fill="currentColor" fillOpacity="0.2" />
+
+      {/* Logo Text */}
+      <text
+        x="70"
+        y="65"
+        fill="currentColor"
+        style={{
+          fontFamily: 'var(--font-space-grotesk)',
+          fontSize: '44px',
+          fontWeight: '800',
+          letterSpacing: '-0.02em',
+        }}
+      >
+        Synthara
+      </text>
+    </svg>
   );
 }

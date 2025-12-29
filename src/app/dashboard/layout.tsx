@@ -1,5 +1,6 @@
 
 import { DashboardShell } from './_components/DashboardShell';
+import { NavigationLoadingProvider } from '@/components/providers/navigation-loading-provider';
 
 
 export default function DashboardLayout({
@@ -9,9 +10,12 @@ export default function DashboardLayout({
 }) {
   return (
     <div className="min-h-screen bg-background">
-      <DashboardShell>
-        {children}
-      </DashboardShell>
+      <NavigationLoadingProvider>
+        <DashboardShell>
+          {children}
+        </DashboardShell>
+      </NavigationLoadingProvider>
     </div>
   );
 }
+

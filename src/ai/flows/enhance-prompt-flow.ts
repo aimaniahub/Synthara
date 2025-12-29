@@ -62,13 +62,32 @@ Respond with a JSON object containing:
     });
 
     try {
-      const parsed = JSON.parse(response.text);
+      // Extract JSON from potential markdown code blocks
+      let jsonText = response.text.trim();
+      if (jsonText.startsWith('```json')) {
+        jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      // Remove trailing commas before closing brackets/braces
+      jsonText = jsonText.replace(/,(\s*[\]}])/g, '$1').trim();
+
+      // Try to find JSON object if not starting with {
+      if (!jsonText.startsWith('{')) {
+        const match = jsonText.match(/\{[\s\S]*\}/);
+        if (match) {
+          jsonText = match[0];
+        }
+      }
+
+      const parsed = JSON.parse(jsonText);
       return {
         enhancedPrompt: parsed.enhancedPrompt || input.currentPrompt,
         reasoning: parsed.reasoning || "Enhanced for better clarity and specificity"
       };
     } catch (parseError) {
       // If JSON parsing fails, try to extract the enhanced prompt from the response
+      console.warn('[EnhancePrompt] JSON parsing failed, extracting from text:', parseError);
       const lines = response.text.split('\n');
       const enhancedLine = lines.find(line => line.toLowerCase().includes('enhanced') || line.toLowerCase().includes('improved'));
 
@@ -86,4 +105,4 @@ Respond with a JSON object containing:
   }
 }
 
-    
+

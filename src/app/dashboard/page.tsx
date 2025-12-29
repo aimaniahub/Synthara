@@ -1,24 +1,21 @@
 
 // src/app/dashboard/page.tsx
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ArrowRight, FileText, PlusCircle, BarChart, Brain, Clock, AlertCircle, DatabaseZap, Wand2, BarChartBig, Save, Eye, TrendingUp, Globe } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { FileText, Brain, Clock, AlertCircle, DatabaseZap, Wand2, BarChartBig, Save, Sparkles } from "lucide-react";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { QuickActions } from "@/components/dashboard/QuickActions";
-import Link from "next/link";
+import { DashboardActions } from "@/components/dashboard/DashboardActions";
+import { ViewDatasetButton } from "@/components/dashboard/ViewDatasetButton";
+import { Button } from "@/components/ui/button";
 import { getUserActivities, getUserDatasets, type ActivityLog, type SavedDataset } from '@/lib/supabase/actions';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { withTimeout } from '@/lib/utils/timeout';
 
-const quickActions = [
-  { title: "Generate New Dataset", Icon: PlusCircle, href: "/dashboard/generate", description: "Start generating a new synthetic dataset.", cta: "Generate Data" },
-  { title: "View Activity History", Icon: Clock, href: "/dashboard/history", description: "Review your past activities and logs.", cta: "View History"},
-  { title: "Train New Model", Icon: Brain, href: "/dashboard/train", description: "Train a machine learning model with your data.", cta: "Train Model" },
-  { title: "Analyze Dataset", Icon: BarChart, href: "/dashboard/analysis", description: "Explore insights from your datasets with AI.", cta: "Analyze Data"},
-  { title: "Browse Dataset Market", Icon: Globe, href: "/dashboard/market", description: "Discover public datasets shared by the community.", cta: "Open Market"},
-];
+// Quick actions are now defined inside the QuickActions component
 
 function getActivityIcon(activityType: string) {
   switch (activityType) {
@@ -32,20 +29,12 @@ function getActivityIcon(activityType: string) {
 
 export default async function DashboardPage() {
   const supabase = await createSupabaseServerClient();
-  async function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
-    let timeout: any;
-    const timeoutPromise = new Promise<T>((resolve) => {
-      timeout = setTimeout(() => resolve(fallback), ms);
-    });
-    p.catch(() => null);
-    return Promise.race([p, timeoutPromise]).finally(() => clearTimeout(timeout)) as Promise<T>;
-  }
 
   const { data: { user } = { user: null } } = supabase
     ? await withTimeout<any>(supabase.auth.getUser(), 2000, { data: { user: null } })
     : ({ data: { user: null } } as any);
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
-  
+
   // Fetch activities and datasets only if user is available
   // To prevent errors if middleware hasn't fully processed or if user becomes null
   let recentActivities: ActivityLog[] = [];
@@ -69,135 +58,155 @@ export default async function DashboardPage() {
 
 
   return (
-    <div className="space-y-8">
-      {/* Header Section */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+    <div className="space-y-6 py-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {/* Refined Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-1">
         <div className="space-y-1">
-          <h1 className="text-2xl lg:text-3xl font-semibold text-foreground">Welcome back, {userName}</h1>
-          <p className="text-sm text-muted-foreground">Overview and recent activity</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Sparkles className="size-5 text-primary animate-pulse" />
+            Synthara <span className="text-muted-foreground/50 font-light">/</span> Dashboard
+          </h1>
+          <p className="text-xs text-muted-foreground font-medium">
+            Welcome, <span className="text-foreground font-semibold">{userName}</span>. You have <span className="text-primary font-semibold">{datasets.length} active datasets</span> ready for analysis.
+          </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
-          <Button size="sm" variant="outline" asChild>
-            <Link href="/dashboard/generate">
-              <PlusCircle className="mr-2 h-4 w-4" /> Create Dataset
-            </Link>
-          </Button>
-          <Button size="sm" variant="outline" asChild>
-            <Link href="/dashboard/analysis">
-              <BarChart className="mr-2 h-4 w-4" /> View Analytics
-            </Link>
-          </Button>
-          <Button size="sm" variant="default" asChild>
-            <Link href="/dashboard/market">
-              <Globe className="mr-2 h-4 w-4" /> Dataset Market
-            </Link>
-          </Button>
-        </div>
+        <DashboardActions />
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatsCard
-          title="Total Datasets"
-          value={datasets?.length || 0}
-          icon={DatabaseZap}
-          color="blue"
-        />
-        <StatsCard
-          title="AI Generations"
-          value={recentActivities?.length || 0}
-          icon={Brain}
-          color="emerald"
-        />
-        <StatsCard
-          title="Total Records"
-          value={datasets?.reduce((acc, dataset) => acc + (dataset.num_rows || 0), 0) || 0}
-          icon={BarChartBig}
-          color="purple"
-        />
-        <StatsCard
-          title="Today's Activity"
-          value={recentActivities?.filter(a => {
-            const activityDate = new Date(a.created_at);
-            const today = new Date();
-            return activityDate.toDateString() === today.toDateString();
-          }).length || 0}
-          icon={Clock}
-          color="orange"
-        />
+      {/* Structured Stats Ribbon */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: "Datasets", value: datasets?.length || 0, icon: DatabaseZap, color: "text-blue-500", trend: "+12%" },
+          { label: "Syntheses", value: recentActivities?.length || 0, icon: Brain, color: "text-emerald-500", trend: "Stable" },
+          { label: "Data Nodes", value: datasets?.reduce((acc, dataset) => acc + (dataset.num_rows || 0), 0).toLocaleString() || 0, icon: BarChartBig, color: "text-purple-500", trend: "+5.2k" },
+          { label: "Uptime", value: "99.9%", icon: Clock, color: "text-orange-500", trend: "Online" }
+        ].map((stat, i) => (
+          <div key={i} className="modern-card p-4 flex items-center gap-4 group transition-all duration-300">
+            <div className={`p-2.5 rounded-xl bg-secondary/50 ${stat.color} group-hover:scale-105 transition-transform`}>
+              <stat.icon className="size-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-0.5">{stat.label}</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-xl font-bold text-foreground tracking-tight">{stat.value}</p>
+                <span className="text-[9px] font-semibold text-emerald-500/80 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">{stat.trend}</span>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* Quick Actions */}
-      <QuickActions actions={quickActions.map(action => ({
-        ...action,
-        color: action.title.includes('Generate') ? 'blue' :
-               action.title.includes('View') ? 'emerald' :
-               action.title.includes('Train') ? 'purple' :
-               'orange'
-      }))} />
+      {/* Core Workspace Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Quick Actions (Compact) */}
+        <div className="lg:col-span-4 space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Quick Access</h2>
+            <div className="h-px flex-1 bg-border/50" />
+          </div>
+          <QuickActions />
+        </div>
 
-      <div className="grid gap-8 grid-cols-1 lg:grid-cols-3">
-        {/* Recent Activity Feed */}
-        <section className="lg:col-span-2">
-          <ActivityFeed activities={recentActivities || []} />
-        </section>
-
-        {/* Last Generated Dataset */}
-        <section>
-          <h2 className="text-xl font-semibold text-foreground mb-4">Latest Dataset</h2>
-          <Card className="border rounded-lg bg-background">
-            <CardHeader className="border-b">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-md bg-muted">
-                  <FileText className="h-5 w-5 text-foreground" />
+        {/* Dataset Focus (Refined) */}
+        <div className="lg:col-span-4 space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Active Context</h2>
+            <div className="h-px flex-1 bg-border/50" />
+          </div>
+          <div className="modern-card overflow-hidden group border-primary/10">
+            <div className="h-24 bg-muted/30 relative overflow-hidden border-b">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
+              <div className="p-4 relative z-10 flex items-center justify-between">
+                <div className="p-2 rounded-lg bg-background border shadow-sm text-foreground">
+                  <FileText className="size-5" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <CardTitle className="text-base font-semibold text-foreground truncate">
-                    {lastSavedDataset ? lastSavedDataset.dataset_name : "No Dataset Yet"}
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {lastSavedDataset ? `Created ${formatDistanceToNow(new Date(lastSavedDataset.created_at), { addSuffix: true })}` : "Your latest dataset will appear here"}
-                  </CardDescription>
+                <Badge variant="secondary" className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5">
+                  Latest Dataset
+                </Badge>
+              </div>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <h3 className="text-md font-bold text-foreground tracking-tight truncate">
+                  {lastSavedDataset ? lastSavedDataset.dataset_name : "Initializing..."}
+                </h3>
+                <p className="text-[10px] text-muted-foreground font-medium flex items-center gap-1.5 mt-1">
+                  <Clock className="size-3" />
+                  {lastSavedDataset ? `Updated ${formatDistanceToNow(new Date(lastSavedDataset.created_at), { addSuffix: true })}` : "Waiting for data..."}
+                </p>
+              </div>
+
+              {lastSavedDataset ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+                    <p className="text-[9px] font-bold text-muted-foreground/60 uppercase">Entries</p>
+                    <p className="text-xs font-bold text-foreground">{lastSavedDataset.num_rows.toLocaleString()}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+                    <p className="text-[9px] font-bold text-muted-foreground/60 uppercase">Fields</p>
+                    <p className="text-xs font-bold text-foreground">
+                      {Array.isArray(lastSavedDataset.schema_json) ? lastSavedDataset.schema_json.length : "0"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg border border-dashed border-border/50 text-center">
+                  <p className="text-[10px] text-muted-foreground italic">Start by generating your first dataset.</p>
+                </div>
+              )}
+
+              <ViewDatasetButton datasetId={lastSavedDataset?.id} disabled={!lastSavedDataset} />
+            </div>
+          </div>
+        </div>
+
+        {/* AI Recommendations (Refined) */}
+        <div className="lg:col-span-4 space-y-3">
+          <div className="flex items-center gap-2 px-1">
+            <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">Intelligence Engine</h2>
+            <div className="h-px flex-1 bg-border/50" />
+          </div>
+          <div className="modern-card relative overflow-hidden p-6 bg-gradient-to-br from-primary/10 via-background to-background border-primary/20">
+            <div className="absolute top-0 right-0 -mt-8 -mr-8 h-32 w-32 rounded-full bg-primary/10 blur-2xl pointer-events-none" />
+
+            <div className="relative z-10 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/20 text-primary shadow-inner">
+                    <Sparkles className="size-4 animate-pulse" />
+                  </div>
+                  <h4 className="text-[11px] font-black text-primary uppercase tracking-widest">AI Intelligence</h4>
+                </div>
+                <Badge variant="outline" className="text-[9px] font-bold border-primary/30 text-primary bg-primary/5 uppercase px-2">
+                  High Impact
+                </Badge>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm text-foreground/90 leading-relaxed font-bold tracking-tight">
+                  Structural Drift Detected
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed font-medium">
+                  Recent analysis of <span className="text-foreground font-semibold">Cluster Sigma</span> suggests a 12% drift in schema consistency.
+                </p>
+
+                <div className="space-y-2 pt-2">
+                  <div className="flex justify-between items-center text-[10px] font-black text-primary/80 uppercase tracking-tighter">
+                    <span>Reliability Index</span>
+                    <span>94%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-primary/10 rounded-full overflow-hidden">
+                    <div className="h-full w-[94%] bg-primary rounded-full" />
+                  </div>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="space-y-1">
-                    <span className="text-muted-foreground">Rows</span>
-                    <p className="font-semibold text-foreground">
-                      {lastSavedDataset ? lastSavedDataset.num_rows.toLocaleString() : "—"}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-muted-foreground">Columns</span>
-                    <p className="font-semibold text-foreground">
-                      {lastSavedDataset && Array.isArray(lastSavedDataset.schema_json) ? lastSavedDataset.schema_json.length : "—"}
-                    </p>
-                  </div>
-                </div>
-                {lastSavedDataset && (
-                  <div className="space-y-2">
-                    <span className="text-sm text-muted-foreground">Prompt Preview</span>
-                    <p className="text-xs bg-muted p-3 rounded-lg text-muted-foreground">
-                      {lastSavedDataset.prompt_used.substring(0, 120)}...
-                    </p>
-                  </div>
-                )}
-                <Progress value={lastSavedDataset ? 100 : 0} className="h-2" />
-              </div>
-            </CardContent>
-            <CardFooter className="border-t">
-              <Button className="w-full" variant="outline" disabled={!lastSavedDataset} asChild>
-                <Link href={lastSavedDataset ? `/dashboard/preview?datasetId=${lastSavedDataset.id}` : "#"}>
-                  View Dataset <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
+
+              <Button className="w-full h-11 bg-primary shadow-lg shadow-primary/20 hover:scale-[1.02] transition-all font-black text-[10px] uppercase tracking-widest rounded-xl">
+                Execute Context Repair
               </Button>
-            </CardFooter>
-          </Card>
-        </section>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

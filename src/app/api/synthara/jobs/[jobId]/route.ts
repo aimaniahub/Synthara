@@ -17,13 +17,13 @@ export async function OPTIONS() {
 }
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     jobId: string;
-  };
+  }>;
 }
 
 export async function GET(_request: NextRequest, context: RouteContext) {
-  const jobId = context.params.jobId;
+  const { jobId } = await context.params;
 
   const job = getSyntharaJob(jobId);
   if (!job) {

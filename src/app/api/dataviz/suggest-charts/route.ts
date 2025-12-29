@@ -79,8 +79,9 @@ export async function POST(req: NextRequest) {
             {
               id: 'chart_1',
               title: 'Title',
-              description: 'optional',
-              type: 'line|bar|scatter',
+              description: 'Detailed description of the chart',
+              mlInsight: 'A 1-point ML-focused summary of what this chart identifies in the data (e.g., correlations, outliers, distribution skew)',
+              type: 'line|bar|scatter|histogram|box|pie|radar',
               xField: 'columnX',
               yField: 'columnY',
               aggregation: 'sum|mean|count',
@@ -94,21 +95,28 @@ export async function POST(req: NextRequest) {
 
         const available = Array.isArray(body.availableTypes) && body.availableTypes.length
           ? body.availableTypes.join(', ')
-          : 'bar, line, scatter';
+          : 'line, bar, scatter, histogram, box, pie, radar';
 
-        const prompt = `You are a senior data visualization assistant.
-Given ONLY the dataset schema below, propose 1-3 useful charts that the user can render with Nivo. You may choose from: ${available}.
+        const prompt = `You are a senior Data Science and Machine Learning assistant.
+Given ONLY the dataset schema below, propose 1-3 highly effective visualizations that provide deep ML insights. 
+You may choose from: ${available}.
 
 Rules for allowed charts:
-- line: xField must be a date column; yField must be number; aggregation: sum (default) or mean.
-- bar: xField must be a categorical/boolean column; yField must be number or a synthesized count metric; aggregation: mean (default), sum, or count.
-- scatter: xField number; yField number; no aggregation preferred.
+- line: Best for time-series or trends; xField must be a date; yField must be number.
+- bar: Best for comparing categories; xField must be categorical; yField must be number or count.
+- scatter: Best for identifying correlations between two numeric variables; xField number; yField number.
+- histogram: Best for identifying data distribution and skewness of a single numeric variable; xField number; yField __count__; aggregation count.
+- box: Best for identifying outliers and statistical spread; xField categorical (optional); yField number.
+- pie: Best for showing proportions; xField categorical; yField count.
+- radar: Best for multivariate feature comparison.
+
+ML Insight Requirement:
+For EACH chart, provide a "mlInsight" field. This MUST be a concise, professional 1-point summary from an ML perspective (e.g., "Identifies potential linear correlation between X and Y", "Shows heavy right-skewed distribution suggesting data normalization might be needed", "Visualizes significant outliers in feature Z").
 
 Constraints:
 - Use only columns that exist in the schema.
-- Prefer simple, clear charts.
-- Keep titles short and human-friendly.
 - Return strictly valid JSON matching the schema below.
+- Prioritize charts that reveal data quality, correlations, or distribution patterns.
 
 Dataset: ${body.datasetName || 'Untitled Dataset'}
 Columns:\n${columnHints}`;
@@ -118,7 +126,7 @@ Columns:\n${columnHints}`;
           prompt,
           schema: schemaShape,
           model,
-          maxTokens: 1200,
+          maxTokens: 1500,
           temperature: 0.2,
         });
 
@@ -133,10 +141,12 @@ Columns:\n${columnHints}`;
               const aggregation: ChartSpec['aggregation'] | undefined =
                 rawAgg === 'mean' || rawAgg === 'sum' || rawAgg === 'count' ? rawAgg : undefined;
 
-              // Allow AI to omit yField for count bars; we synthesize a metric name
+              // Allow AI to omit yField for count-based charts
               const rawX = (c as any).xField ? String((c as any).xField) : undefined;
               let rawY = (c as any).yField ? String((c as any).yField) : undefined;
-              if (!rawY && type === 'bar' && aggregation === 'count' && rawX) {
+
+              const isCountType = (type === 'bar' || type === 'histogram' || type === 'pie');
+              if (!rawY && isCountType && aggregation === 'count' && rawX) {
                 rawY = '__count__';
               }
 
@@ -144,13 +154,14 @@ Columns:\n${columnHints}`;
                 id: String(c.id || `chart_${idx + 1}`),
                 title: String(c.title || `Chart ${idx + 1}`),
                 description: c.description ? String(c.description) : undefined,
-                type: type === 'line' || type === 'bar' || type === 'scatter' ? type : 'bar',
+                mlInsight: (c as any).mlInsight ? String((c as any).mlInsight) : undefined,
+                type: ['line', 'bar', 'scatter', 'histogram', 'box', 'pie', 'radar'].includes(type || '') ? type : 'bar',
                 xField: rawX,
                 yField: rawY,
                 aggregation,
               } as ChartSpec;
             })
-            .filter(c => !!c.xField && !!c.yField);
+            .filter(c => !!c.xField && (!!c.yField || c.type === 'box')); // Box plot might only need yField
         }
       } catch (e) {
         // AI failed; will fallback below

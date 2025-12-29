@@ -38,7 +38,7 @@ export class DOCXExportService {
   async generateReport(options: DOCXExportOptions): Promise<Uint8Array> {
     try {
       const { datasetName, analysisDate, profile, insights, rawData = [], exportType = 'text-with-tables' } = options;
-      
+
       const doc = new Document({
         sections: [
           {
@@ -55,31 +55,31 @@ export class DOCXExportService {
             children: [
               // Cover Page
               ...this.getCoverPage(datasetName, analysisDate, profile),
-              
+
               // Table of Contents
               ...this.getTableOfContents(),
-              
+
               // Executive Summary
               ...this.getExecutiveSummary(profile),
-              
+
               // Dataset Overview
               ...this.getDatasetOverview(profile),
-              
+
               // Statistical Summary
               ...this.getStatisticalSummary(profile),
-              
+
               // Data Quality Analysis
               ...this.getDataQualityAnalysis(profile),
-              
+
               // Column Analysis
               ...this.getColumnAnalysis(profile),
-              
+
               // Correlation Analysis
               ...this.getCorrelationAnalysis(profile),
-              
+
               // AI Insights
               ...this.getAIInsights(insights),
-              
+
               // Sample Data
               ...this.getSampleData(rawData, exportType),
             ],
@@ -275,7 +275,7 @@ export class DOCXExportService {
 
   private getExecutiveSummary(profile: DatasetProfile): Paragraph[] {
     const qualityDescription = this.getQualityDescription(profile.overallQuality);
-    
+
     return [
       new Paragraph({
         children: [
@@ -327,7 +327,7 @@ export class DOCXExportService {
       new Paragraph({
         children: [
           new TextRun({
-            text: profile.missingDataPattern.length > 0 
+            text: profile.missingDataPattern.length > 0
               ? `${profile.missingDataPattern.length} columns have missing data that may require attention.`
               : 'No significant missing data issues were detected.',
             size: 12,
@@ -338,7 +338,7 @@ export class DOCXExportService {
     ];
   }
 
-  private getDatasetOverview(profile: DatasetProfile): Paragraph[] {
+  private getDatasetOverview(profile: DatasetProfile): (Paragraph | Table)[] {
     return [
       new Paragraph({
         children: [
@@ -488,7 +488,7 @@ export class DOCXExportService {
     ];
   }
 
-  private getStatisticalSummary(profile: DatasetProfile): Paragraph[] {
+  private getStatisticalSummary(profile: DatasetProfile): (Paragraph | Table)[] {
     if (!profile.columns || profile.columns.length === 0) {
       return [
         new Paragraph({
@@ -580,8 +580,8 @@ export class DOCXExportService {
           }),
           new TableCell({
             children: [new Paragraph({
-              children: [new TextRun({ 
-                text: `${col.missingPercentage.toFixed(1)}%`, 
+              children: [new TextRun({
+                text: `${col.missingPercentage.toFixed(1)}%`,
                 size: 12,
                 color: col.missingPercentage > 10 ? this.colors.error : this.colors.text
               })],
@@ -594,17 +594,17 @@ export class DOCXExportService {
           }),
           new TableCell({
             children: [new Paragraph({
-              children: [new TextRun({ 
-                text: col.type === 'numeric' && col.mean ? col.mean.toFixed(2) : '-', 
-                size: 12 
+              children: [new TextRun({
+                text: col.type === 'numeric' && col.mean ? col.mean.toFixed(2) : '-',
+                size: 12
               })],
             })],
           }),
           new TableCell({
             children: [new Paragraph({
-              children: [new TextRun({ 
-                text: col.type === 'numeric' && col.std ? col.std.toFixed(2) : '-', 
-                size: 12 
+              children: [new TextRun({
+                text: col.type === 'numeric' && col.std ? col.std.toFixed(2) : '-',
+                size: 12
               })],
             })],
           }),
@@ -643,8 +643,8 @@ export class DOCXExportService {
     ];
   }
 
-  private getDataQualityAnalysis(profile: DatasetProfile): Paragraph[] {
-    const sections = [
+  private getDataQualityAnalysis(profile: DatasetProfile): (Paragraph | Table)[] {
+    const sections: (Paragraph | Table)[] = [
       new Paragraph({
         children: [
           new TextRun({
@@ -732,8 +732,8 @@ export class DOCXExportService {
             }),
             new TableCell({
               children: [new Paragraph({
-                children: [new TextRun({ 
-                  text: `${item.missingPercentage.toFixed(1)}%`, 
+                children: [new TextRun({
+                  text: `${item.missingPercentage.toFixed(1)}%`,
                   size: 12,
                   color: item.missingPercentage > 20 ? this.colors.error : this.colors.text
                 })],
@@ -741,8 +741,8 @@ export class DOCXExportService {
             }),
             new TableCell({
               children: [new Paragraph({
-                children: [new TextRun({ 
-                  text: this.getMissingDataSeverity(item.missingPercentage), 
+                children: [new TextRun({
+                  text: this.getMissingDataSeverity(item.missingPercentage),
                   size: 12,
                   color: this.getSeverityColor(item.missingPercentage)
                 })],
@@ -787,7 +787,7 @@ export class DOCXExportService {
     return sections;
   }
 
-  private getColumnAnalysis(profile: DatasetProfile): Paragraph[] {
+  private getColumnAnalysis(profile: DatasetProfile): (Paragraph | Table)[] {
     if (!profile.columns || profile.columns.length === 0) {
       return [
         new Paragraph({
@@ -813,7 +813,7 @@ export class DOCXExportService {
       ];
     }
 
-    const sections = [
+    const sections: (Paragraph | Table)[] = [
       new Paragraph({
         children: [
           new TextRun({
@@ -898,8 +898,8 @@ export class DOCXExportService {
             }),
             new TableCell({
               children: [new Paragraph({
-                children: [new TextRun({ 
-                  text: `${column.missingPercentage.toFixed(1)}%`, 
+                children: [new TextRun({
+                  text: `${column.missingPercentage.toFixed(1)}%`,
                   size: 12,
                   color: column.missingPercentage > 10 ? this.colors.error : this.colors.text
                 })],
@@ -930,8 +930,8 @@ export class DOCXExportService {
             }),
             new TableCell({
               children: [new Paragraph({
-                children: [new TextRun({ 
-                  text: `${(100 - column.missingPercentage).toFixed(1)}%`, 
+                children: [new TextRun({
+                  text: `${(100 - column.missingPercentage).toFixed(1)}%`,
                   size: 12,
                   color: this.colors.accent
                 })],
@@ -1166,7 +1166,7 @@ export class DOCXExportService {
     return sections;
   }
 
-  private getCorrelationAnalysis(profile: DatasetProfile): Paragraph[] {
+  private getCorrelationAnalysis(profile: DatasetProfile): (Paragraph | Table)[] {
     if (!profile.correlationMatrix || profile.numericColumns.length < 2) {
       return [
         new Paragraph({
@@ -1193,8 +1193,8 @@ export class DOCXExportService {
     }
 
     const correlations = this.findSignificantCorrelations(profile.correlationMatrix, profile.numericColumns);
-    
-    const sections = [
+
+    const sections: (Paragraph | Table)[] = [
       new Paragraph({
         children: [
           new TextRun({
@@ -1246,8 +1246,8 @@ export class DOCXExportService {
           }),
           ...row.map(corr => new TableCell({
             children: [new Paragraph({
-              children: [new TextRun({ 
-                text: corr.toFixed(3), 
+              children: [new TextRun({
+                text: corr.toFixed(3),
                 size: 10,
                 color: Math.abs(corr) > 0.7 ? this.colors.primary : this.colors.text
               })],
@@ -1308,8 +1308,8 @@ export class DOCXExportService {
     return sections;
   }
 
-  private getAIInsights(insights: any): Paragraph[] {
-    const sections = [
+  private getAIInsights(insights: any): (Paragraph | Table)[] {
+    const sections: (Paragraph | Table)[] = [
       new Paragraph({
         children: [
           new TextRun({
@@ -1417,7 +1417,7 @@ export class DOCXExportService {
     return sections;
   }
 
-  private getSampleData(rawData: Record<string, any>[], exportType: string): Paragraph[] {
+  private getSampleData(rawData: Record<string, any>[], exportType: string): (Paragraph | Table)[] {
     if (rawData.length === 0) {
       return [
         new Paragraph({
@@ -1444,7 +1444,7 @@ export class DOCXExportService {
     }
 
     const headers = Object.keys(rawData[0]);
-    const sampleData = rawData.slice(0, 20).map(row => 
+    const sampleData = rawData.slice(0, 20).map(row =>
       headers.map(header => {
         const value = row[header];
         if (value === null || value === undefined) return 'N/A';
@@ -1453,7 +1453,7 @@ export class DOCXExportService {
       })
     );
 
-    const sections = [
+    const sections: (Paragraph | Table)[] = [
       new Paragraph({
         children: [
           new TextRun({
@@ -1563,9 +1563,9 @@ export class DOCXExportService {
     return this.colors.error;
   }
 
-  private findSignificantCorrelations(matrix: number[][], columns: string[]): Array<{col1: string, col2: string, value: number, strength: string}> {
+  private findSignificantCorrelations(matrix: number[][], columns: string[]): Array<{ col1: string, col2: string, value: number, strength: string }> {
     const correlations = [];
-    
+
     for (let i = 0; i < matrix.length; i++) {
       for (let j = i + 1; j < matrix[i].length; j++) {
         const value = Math.abs(matrix[i][j]);
@@ -1574,7 +1574,7 @@ export class DOCXExportService {
           if (value > 0.8) strength = 'Very Strong';
           else if (value > 0.7) strength = 'Strong';
           else if (value > 0.6) strength = 'Moderate';
-          
+
           correlations.push({
             col1: columns[i],
             col2: columns[j],
@@ -1584,7 +1584,7 @@ export class DOCXExportService {
         }
       }
     }
-    
+
     return correlations.sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
   }
 }
@@ -1596,6 +1596,6 @@ export const getDOCXExportService = () => {
   if (!docxExportService) {
     docxExportService = new DOCXExportService();
   }
-  
+
   return docxExportService;
 };

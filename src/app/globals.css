@@ -5,40 +5,57 @@
 @layer base {
   :root {
     /* Light Mode - Modern slate/blue theme */
-    --background: 210 20% 98%; /* Light slate background */
-    --foreground: 215 25% 15%; /* Dark slate text */
+    --background: 210 20% 98%;
+    /* Light slate background */
+    --foreground: 215 25% 15%;
+    /* Dark slate text */
 
-    --card: 0 0% 100%; /* Pure white cards */
+    --card: 0 0% 100%;
+    /* Pure white cards */
     --card-foreground: 215 25% 15%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 215 25% 15%;
 
-    --primary: 217 91% 60%; /* Bright blue primary */
-    --primary-foreground: 0 0% 100%; /* White text on primary */
+    --primary: 217 91% 60%;
+    /* Bright blue primary */
+    --primary-foreground: 0 0% 100%;
+    /* White text on primary */
 
-    --secondary: 210 40% 95%; /* Light blue-gray secondary */
+    --secondary: 210 40% 95%;
+    /* Light blue-gray secondary */
     --secondary-foreground: 215 25% 25%;
 
-    --muted: 210 40% 96%; /* Very light blue-gray muted */
+    --muted: 210 40% 96%;
+    /* Very light blue-gray muted */
     --muted-foreground: 215 16% 46%;
 
-    --accent: 212 95% 95%; /* Light blue accent */
+    --accent: 212 95% 95%;
+    /* Light blue accent */
     --accent-foreground: 217 91% 60%;
 
-    --destructive: 0 84.2% 60.2%; /* Red for destructive actions */
+    --destructive: 0 84.2% 60.2%;
+    /* Red for destructive actions */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 5.9% 90%; /* Light border */
-    --input: 240 5.9% 90%; /* Light input background */
-    --ring: 158 64% 52%; /* Emerald ring color */
+    --border: 240 5.9% 90%;
+    /* Light border */
+    --input: 240 5.9% 90%;
+    /* Light input background */
+    --ring: 158 64% 52%;
+    /* Emerald ring color */
 
     /* Chart colors - emerald/purple theme */
-    --chart-1: 158 64% 52%; /* Emerald */
-    --chart-2: 262 83% 58%; /* Purple */
-    --chart-3: 198 93% 60%; /* Cyan */
-    --chart-4: 280 100% 70%; /* Magenta */
-    --chart-5: 47 96% 53%; /* Yellow */
+    --chart-1: 158 64% 52%;
+    /* Emerald */
+    --chart-2: 262 83% 58%;
+    /* Purple */
+    --chart-3: 198 93% 60%;
+    /* Cyan */
+    --chart-4: 280 100% 70%;
+    /* Magenta */
+    --chart-5: 47 96% 53%;
+    /* Yellow */
 
     --radius: 0.75rem;
 
@@ -60,40 +77,56 @@
 
   .dark {
     /* Dark Mode - Modern dark slate theme */
-    --background: 215 28% 8%; /* Deep dark slate */
-    --foreground: 210 20% 95%; /* Light text */
+    --background: 215 28% 8%;
+    /* Deep dark slate */
+    --foreground: 210 20% 95%;
+    /* Light text */
 
-    --card: 215 25% 12%; /* Dark slate cards */
+    --card: 215 25% 12%;
+    /* Dark slate cards */
     --card-foreground: 210 20% 95%;
 
     --popover: 215 25% 12%;
     --popover-foreground: 210 20% 95%;
 
-    --primary: 217 91% 60%; /* Bright blue primary (consistent) */
+    --primary: 217 91% 60%;
+    /* Bright blue primary (consistent) */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 215 25% 18%; /* Dark slate secondary */
+    --secondary: 215 25% 18%;
+    /* Dark slate secondary */
     --secondary-foreground: 210 20% 90%;
 
-    --muted: 215 25% 15%; /* Muted dark slate */
+    --muted: 215 25% 15%;
+    /* Muted dark slate */
     --muted-foreground: 215 16% 65%;
 
-    --accent: 215 25% 18%; /* Dark slate accent */
+    --accent: 215 25% 18%;
+    /* Dark slate accent */
     --accent-foreground: 217 91% 60%;
 
-    --destructive: 0 62.8% 30.6%; /* Dark red */
+    --destructive: 0 62.8% 30.6%;
+    /* Dark red */
     --destructive-foreground: 0 0% 98%;
 
-    --border: 262 30% 18%; /* Dark purple border */
-    --input: 262 30% 15%; /* Dark input background */
-    --ring: 158 64% 52%; /* Emerald ring */
+    --border: 262 30% 18%;
+    /* Dark purple border */
+    --input: 262 30% 15%;
+    /* Dark input background */
+    --ring: 158 64% 52%;
+    /* Emerald ring */
 
     /* Chart colors for dark mode */
-    --chart-1: 158 64% 52%; /* Emerald */
-    --chart-2: 262 83% 58%; /* Purple */
-    --chart-3: 198 93% 60%; /* Cyan */
-    --chart-4: 280 100% 70%; /* Magenta */
-    --chart-5: 47 96% 53%; /* Yellow */
+    --chart-1: 158 64% 52%;
+    /* Emerald */
+    --chart-2: 262 83% 58%;
+    /* Purple */
+    --chart-3: 198 93% 60%;
+    /* Cyan */
+    --chart-4: 280 100% 70%;
+    /* Magenta */
+    --chart-5: 47 96% 53%;
+    /* Yellow */
 
     /* Glass-morphism for dark mode */
     --glass-background: 255 255 255 / 0.05;
@@ -101,7 +134,8 @@
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 
     /* Dark sidebar with glass effect */
-    --sidebar-background: 262 50% 8%; /* Very dark purple */
+    --sidebar-background: 262 50% 8%;
+    /* Very dark purple */
     --sidebar-foreground: 0 0% 95%;
     --sidebar-primary: 158 64% 52%;
     --sidebar-primary-foreground: 0 0% 100%;
@@ -116,12 +150,14 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
 }
 
 @layer utilities {
+
   /* Glass-morphism utilities */
   .glass {
     @apply bg-white/10 backdrop-blur-md border border-white/20;
@@ -232,10 +268,74 @@
   .sidebar-mobile {
     @apply w-64 sm:w-72;
   }
+
+  /* Premium Utilities */
+  .text-gradient-primary {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-blue-400 to-indigo-500;
+  }
+
+  .text-gradient-purple {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-purple-500 via-violet-400 to-indigo-400;
+  }
+
+  .bg-grid-white {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='rgb(255 255 255 / 0.04)'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E");
+  }
+
+  .bg-grid-black {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='rgb(0 0 0 / 0.04)'%3E%3Cpath d='M0 .5H31.5V32'/%3E%3C/svg%3E");
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 4s ease-in-out infinite;
+  }
+
+  .reveal-on-scroll {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .reveal-on-scroll.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-20px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    opacity: 0.5;
+    filter: blur(40px);
+  }
+
+  50% {
+    opacity: 0.8;
+    filter: blur(60px);
+  }
 }
 
 /* Remove sidebar gap - Fix layout spacing */
-[data-sidebar="sidebar"] + * {
+[data-sidebar="sidebar"]+* {
   margin-left: 0 !important;
 }
 

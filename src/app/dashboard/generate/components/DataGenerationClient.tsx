@@ -32,6 +32,9 @@ import {
   AlertCircle,
   Loader2,
   Wand2,
+  Brain,
+  Settings2,
+  Sparkles,
 } from 'lucide-react';
 
 // Form validation schema
@@ -777,451 +780,325 @@ export function DataGenerationClient() {
   }, [form]);
 
   return (
-    <div className="space-y-6">
-      {/* Generation Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Data Generation Settings
-          </CardTitle>
+    <div className="space-y-10 w-full animate-in fade-in duration-700">
+      {/* Full-Width Configuration Form */}
+      <Card className="modern-card border-none shadow-sm overflow-hidden bg-background/40 backdrop-blur-sm">
+        <CardHeader className="pb-6 pt-8 px-8 border-b border-border/10">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+              <Settings2 className="h-4 w-4" />
+            </div>
+            <CardTitle className="text-xl font-bold tracking-tight">Synthesis Protocol</CardTitle>
+          </div>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Dataset Name */}
-            <div className="space-y-2">
-              <Label htmlFor="datasetName">Dataset Name</Label>
-              <Input
-                id="datasetName"
-                placeholder="Enter a name for your dataset"
-                {...form.register('datasetName')}
-                disabled={isGenerating}
-              />
-              {form.formState.errors.datasetName && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.datasetName.message}
-                </p>
-              )}
-            </div>
-
-            {/* Prompt */}
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label htmlFor="prompt">Data Description</Label>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleEnhancePrompt}
-                  disabled={isGenerating || isEnhancing || !watchedValues.prompt?.trim()}
-                >
-                  {isEnhancing ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Enhancing...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="mr-2 h-4 w-4" />
-                      Enhance with AI
-                    </>
-                  )}
-                </Button>
-              </div>
-              <Textarea
-                id="prompt"
-                placeholder="Describe the data you want to generate (e.g., 'Generate a dataset of 100 tech companies with their names, locations, employee counts, and revenue')"
-                className="min-h-[100px]"
-                {...form.register('prompt')}
-                disabled={isGenerating}
-              />
-              {form.formState.errors.prompt && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.prompt.message}
-                </p>
-              )}
-              {enhancementInfo && (
-                <div className="rounded-md border bg-muted/40 p-3">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <Wand2 className="h-4 w-4 text-primary" />
-                    AI enhancement applied
-                  </div>
-                  {enhancementInfo.reasoning && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {enhancementInfo.reasoning}
-                    </p>
+        <CardContent className="px-6 pb-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {/* Left Column in Form: Name & Scope */}
+              <div className="space-y-8">
+                <div className="space-y-3">
+                  <Label htmlFor="datasetName" className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground/70">Dataset Identity</Label>
+                  <Input
+                    id="datasetName"
+                    placeholder="e.g., Global Financial Matrix 2025"
+                    className="h-14 rounded-xl bg-secondary/20 border-border/50 focus:ring-primary/20 transition-all text-sm font-bold px-5"
+                    {...form.register('datasetName')}
+                    disabled={isGenerating}
+                  />
+                  {form.formState.errors.datasetName && (
+                    <p className="text-[10px] font-bold text-destructive px-1">{form.formState.errors.datasetName.message}</p>
                   )}
                 </div>
-              )}
-            </div>
 
-            {/* Number of Rows */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="numRows">Number of Rows: {watchedValues.numRows}</Label>
-                <Badge variant="outline">{watchedValues.numRows} rows</Badge>
-              </div>
-              <Slider
-                id="numRows"
-                min={1}
-                max={1000}
-                step={1}
-                value={[watchedValues.numRows]}
-                onValueChange={([value]) => setValue('numRows', value)}
-                disabled={isGenerating}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>1</span>
-                <span>1000</span>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between space-x-2">
-                <div className="space-y-1">
-                  <Label htmlFor="useWebData" className="flex items-center gap-2">
-                    <Globe className="h-4 w-4" />
-                    Use Web Data
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Enable to scrape real data from the web instead of generating synthetic data
-                  </p>
-                </div>
-                <Switch
-                  id="useWebData"
-                  checked={watchedValues.useWebData}
-                  onCheckedChange={(checked) => setValue('useWebData', checked)}
-                  disabled={isGenerating}
-                />
-              </div>
-
-              {watchedValues.useWebData && (
-                <div className="rounded-md bg-muted/40 p-3 space-y-2">
-                  <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-                    <span className="font-medium text-foreground">Web scraping enabled</span>
-                    <span>
-                      The app will search with SERP, scrape pages with Crawl4AI, then structure data into a
-                      CSV-ready dataset.
+                <div className="space-y-5">
+                  <div className="flex justify-between items-center px-1">
+                    <Label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground/70">Node Count</Label>
+                    <span className="text-xs font-black text-primary px-3 py-1 rounded-full bg-primary/10 border border-primary/20 tracking-widest">
+                      {watchedValues.numRows.toLocaleString()} RECORDS
                     </span>
                   </div>
+                  <div className="px-1">
+                    <Slider
+                      value={[watchedValues.numRows]}
+                      onValueChange={([val]) => setValue('numRows', val)}
+                      max={250}
+                      min={1}
+                      step={1}
+                      disabled={isGenerating}
+                      className="py-2"
+                    />
+                  </div>
                 </div>
-              )}
+
+                <div className="flex items-center justify-between p-5 rounded-2xl bg-secondary/10 border border-border/50 group hover:border-primary/20 transition-all duration-300">
+                  <div className="space-y-1">
+                    <Label htmlFor="useWebData" className="text-sm font-black text-foreground cursor-pointer flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-primary" /> Web Intelligence
+                    </Label>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-tight opacity-60">Ground synthesis in empirical data</p>
+                  </div>
+                  <Switch
+                    id="useWebData"
+                    checked={watchedValues.useWebData}
+                    onCheckedChange={(val) => setValue('useWebData', val)}
+                    disabled={isGenerating}
+                  />
+                </div>
+              </div>
+
+              {/* Middle & Right Column: Prompt / Intelligence Scope */}
+              <div className="lg:col-span-2 space-y-3">
+                <div className="flex justify-between items-center px-1">
+                  <Label htmlFor="prompt" className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground/70">Intelligence Scope</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleEnhancePrompt}
+                    disabled={isGenerating || isEnhancing || !watchedValues.prompt?.trim()}
+                    className="h-8 px-4 text-[10px] text-primary font-black uppercase tracking-widest hover:bg-primary/10 rounded-lg transition-all"
+                  >
+                    {isEnhancing ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Wand2 className="h-3 w-3 mr-2" />}
+                    Optimise Engine
+                  </Button>
+                </div>
+                <div className="relative group">
+                  <Textarea
+                    id="prompt"
+                    placeholder="Describe the architectural metadata and domain patterns you require..."
+                    className="min-h-[220px] text-base leading-relaxed resize-none rounded-2xl bg-secondary/20 border-border/50 focus:ring-primary/20 transition-all scrollbar-hide p-6 font-medium"
+                    {...form.register('prompt')}
+                    disabled={isGenerating}
+                  />
+                  <div className="absolute bottom-4 right-4 text-[10px] font-black text-muted-foreground/40 pointer-events-none uppercase tracking-widest">
+                    {(watchedValues.prompt || '').length} Bytes
+                  </div>
+                </div>
+                {form.formState.errors.prompt && (
+                  <p className="text-[10px] font-bold text-destructive flex items-center gap-2 px-1">
+                    <AlertCircle className="w-4 h-4" /> {form.formState.errors.prompt.message}
+                  </p>
+                )}
+              </div>
             </div>
 
-            <Separator />
-
-            {/* Action Buttons */}
-            <div className="flex gap-3">
+            <div className="flex gap-4 pt-4 px-1">
               <Button
                 type="submit"
                 disabled={isGenerating || isSubmitting || !form.formState.isValid || !watchedValues.prompt.trim()}
-                className="flex-1"
+                className="flex-1 h-14 rounded-2xl text-base font-black uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-[1.01] active:scale-[0.99] transition-all bg-primary"
               >
-                {isGenerating || isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {isSubmitting ? 'Starting...' : 'Generating...'}
-                  </>
+                {isGenerating ? (
+                  <><Loader2 className="mr-3 h-5 w-5 animate-spin" /> Forge Active</>
                 ) : (
-                  <>
-                    <Play className="mr-2 h-4 w-4" />
-                    Generate Data
-                  </>
+                  <><Play className="mr-3 h-5 w-5 fill-current" /> Initiate Data Flow</>
                 )}
               </Button>
-
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleReset}
                 disabled={isGenerating}
+                className="h-14 w-14 rounded-2xl border-border/50 p-0 hover:bg-secondary/50 transition-all"
+                title="Reset Forge"
               >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Reset
+                <RefreshCw className="h-5 w-5 text-muted-foreground" />
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      {/* Progress Indicator & Backend CSV Loading State */}
-      {isGenerating && (
-        <Card>
-          <CardContent className="pt-6 space-y-4">
-            {isAnalyzingScraped && (
-              <div className="rounded-md border border-dashed bg-muted/60 px-3 py-2 flex items-start gap-3">
-                <Loader2 className="h-4 w-4 mt-0.5 animate-spin text-primary" />
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Analyzing scraped content with Grok 4.1</p>
-                  <p className="text-xs text-muted-foreground">
-                    Weve sent the full scraped JSON snapshot to the OpenRouter Grok model. This step can take
-                    a little while as it extracts the exact rows you requested.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
+      {/* Results Section (Only visible during/after generation) */}
+      <div className="space-y-6">
+        {/* Compact Progress Card */}
+        {isGenerating && (
+          <Card className="modern-card border-none shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+            <CardContent className="p-6 space-y-6">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{progressLabel}</span>
-                <span className="text-sm text-muted-foreground">{progress}%</span>
-              </div>
-              <Progress value={progress} className="w-full" />
-            </div>
-
-            {isBackendCsvPhase && (
-              <div className="flex items-center justify-center rounded-lg bg-muted/40 px-4 py-6">
-                <div className="flex flex-col items-center gap-3 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-primary/20 bg-background">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Structuring scraped web data into CSV</p>
-                    <p className="text-xs text-muted-foreground">
-                      Scraping is complete. We are now cleaning, organizing, and shaping rows into a downloadable CSV.
-                    </p>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    {progressLabel || "Synthesis in progress..."}
+                  </h3>
+                  <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    <Globe className={`w-3 h-3 ${watchedValues.useWebData ? 'text-primary' : ''}`} />
+                    {streamedRowCountRef.current} / {watchedValues.numRows} Rows Generated
                   </div>
                 </div>
+                <div className="text-2xl font-black text-primary tabular-nums">{progress}%</div>
+              </div>
+              <Progress value={progress} className="h-2 bg-secondary rounded-full" />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Operational Logs Terminal */}
+        {showTerminal && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Operational Logs
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => setShowTerminal(false)} className="h-5 text-[9px] font-bold hover:bg-secondary">HIDE LOGS</Button>
+            </div>
+            <div className="rounded-xl overflow-hidden border border-border/50">
+              <SimpleTerminalLogger
+                ref={terminalLoggerRef}
+                isActive={isGenerating}
+                requestData={{
+                  prompt: watchedValues.prompt,
+                  numRows: watchedValues.numRows,
+                  useWebData: watchedValues.useWebData,
+                }}
+                onComplete={(result) => {
+                  setGenerationResult(result);
+                  setIsGenerating(false);
+                }}
+                onError={(error) => {
+                  console.error('Generation error:', error);
+                  setIsGenerating(false);
+                  setIsSubmitting(false);
+                }}
+                onScrapedContent={(content) => {
+                  setScrapedContent(prev => [...prev, {
+                    content,
+                    timestamp: new Date().toISOString()
+                  }]);
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Well-Structured Results Matrix */}
+        {generationResult && (
+          <div className="animate-in fade-in zoom-in-95 duration-500 space-y-8">
+            {/* AI Analysis Commentary */}
+            {generationResult.feedback && (
+              <div className="p-8 rounded-3xl bg-primary/5 border border-primary/10 space-y-3 relative overflow-hidden group">
+                <div className="flex items-center gap-3 relative z-10">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                    <Brain className="size-4" />
+                  </div>
+                  <h4 className="text-xs font-black uppercase tracking-[0.2em] text-primary">Intelligence Synopsis</h4>
+                </div>
+                <p className="text-base text-muted-foreground leading-relaxed italic font-bold relative z-10 pl-11">
+                  "{generationResult.feedback}"
+                </p>
+                <Sparkles className="absolute -right-4 -bottom-4 size-32 text-primary/5 group-hover:text-primary/10 transition-colors duration-700" />
               </div>
             )}
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Terminal Logger */}
-      {showTerminal && (
-        <div>
-          <SimpleTerminalLogger
-            ref={terminalLoggerRef}
-            isActive={isGenerating}
-            requestData={{
-              prompt: watchedValues.prompt,
-              numRows: watchedValues.numRows,
-              useWebData: watchedValues.useWebData,
-            }}
-            onComplete={(result) => {
-              setGenerationResult(result);
-              setIsGenerating(false);
-            }}
-            onError={(error) => {
-              console.error('Generation error:', error);
-              setIsGenerating(false);
-              setIsSubmitting(false);
-
-              // Show user-friendly error message
-              toast({
-                title: "Generation encountered issues",
-                description: "Some web sources couldn't be accessed, but the process will continue with available data.",
-                variant: "default",
-              });
-            }}
-            onScrapedContent={(content) => {
-              setScrapedContent(prev => [...prev, {
-                content,
-                timestamp: new Date().toISOString()
-              }]);
-            }}
-            onClose={() => setShowTerminal(false)}
-          />
-        </div>
-      )}
-
-      {/* Results Display */}
-      {generationResult && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              Generation Results
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="preview" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="preview">Data Preview</TabsTrigger>
-                <TabsTrigger value="schema">Schema</TabsTrigger>
-                <TabsTrigger value="raw">Raw Data</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="preview" className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">
-                      {generationResult.data?.length || 0} rows
-                    </Badge>
-                    <Badge variant="outline">
-                      {generationResult.schema?.length || 0} columns
-                    </Badge>
-                  </div>
-                  <div className="flex gap-3 items-center">
+            <Card className="modern-card border-none shadow-sm overflow-hidden bg-background/40 backdrop-blur-md">
+              <CardHeader className="bg-muted/20 border-b border-border/10 px-8 py-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                  <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <Label htmlFor="publicToggle" className="text-sm">Public</Label>
-                      <Switch id="publicToggle" checked={isPublic} onCheckedChange={setIsPublic} />
+                      <CheckCircle className="h-5 w-5 text-emerald-500" />
+                      <CardTitle className="text-2xl font-black tracking-tight text-foreground uppercase">Synthesis Manifest</CardTitle>
                     </div>
-                    <Button variant="outline" size="sm" onClick={handleDownloadCSV}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Download CSV
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-emerald-500/20 text-emerald-500 bg-emerald-500/5 h-6 px-3">
+                        {generationResult.data?.length || 0} RECORDS
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] font-black uppercase tracking-widest border-blue-500/20 text-blue-500 bg-blue-500/5 h-6 px-3">
+                        {generationResult.schema?.length || 0} ATTRIBUTES
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button variant="outline" onClick={handleDownloadCSV} className="h-12 px-6 rounded-xl font-black text-xs uppercase tracking-widest border-border/50 hover:bg-secondary/50 transition-all">
+                      <Download className="mr-3 h-4 w-4" /> Download CSV
                     </Button>
-                    <Button size="sm" onClick={handleSaveDataset} disabled={isSaving}>
-                      {isSaving ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Save className="mr-2 h-4 w-4" />
-                      )}
-                      Save Dataset
+                    <Button onClick={handleSaveDataset} disabled={isSaving} className="h-12 px-8 rounded-xl font-black text-xs uppercase tracking-widest bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-500/20 transition-all">
+                      {isSaving ? <Loader2 className="mr-3 h-4 w-4 animate-spin" /> : <Save className="mr-3 h-4 w-4" />}
+                      Vault Records
                     </Button>
                   </div>
                 </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Tabs defaultValue="preview" className="w-full">
+                  <div className="flex items-center justify-between border-b border-border/10 bg-muted/10 px-8">
+                    <TabsList className="h-14 bg-transparent rounded-none p-0 gap-8">
+                      <TabsTrigger value="preview" className="text-xs font-black uppercase tracking-widest h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground bg-transparent transition-all px-0">Data Matrix</TabsTrigger>
+                      <TabsTrigger value="schema" className="text-xs font-black uppercase tracking-widest h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground bg-transparent transition-all px-0">Architecture Map</TabsTrigger>
+                      <TabsTrigger value="raw" className="text-xs font-black uppercase tracking-widest h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground bg-transparent transition-all px-0">Raw Protocol</TabsTrigger>
+                    </TabsList>
 
-                <ScrollArea className="h-[400px] w-full border rounded-md">
-                  {generationResult.data && generationResult.data.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            {generationResult.schema?.map((column) => (
-                              <TableHead key={column.name} className="whitespace-nowrap">
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{column.name}</span>
-                                  <span className="text-xs text-muted-foreground font-normal">
-                                    {column.type}
-                                  </span>
-                                </div>
-                              </TableHead>
-                            )) || Object.keys(generationResult.data[0] || {}).map((key) => (
-                              <TableHead key={key} className="whitespace-nowrap">
-                                {key}
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {generationResult.data.slice(0, 50).map((row, index) => (
-                            <TableRow key={index}>
-                              {generationResult.schema?.map((column) => (
-                                <TableCell key={column.name} className="max-w-[200px] truncate">
-                                  <div className="truncate" title={String(row[column.name] || '')}>
-                                    {String(row[column.name] || '')}
+                    <div className="hidden sm:flex items-center gap-2 p-2 px-4 rounded-xl bg-secondary/30 border border-border/30">
+                      <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Session Immutable</span>
+                    </div>
+                  </div>
+
+                  <TabsContent value="preview" className="m-0">
+                    <ScrollArea className="h-[600px] w-full custom-scrollbar">
+                      {generationResult.data && generationResult.data.length > 0 ? (
+                        <Table>
+                          <TableHeader className="bg-muted/30">
+                            <TableRow className="border-border/30 hover:bg-transparent">
+                              {generationResult.schema?.map((column: { name: string, type: string }) => (
+                                <TableHead key={column.name} className="px-8 py-5 h-16 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black uppercase tracking-[0.1em] text-foreground">{column.name}</span>
+                                    <Badge variant="outline" className="text-[10px] font-black uppercase border-primary/20 text-primary h-5 px-1.5 bg-primary/5">{column.type}</Badge>
                                   </div>
-                                </TableCell>
-                              )) || Object.keys(generationResult.data[0] || {}).map((key) => (
-                                <TableCell key={key} className="max-w-[200px] truncate">
-                                  <div className="truncate" title={String(row[key] || '')}>
-                                    {String(row[key] || '')}
-                                  </div>
-                                </TableCell>
+                                </TableHead>
                               ))}
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-32 text-muted-foreground">
-                      No data available to display
-                    </div>
-                  )}
-                </ScrollArea>
-                {generationResult.data && generationResult.data.length > 50 && (
-                  <p className="text-sm text-muted-foreground text-center">
-                    Showing first 50 rows of {generationResult.data.length} total rows
-                  </p>
-                )}
-              </TabsContent>
+                          </TableHeader>
+                          <TableBody>
+                            {generationResult.data.slice(0, 100).map((row: Record<string, any>, index: number) => (
+                              <TableRow key={index} className="border-border/10 hover:bg-primary/[0.02] transition-colors group">
+                                {generationResult.schema?.map((column: { name: string, type: string }) => (
+                                  <TableCell key={column.name} className="px-8 py-5 text-sm font-bold text-muted-foreground group-hover:text-foreground transition-colors max-w-[300px] truncate">
+                                    {row[column.name] === null || row[column.name] === undefined || String(row[column.name]).trim() === '' ? (
+                                      <span className="opacity-30 italic font-medium">null</span>
+                                    ) : (
+                                      String(row[column.name])
+                                    )}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      ) : (
+                        <div className="flex items-center justify-center h-48 text-xs font-black uppercase tracking-[0.3em] text-muted-foreground/20 italic">No Matrix Data Found</div>
+                      )}
+                    </ScrollArea>
+                  </TabsContent>
 
-              <TabsContent value="schema" className="space-y-4">
-                <div className="space-y-2">
-                  {generationResult.schema && generationResult.schema.length > 0 ? (
-                    generationResult.schema.map((column, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 border rounded-md">
-                        <div>
-                          <span className="font-medium">{column.name}</span>
-                          <span className="text-sm text-muted-foreground ml-2">
-                            ({column.type})
-                          </span>
+                  <TabsContent value="schema" className="p-10 m-0">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {generationResult.schema?.map((column: any, index: number) => (
+                        <div key={index} className="p-6 rounded-2xl bg-secondary/20 border border-border/50 group hover:border-primary/40 transition-all duration-300 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-black uppercase tracking-wider text-foreground">{column.name}</p>
+                            <Badge variant="secondary" className="text-[10px] font-black tracking-widest bg-primary/10 text-primary border-none">{column.type}</Badge>
+                          </div>
+                          {column.description && <p className="text-sm text-muted-foreground leading-relaxed font-bold group-hover:text-foreground/80 transition-colors uppercase tracking-tight text-[10px]">{column.description}</p>}
                         </div>
-                        {column.description && (
-                          <span className="text-sm text-muted-foreground">
-                            {column.description}
-                          </span>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex items-center justify-center h-32 text-muted-foreground">
-                      No schema information available
+                      ))}
                     </div>
-                  )}
-                </div>
-              </TabsContent>
+                  </TabsContent>
 
-              <TabsContent value="raw" className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">CSV Data</span>
-                    <Badge variant="outline">
-                      {generationResult.csv ? `${generationResult.csv.split('\n').length - 1} lines` : '0 lines'}
-                    </Badge>
-                  </div>
-                  <ScrollArea className="h-[400px] w-full border rounded-md">
-                    {generationResult.csv ? (
-                      <div className="p-4">
-                        <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-                          {generationResult.csv}
-                        </pre>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center h-32 text-muted-foreground">
-                        No CSV data available
-                      </div>
-                    )}
-                  </ScrollArea>
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            {generationResult.feedback && (
-              <div className="mt-4 p-3 bg-muted rounded-md">
-                <p className="text-sm">
-                  <strong>AI Feedback:</strong> {generationResult.feedback}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Scraped Content Display */}
-      {scrapedContent.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              Scraped Content
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-[300px] w-full">
-              <div className="space-y-3">
-                {scrapedContent.map((item, index) => (
-                  <div key={index} className="p-3 border rounded-md">
-                    <div className="flex items-center justify-between mb-2">
-                      <Badge variant="secondary">Content {index + 1}</Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(item.timestamp).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted-foreground line-clamp-3">
-                      {typeof item.content === 'string' ? item.content : JSON.stringify(item.content)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      )}
+                  <TabsContent value="raw" className="m-0">
+                    <ScrollArea className="h-[600px] w-full bg-black/40 p-10 custom-scrollbar">
+                      <pre className="text-xs font-mono text-emerald-400/80 leading-loose">
+                        {generationResult.csv}
+                      </pre>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

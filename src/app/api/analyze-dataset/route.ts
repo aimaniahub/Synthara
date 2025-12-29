@@ -47,31 +47,16 @@ export async function POST(request: NextRequest) {
         type: col.type,
       }));
 
-      const columnPrompt = `You are a senior data analyst.
+      const columnPrompt = `You are a technical data analyst.
+Dataset schema: ${JSON.stringify(schema)}
+Sample rows: ${JSON.stringify(sampleData.slice(0, 5))}
+Profile: ${JSON.stringify(analysisResult.profile)}
 
-Dataset schema:
-${JSON.stringify(schema, null, 2)}
-
-Sample rows (up to 100):
-${JSON.stringify(sampleData.slice(0, 20), null, 2)}
-
-Profile summary:
-${JSON.stringify(analysisResult.profile, null, 2)}
-
-For each column, provide:
-- A short human-readable description of what the column represents
-- Notable quality issues (missing values, outliers, skew, etc.)
-- Concrete recommendations to improve data quality or usage
-
-Return JSON only:
+For each column, provide a concise summary, quality issues, and 1 action. Use technical language.
+Return JSON ONLY:
 {
   "columnInsights": [
-    {
-      "name": "column_name",
-      "summary": "short description",
-      "qualityIssues": ["issue 1", "issue 2"],
-      "recommendations": ["recommendation 1", "recommendation 2"]
-    }
+    { "name": "col", "summary": "desc", "qualityIssues": ["issue"], "recommendations": ["action"] }
   ]
 }`;
 
@@ -88,41 +73,38 @@ Return JSON only:
           columnInsights: [
             {
               name: 'column_name',
-              summary: 'short description',
-              qualityIssues: ['issue 1'],
-              recommendations: ['recommendation 1'],
+              summary: 'summary',
+              qualityIssues: ['issue'],
+              recommendations: ['rec'],
             },
           ],
         },
-        model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
-        maxTokens: 2000,
-        temperature: 0.3,
+        model: process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b:free',
+        maxTokens: 800,
+        temperature: 0.2,
       });
 
-      const deepPrompt = `You are a senior data scientist.
+      const deepPrompt = `You are a Lead Data Architect at Synthara.
+Analyze this comprehensive dataset profile: ${JSON.stringify(analysisResult.profile)}
 
-Dataset profile:
-${JSON.stringify(analysisResult.profile, null, 2)}
+Your objective is to map "Entity Relationships" across the entire schema. 
+Even if the statistical correlation matrix is sparse or empty, use your intelligence to identify:
+1. Semantic dependencies between categorical fields (e.g., "Most 'Action' movies have 'High' budgets").
+2. Observed hierarchies or logical groupings.
+3. Interesting patterns in value distributions across different columns.
 
-Correlation matrix (may be empty):
-${JSON.stringify(analysisResult.profile.correlationMatrix || [], null, 2)}
+Provide:
+1. One-sentence technical summary of the dataset's architecture.
+2. Top correlation/relationship insights mapped as entities.
+3. 3-5 high-priority technical recommendations for synthesis or optimization.
 
-Numeric columns: ${JSON.stringify(analysisResult.profile.numericColumns || [])}
-Categorical columns: ${JSON.stringify(analysisResult.profile.categoricalColumns || [])}
-Total rows: ${analysisResult.profile.totalRows}
-
-Provide high-level insights about this dataset, including:
-- A concise summary of what the dataset seems to capture
-- Interesting correlations or relationships
-- Actionable recommendations for feature engineering or further analysis
-
-Return JSON only:
+Return JSON ONLY:
 {
-  "summary": "short paragraph",
+  "summary": "...",
   "correlations": [
-    { "columnA": "col1", "columnB": "col2", "strength": "weak|moderate|strong", "insight": "text" }
+    { "columnA": "First Column", "columnB": "Second Column", "strength": "Strong | Moderate | Weak", "insight": "Describe the semantic or statistical connection." }
   ],
-  "recommendations": ["rec 1", "rec 2"]
+  "recommendations": ["..."]
 }`;
 
       const deepAnalysis = await SimpleAI.generateWithSchema<{
@@ -137,7 +119,7 @@ Return JSON only:
       }>({
         prompt: deepPrompt,
         schema: {
-          summary: 'short paragraph',
+          summary: 'summary',
           correlations: [
             {
               columnA: 'col1',
@@ -148,9 +130,9 @@ Return JSON only:
           ],
           recommendations: ['rec 1'],
         },
-        model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
-        maxTokens: 2000,
-        temperature: 0.3,
+        model: process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b:free',
+        maxTokens: 800,
+        temperature: 0.2,
       });
 
       aiInsights = {
@@ -193,7 +175,7 @@ Return JSON only:
   } catch (error) {
     console.error('Analysis API error:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Analysis failed',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

@@ -1,8 +1,10 @@
-import type {Metadata} from 'next';
+import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from '@/components/theme-provider';
 import { ErrorHandler } from '@/components/error-handler';
+import { RouteProgress } from '@/components/ui/route-progress';
 import { Inter, Space_Grotesk } from 'next/font/google'; // Import GoogleFont objects
 
 // Configure Inter font with fallback handling
@@ -46,6 +48,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          {/* Route transition progress bar */}
+          <Suspense fallback={null}>
+            <RouteProgress />
+          </Suspense>
           <ErrorHandler />
           {children}
           <Toaster />
@@ -54,3 +60,4 @@ export default function RootLayout({
     </html>
   );
 }
+

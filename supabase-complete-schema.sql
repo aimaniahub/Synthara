@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS public.generated_datasets (
     schema_json JSONB NOT NULL,
     data_csv TEXT NOT NULL,
     feedback TEXT,
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -103,6 +104,11 @@ CREATE POLICY "Users can update their own datasets" ON public.generated_datasets
 CREATE POLICY "Users can delete their own datasets" ON public.generated_datasets
     FOR DELETE USING (auth.uid() = user_id);
 
+ALTER TABLE public.generated_datasets ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE POLICY IF NOT EXISTS "Anyone can view public datasets" ON public.generated_datasets
+    FOR SELECT USING (is_public = true);
+
 -- Create RLS policies for user_profiles
 CREATE POLICY "Users can view their own profile" ON public.user_profiles
     FOR SELECT USING (auth.uid() = user_id);
@@ -163,17 +169,100 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Create storage bucket for file uploads
-INSERT INTO storage.buckets (id, name, public) VALUES ('datasets', 'datasets', false);
+INSERT INTO storage.buckets (id, name, public) VALUES ('datasets', 'datasets', false)
+ON CONFLICT (id) DO NOTHING;
 
 -- Create storage policies
-CREATE POLICY "Users can upload their own files" ON storage.objects
+CREATE POLICY IF NOT EXISTS "Users can upload their own files" ON storage.objects
     FOR INSERT WITH CHECK (bucket_id = 'datasets' AND auth.uid()::text = (storage.foldername(name))[1]);
 
-CREATE POLICY "Users can view their own files" ON storage.objects
+CREATE POLICY IF NOT EXISTS "Users can view their own files" ON storage.objects
     FOR SELECT USING (bucket_id = 'datasets' AND auth.uid()::text = (storage.foldername(name))[1]);
 
-CREATE POLICY "Users can update their own files" ON storage.objects
+CREATE POLICY IF NOT EXISTS "Users can update their own files" ON storage.objects
     FOR UPDATE USING (bucket_id = 'datasets' AND auth.uid()::text = (storage.foldername(name))[1]);
 
-CREATE POLICY "Users can delete their own files" ON storage.objects
+CREATE POLICY IF NOT EXISTS "Users can delete their own files" ON storage.objects
     FOR DELETE USING (bucket_id = 'datasets' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Training tables for production-like training lifecycle
+CREATE TABLE IF NOT EXISTS public.training_jobs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    dataset_name TEXT,
+    config JSONB DEFAULT '{}'::jsonb NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'QUEUED',
+    total_epochs INTEGER NOT NULL DEFAULT 0,
+    current_epoch INTEGER NOT NULL DEFAULT 0,
+    progress INTEGER NOT NULL DEFAULT 0,
+    last_metrics JSONB,
+    artifact_path TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.training_logs (
+    id BIGSERIAL PRIMARY KEY,
+    job_id UUID NOT NULL REFERENCES public.training_jobs(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    epoch INTEGER NOT NULL,
+    progress INTEGER NOT NULL,
+    metrics JSONB,
+    message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for training tables
+CREATE INDEX IF NOT EXISTS idx_training_jobs_user_id ON public.training_jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_training_jobs_created_at ON public.training_jobs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_training_logs_job_id_epoch ON public.training_logs(job_id, epoch);
+CREATE INDEX IF NOT EXISTS idx_training_logs_user_id ON public.training_logs(user_id);
+
+-- Enable RLS on training tables
+ALTER TABLE public.training_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.training_logs ENABLE ROW LEVEL SECURITY;
+
+-- Policies for training_jobs
+CREATE POLICY IF NOT EXISTS "Users can view their own training jobs" ON public.training_jobs
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "Users can insert their own training jobs" ON public.training_jobs
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "Users can update their own training jobs" ON public.training_jobs
+    FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "Users can delete their own training jobs" ON public.training_jobs
+    FOR DELETE USING (auth.uid() = user_id);
+
+-- Policies for training_logs
+CREATE POLICY IF NOT EXISTS "Users can view their own training logs" ON public.training_logs
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "Users can insert their own training logs" ON public.training_logs
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY IF NOT EXISTS "Users can update their own training logs" ON public.training_logs
+    FOR UPDATE USING (auth.uid() = user_id);
+
+-- Trigger to keep updated_at fresh on training_jobs
+CREATE TRIGGER IF NOT EXISTS update_training_jobs_updated_at 
+    BEFORE UPDATE ON public.training_jobs 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Create storage bucket for model artifacts
+INSERT INTO storage.buckets (id, name, public) VALUES ('models', 'models', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- Create storage policies for model artifacts
+CREATE POLICY IF NOT EXISTS "Users can upload their own model artifacts" ON storage.objects
+    FOR INSERT WITH CHECK (bucket_id = 'models' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY IF NOT EXISTS "Users can view their own model artifacts" ON storage.objects
+    FOR SELECT USING (bucket_id = 'models' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY IF NOT EXISTS "Users can update their own model artifacts" ON storage.objects
+    FOR UPDATE USING (bucket_id = 'models' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+CREATE POLICY IF NOT EXISTS "Users can delete their own model artifacts" ON storage.objects
+    FOR DELETE USING (bucket_id = 'models' AND auth.uid()::text = (storage.foldername(name))[1]);

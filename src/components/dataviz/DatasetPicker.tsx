@@ -18,6 +18,7 @@ type SavedDataset = {
 
 type Props = {
   onChange: (rows: Record<string, any>[], meta: DatasetMeta) => void
+  hidePreview?: boolean
 }
 
 async function parseCSV(csvText: string): Promise<Record<string, any>[]> {
@@ -31,7 +32,7 @@ async function parseCSV(csvText: string): Promise<Record<string, any>[]> {
   return rows
 }
 
-export default function DatasetPicker({ onChange }: Props) {
+export default function DatasetPicker({ onChange, hidePreview }: Props) {
   const [saved, setSaved] = useState<SavedDataset[]>([])
   const [loadingSaved, setLoadingSaved] = useState(true)
   const [selectedId, setSelectedId] = useState<string>('')
@@ -161,7 +162,7 @@ export default function DatasetPicker({ onChange }: Props) {
         <div className="text-sm text-destructive">{error}</div>
       )}
 
-      {!!preview.length && (
+      {!hidePreview && !!preview.length && (
         <div className="rounded-lg border p-3">
           <div className="text-xs text-muted-foreground mb-2">
             {meta?.source === 'saved' ? 'Saved Dataset' : 'Uploaded File'} · {rows.length} rows · {Object.keys(preview[0] || {}).length} columns

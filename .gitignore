@@ -38,8 +38,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# AI and development
+# environment variables
 .env*
+!.env.example
 
 # firebase
 firebase-debug.log
@@ -67,3 +68,20 @@ logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Build output and debug files
+build-errors.txt
+build_output.txt
+undef_context.txt
+undef_errors.txt
+
+# AI/Development prompt files
+windsurf_optimization_prompt.md
+
+# Documentation drafts (numbered txt files)
+[0-9][0-9]_*.txt
+
+# IDE
+.idea/
+*.swp
+*.swo

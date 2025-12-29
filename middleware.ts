@@ -100,7 +100,7 @@ export async function middleware(request: NextRequest) {
     url.searchParams.delete('next') // Clear next param as we are going to dashboard
     return NextResponse.redirect(url)
   }
-  
+
   // Return the response, which may have updated cookies from supabase.auth.getUser()
   return response
 }
