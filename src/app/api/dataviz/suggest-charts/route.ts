@@ -3,6 +3,8 @@ import { type SuggestChartsRequest, type SuggestChartsResponse, type ColumnInfo,
 import { SimpleAI } from '@/ai/simple-ai';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 120; // 2 minutes for AI operations
 
 function pickCharts(columns: ColumnInfo[]): ChartSpec[] {
   const nums = columns.filter(c => c.type === 'number');

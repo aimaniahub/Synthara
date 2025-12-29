@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 120; // 2 minutes for AI operations
 import { analysisService } from '@/services/analysis-service';
 import { SimpleAI } from '@/ai/simple-ai';
 

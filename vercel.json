@@ -15,6 +15,12 @@
     },
     "src/app/api/crawl4ai/route.ts": {
       "maxDuration": 120
+    },
+    "src/app/api/dataviz/**/*.ts": {
+      "maxDuration": 120
+    },
+    "src/app/api/analyze-dataset/route.ts": {
+      "maxDuration": 120
     }
   },
   "headers": [
