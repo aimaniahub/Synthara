@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getWritableTempDir } from '@/lib/utils/fs-utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,13 +55,7 @@ export async function POST(request: NextRequest) {
     const filename = `dataset-${timestamp}.csv`;
 
     // Save to local file system
-    const outputDir = join(process.cwd(), 'output');
-    try {
-      await mkdir(outputDir, { recursive: true });
-    } catch (error) {
-      // Directory might already exist, ignore error
-    }
-
+    const outputDir = getWritableTempDir('output');
     const filepath = join(outputDir, filename);
     await writeFile(filepath, csvData, 'utf8');
 

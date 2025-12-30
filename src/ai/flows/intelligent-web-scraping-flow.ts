@@ -8,6 +8,7 @@ import { SimpleAI } from '@/ai/simple-ai';
 import { crawl4aiService } from '@/services/crawl4ai-service';
 import { inferSchema } from '@/lib/data-processing/schema-inference';
 import { generateCSV } from '@/lib/data-processing/csv-generator';
+import { getWritableTempDir } from '@/lib/utils/fs-utils';
 
 // Input validation schema
 const IntelligentWebScrapingInputSchema = z.object({
@@ -53,7 +54,8 @@ export interface WebScrapingLogger {
 function extractRowsFromAnalyzedFile(sessionId: string | undefined, logger?: WebScrapingLogger): Array<Record<string, any>> {
   try {
     if (!sessionId) return [];
-    const analyzedPath = join(process.cwd(), 'temp', 'analyzed', `${sessionId}-ai-analysis.json`);
+    const analyzedDir = getWritableTempDir('analyzed');
+    const analyzedPath = join(analyzedDir, `${sessionId}-ai-analysis.json`);
     if (!existsSync(analyzedPath)) return [];
     const raw = readFileSync(analyzedPath, { encoding: 'utf8' }).trim();
 
@@ -118,11 +120,7 @@ function writeRowChunksToTemp(
   logger?: WebScrapingLogger
 ): { dir: string; count: number; size: number } | null {
   try {
-    const tempBase = join(process.cwd(), 'temp');
-    const chunksDir = join(tempBase, 'chunks');
-    if (!existsSync(chunksDir)) {
-      mkdirSync(chunksDir, { recursive: true });
-    }
+    const chunksDir = getWritableTempDir('chunks');
     const sid = sessionId || new Date().getTime().toString();
     const chunkSize = 25;
     let count = 0;
@@ -435,10 +433,7 @@ export async function intelligentWebScraping(
       logger
     );
 
-    const outputDir = join(process.cwd(), 'output');
-    if (!existsSync(outputDir)) {
-      mkdirSync(outputDir, { recursive: true });
-    }
+    const outputDir = getWritableTempDir('output');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const csvFileName = `dataset-${timestamp}.csv`;
     const csvFilePath = join(outputDir, csvFileName);
@@ -1244,15 +1239,9 @@ async function dumpScrapedDataToTempFile(
   sessionId?: string
 ): Promise<string | null> {
   try {
-    // Create temp directory if it doesn't exist
-    const tempDir = join(process.cwd(), 'temp');
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
-    }
-    const scrapedDir = join(tempDir, 'scraped');
-    if (!existsSync(scrapedDir)) {
-      mkdirSync(scrapedDir, { recursive: true });
-    }
+    // Create temp directory which is environment-aware
+    const tempDir = getWritableTempDir();
+    const scrapedDir = getWritableTempDir('scraped');
 
     // Create a comprehensive dataset file
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

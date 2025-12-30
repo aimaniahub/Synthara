@@ -6,6 +6,7 @@
 import { OpenAI } from 'openai';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { getWritableTempDir } from '@/lib/utils/fs-utils';
 
 // Initialize OpenRouter client
 const openRouterApiKey = process.env.OPENROUTER_API_KEY;
@@ -136,21 +137,15 @@ ${JSON.stringify(schema, null, 2)}`;
     // Always persist the raw AI response so we can debug or post-process it later
     let rawResponsePath: string | null = null;
     try {
-      const tempDir = join(process.cwd(), 'temp');
-      if (!existsSync(tempDir)) {
-        mkdirSync(tempDir, { recursive: true });
-      }
+      const tempDir = getWritableTempDir();
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       rawResponsePath = join(tempDir, `ai-raw-response-${timestamp}.json`);
       writeFileSync(rawResponsePath, result.text, 'utf8');
       console.log(`[SimpleAI] Raw AI response saved to: ${rawResponsePath}`);
 
-      // If we have a sessionId, also copy to temp/analyzed/{sessionId}-ai-analysis.json immediately
+      // If we have a sessionId, also copy to analyzed/{sessionId}-ai-analysis.json immediately
       if (sessionId) {
-        const analyzedDir = join(tempDir, 'analyzed');
-        if (!existsSync(analyzedDir)) {
-          mkdirSync(analyzedDir, { recursive: true });
-        }
+        const analyzedDir = getWritableTempDir('analyzed');
         const analyzedPath = join(analyzedDir, `${sessionId}-ai-analysis.json`);
         writeFileSync(analyzedPath, result.text, 'utf8');
       }
@@ -423,11 +418,7 @@ Return your response as a JSON object with this exact structure:
     try {
       const rawPath = (result as any)?._rawFilePath as string | undefined;
       if (sessionId && rawPath) {
-        const tempBase = join(process.cwd(), 'temp');
-        const analyzedDir = join(tempBase, 'analyzed');
-        if (!existsSync(analyzedDir)) {
-          mkdirSync(analyzedDir, { recursive: true });
-        }
+        const analyzedDir = getWritableTempDir('analyzed');
         const analyzedPath = join(analyzedDir, `${sessionId}-ai-analysis.json`);
         const rawText = readFileSync(rawPath, 'utf8');
         writeFileSync(analyzedPath, rawText, 'utf8');

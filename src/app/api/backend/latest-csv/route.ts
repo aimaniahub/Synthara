@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { existsSync, readdirSync, statSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { getWritableTempDir } from '@/lib/utils/fs-utils';
 
 function parseCsvLine(line: string): string[] {
   const result: string[] = [];
@@ -37,18 +38,7 @@ function parseCsvLine(line: string): string[] {
 
 export async function GET() {
   try {
-    const outputDir = join(process.cwd(), 'output');
-    if (!existsSync(outputDir)) {
-      return NextResponse.json(
-        { success: false, status: 'not_ready', error: 'Output directory not found' },
-        {
-          status: 202,
-          headers: {
-            'Retry-After': '5',
-          },
-        },
-      );
-    }
+    const outputDir = getWritableTempDir('output');
 
     const entries = readdirSync(outputDir).filter((name) => name.toLowerCase().endsWith('.csv'));
     if (!entries.length) {
