@@ -31,7 +31,7 @@ async function scrapeUrlsForJob(urls: string[]): Promise<
 
   const healthOk = await fetch(`${crawl4aiServiceUrl}/health`, {
     method: 'GET',
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(30000),
   }).catch(() => undefined);
 
   if (!healthOk || !healthOk.ok) {
@@ -62,7 +62,7 @@ async function scrapeUrlsForJob(urls: string[]): Promise<
             extract_clean_html: true,
             extract_text: true,
             wait_for: null,
-            timeout: 20000,
+            timeout: 180000,
             remove_forms: true,
             remove_scripts: true,
             remove_styles: true,

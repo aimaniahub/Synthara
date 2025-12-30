@@ -23,7 +23,7 @@ class Crawl4AIService {
       'http://localhost:11235';
   }
 
-  async health(timeoutMs: number = 5000): Promise<boolean> {
+  async health(timeoutMs: number = 30000): Promise<boolean> {
     try {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeoutMs);

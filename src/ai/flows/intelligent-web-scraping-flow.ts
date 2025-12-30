@@ -939,7 +939,7 @@ async function scrapeUrlsWithCrawl4AI(
     try {
       const healthCheck = await fetch(`${crawl4aiServiceUrl}/health`, {
         method: 'GET',
-        signal: AbortSignal.timeout(5000) // 5 second timeout
+        signal: AbortSignal.timeout(30000) // 30 second timeout
       });
       if (!healthCheck.ok) {
         throw new Error(`Service health check failed: ${healthCheck.status}`);
@@ -1000,7 +1000,7 @@ async function scrapeUrlsWithCrawl4AI(
                     extract_clean_html: true,
                     extract_text: true,
                     wait_for: null,
-                    timeout: 20000, // Reduced timeout for faster failure detection
+                    timeout: 180000, // 3-minute timeout for scraping
                   },
                 }),
               });
