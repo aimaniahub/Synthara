@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         console.log(`[Crawl4AI API] Scraping: ${url}`);
 
         // Call actual Crawl4AI service
-        const crawl4aiUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:11235';
+        const crawl4aiUrl = process.env.CRAWL4AI_SERVICE_URL || process.env.CRAWL4AI_EXTRACT_URL || 'http://localhost:11235';
         const response = await fetch(`${crawl4aiUrl}/crawl`, {
           method: 'POST',
           headers: {

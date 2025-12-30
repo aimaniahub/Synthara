@@ -27,7 +27,7 @@ async function scrapeUrlsForJob(urls: string[]): Promise<
     content: string;
   }>
 > {
-  const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || 'http://localhost:11235';
+  const crawl4aiServiceUrl = process.env.CRAWL4AI_SERVICE_URL || process.env.CRAWL4AI_EXTRACT_URL || 'http://localhost:11235';
 
   const healthOk = await fetch(`${crawl4aiServiceUrl}/health`, {
     method: 'GET',

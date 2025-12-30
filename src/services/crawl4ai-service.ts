@@ -18,9 +18,9 @@ class Crawl4AIService {
 
   constructor() {
     this.baseUrl =
-      process.env.CRAWL4AI_EXTRACT_URL ||
       process.env.CRAWL4AI_SERVICE_URL ||
-      'http://localhost:11236';
+      process.env.CRAWL4AI_EXTRACT_URL ||
+      'http://localhost:11235';
   }
 
   async health(timeoutMs: number = 5000): Promise<boolean> {
@@ -67,11 +67,11 @@ class Crawl4AIService {
 
       const normalized: Crawl4AIStructuredResult[] = Array.isArray(data?.results)
         ? data.results.map((r: any) => ({
-            url: String(r.url || r.source || ''),
-            title: r.title ? String(r.title) : undefined,
-            rows: Array.isArray(r.rows) ? r.rows : Array.isArray(r.data) ? r.data : [],
-            schema: Array.isArray(r.schema) ? r.schema.map((c: any) => ({ name: String(c.name || c.key), type: String(c.type || 'string'), description: c.description })) : undefined,
-          }))
+          url: String(r.url || r.source || ''),
+          title: r.title ? String(r.title) : undefined,
+          rows: Array.isArray(r.rows) ? r.rows : Array.isArray(r.data) ? r.data : [],
+          schema: Array.isArray(r.schema) ? r.schema.map((c: any) => ({ name: String(c.name || c.key), type: String(c.type || 'string'), description: c.description })) : undefined,
+        }))
         : [];
 
       return { success: Boolean(data?.success) && normalized.length > 0, results: normalized, error: data?.error };
