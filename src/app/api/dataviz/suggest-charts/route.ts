@@ -103,7 +103,12 @@ export async function POST(req: NextRequest) {
 Given ONLY the dataset schema below, propose 1-3 highly effective visualizations that provide deep ML insights. 
 You may choose from: ${available}.
 
-Rules for allowed charts:
+Rules:
+- DO NOT provide any reasoning, thinking, or introduction text.
+- START your response directly with the opening bracket {
+- ENSURE the output is strictly valid JSON.
+
+Chart Types and Rules:
 - line: Best for time-series or trends; xField must be a date; yField must be number.
 - bar: Best for comparing categories; xField must be categorical; yField must be number or count.
 - scatter: Best for identifying correlations between two numeric variables; xField number; yField number.
@@ -113,7 +118,7 @@ Rules for allowed charts:
 - radar: Best for multivariate feature comparison.
 
 ML Insight Requirement:
-For EACH chart, provide a "mlInsight" field. This MUST be a concise, professional 1-point summary from an ML perspective (e.g., "Identifies potential linear correlation between X and Y", "Shows heavy right-skewed distribution suggesting data normalization might be needed", "Visualizes significant outliers in feature Z").
+For EACH chart, provide a "mlInsight" field. This MUST be a concise, professional 1-point summary from an ML perspective.
 
 Constraints:
 - Use only columns that exist in the schema.
@@ -123,7 +128,7 @@ Constraints:
 Dataset: ${body.datasetName || 'Untitled Dataset'}
 Columns:\n${columnHints}`;
 
-        const model = process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free';
+        const model = process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free';
         const ai = await SimpleAI.generateWithSchema<SuggestChartsResponse>({
           prompt,
           schema: schemaShape,

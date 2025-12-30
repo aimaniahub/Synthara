@@ -212,157 +212,137 @@ export function DatasetSelector({ onDatasetSelect, onAnalysisStart, hideAnalyzeB
   const hasData = parsedData.length > 0;
 
   return (
-    <Card className="modern-card border-none shadow-sm overflow-hidden">
-      <CardHeader className="pb-4 pt-6 px-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
-            <Database className="h-4 w-4" />
-          </div>
-          <CardTitle className="text-lg font-bold tracking-tight">Dataset Selection</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="px-6 pb-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Saved Datasets */}
-          <div className="space-y-3">
-            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Saved Intelligence</Label>
-            {isLoadingDatasets ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground h-10">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Retrieving...
-              </div>
-            ) : (
-              <Select value={selectedDatasetId} onValueChange={handleSavedDatasetSelect}>
-                <SelectTrigger className="h-10 rounded-lg bg-secondary/30 border-border/50 focus:ring-primary/20 transition-all text-sm">
-                  <SelectValue placeholder="Chose a saved dataset" />
-                </SelectTrigger>
-                <SelectContent>
-                  {savedDatasets.length === 0 ? (
-                    <SelectItem value="__no_saved__" disabled>
-                      No saved datasets
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Saved Datasets */}
+        <div className="space-y-1.5">
+          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Repository</Label>
+          {isLoadingDatasets ? (
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground h-9">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Retrieving...
+            </div>
+          ) : (
+            <Select value={selectedDatasetId} onValueChange={handleSavedDatasetSelect}>
+              <SelectTrigger className="h-9 rounded-lg bg-secondary/30 border-border/50 focus:ring-primary/20 transition-all text-xs">
+                <SelectValue placeholder="Chose a saved dataset" />
+              </SelectTrigger>
+              <SelectContent>
+                {savedDatasets.length === 0 ? (
+                  <SelectItem value="__no_saved__" disabled>
+                    No saved datasets
+                  </SelectItem>
+                ) : (
+                  savedDatasets.map((dataset) => (
+                    <SelectItem key={dataset.id} value={dataset.id}>
+                      <div className="flex items-center justify-between w-full">
+                        <span className="truncate">{dataset.dataset_name}</span>
+                        <Badge variant="secondary" className="ml-2 text-[8px] h-4">
+                          {dataset.num_rows}
+                        </Badge>
+                      </div>
                     </SelectItem>
-                  ) : (
-                    savedDatasets.map((dataset) => (
-                      <SelectItem key={dataset.id} value={dataset.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <span className="truncate">{dataset.dataset_name}</span>
-                          <Badge variant="secondary" className="ml-2 text-[8px] h-4">
-                            {dataset.num_rows} rows
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {/* File Upload */}
+        <div className="space-y-1.5">
+          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">External Stream (CSV)</Label>
+          <div className="relative group">
+            <Input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              disabled={isParsingFile}
+              className="h-9 rounded-lg bg-secondary/30 border-border/50 file:mr-3 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[9px] file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 text-[10px] transition-all cursor-pointer flex items-center"
+            />
+            {isParsingFile && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              </div>
             )}
           </div>
-
-          {/* File Upload */}
-          <div className="space-y-3">
-            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">External Protocol (CSV)</Label>
-            <div className="relative group">
-              <Input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                disabled={isParsingFile}
-                className="h-10 rounded-lg bg-secondary/30 border-border/50 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 text-xs transition-all cursor-pointer"
-              />
-              {isParsingFile && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Loader2 className="h-3 w-3 animate-spin text-primary" />
-                </div>
-              )}
-            </div>
-          </div>
         </div>
+      </div>
 
-        {/* Data Preview */}
-        {hasData && (
-          <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Payload Preview</Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearSelection}
-                className="h-6 px-2 text-[10px] font-bold text-destructive hover:bg-destructive/5"
-              >
-                <X className="h-3 w-3 mr-1" /> Clear
-              </Button>
+      {hasData && (
+        <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+          <div className="flex items-center justify-between">
+            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Ingested Payload</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSelection}
+              className="h-5 px-1.5 text-[9px] font-bold text-destructive hover:bg-destructive/5"
+            >
+              <X className="h-3 w-3 mr-1" /> Clear
+            </Button>
+          </div>
+
+          <div className="border border-border/30 rounded-lg overflow-hidden bg-secondary/5">
+            <div className="bg-secondary/10 px-3 py-1 text-[9px] font-bold text-muted-foreground/70 flex items-center justify-between border-b border-border/10">
+              <span className="flex items-center gap-1.5"><CheckCircle className="size-2.5 text-emerald-500" /> ACTIVE CONTEXT</span>
+              <span className="text-[8px]">{previewData.length > 0 ? Object.keys(previewData[0]).length : 0} FIELDS | {parsedData.length} RECORDS</span>
             </div>
-
-            <div className="border border-border/50 rounded-xl overflow-hidden bg-secondary/10">
-              <div className="bg-secondary/20 px-4 py-2 text-xs font-bold text-muted-foreground flex items-center justify-between">
-                <span>{selectedDatasetId ? 'REPOSITORY SOURCE' : 'UPLOADED STREAM'}</span>
-                <span className="text-primary">{previewData.length > 0 ? Object.keys(previewData[0]).length : 0} FIELDS | {parsedData.length} RECORDS</span>
-              </div>
-              <ScrollArea className="h-64 w-full">
-                <table className="w-full text-xs">
-                  <thead className="bg-secondary/10 sticky top-0">
-                    <tr>
-                      {previewData.length > 0 && Object.keys(previewData[0]).map((key) => (
-                        <th key={key} className="px-4 py-3 text-left font-bold text-muted-foreground/70 truncate max-w-48 border-b border-border/30">
-                          {key}
-                        </th>
+            <ScrollArea className="h-32 w-full">
+              <table className="w-full text-[10px]">
+                <thead className="bg-secondary/5 sticky top-0">
+                  <tr>
+                    {previewData.length > 0 && Object.keys(previewData[0]).map((key) => (
+                      <th key={key} className="px-3 py-1.5 text-left font-bold text-muted-foreground/50 truncate max-w-32 border-b border-border/10">
+                        {key}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewData.map((row, index) => (
+                    <tr key={index} className="border-b border-border/5 last:border-0 hover:bg-white/5 transition-colors">
+                      {Object.values(row).map((value, cellIndex) => (
+                        <td key={cellIndex} className="px-3 py-1.5 truncate max-w-32 text-muted-foreground/80 font-medium">
+                          {value === null || value === undefined ? (
+                            <span className="opacity-20 italic">null</span>
+                          ) : (
+                            String(value)
+                          )}
+                        </td>
                       ))}
                     </tr>
-                  </thead>
-                  <tbody>
-                    {previewData.map((row, index) => (
-                      <tr key={index} className="border-b border-border/20 last:border-0 hover:bg-white/5 transition-colors">
-                        {Object.values(row).map((value, cellIndex) => (
-                          <td key={cellIndex} className="px-4 py-3 truncate max-w-48 text-muted-foreground font-medium">
-                            {value === null || value === undefined ? (
-                              <span className="opacity-30 italic">null</span>
-                            ) : (
-                              String(value)
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </ScrollArea>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
-          {!hideAnalyzeButton && (
-            <Button
-              onClick={handleAnalyze}
-              disabled={!hasData}
-              className="w-full sm:w-auto min-w-40 h-11 rounded-xl text-sm font-bold shadow-md shadow-emerald-500/10 hover:translate-y-[-1px] transition-all active:translate-y-0"
-              variant={hasData ? "default" : "secondary"}
-            >
-              {hasData ? (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Analyze Dataset
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="h-4 w-4 mr-2" />
-                  Select Dataset
-                </>
-              )}
-            </Button>
-          )}
-
-          <div className="flex-1 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10 flex items-center gap-3">
-            <div className="p-1.5 rounded-md bg-blue-500/10 text-blue-600">
-              <FileText className="h-3 w-3" />
-            </div>
-            <p className="text-[9px] text-muted-foreground leading-tight font-medium">
-              <strong className="text-blue-600">Automatic Detection:</strong> CSV headers, numeric ranges, categorical patterns, and missing values are identified instantly.
-            </p>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollArea>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      )}
+
+      <div className="pt-1">
+        {!hideAnalyzeButton && (
+          <Button
+            onClick={handleAnalyze}
+            disabled={!hasData}
+            className="w-full h-10 rounded-lg text-xs font-bold shadow-lg shadow-primary/10 hover:translate-y-[-1px] transition-all active:translate-y-0"
+            variant={hasData ? "default" : "secondary"}
+          >
+            {hasData ? (
+              <>
+                <Sparkles className="h-3.5 w-3.5 mr-2" />
+                Initialize Context
+              </>
+            ) : (
+              <>
+                <AlertCircle className="h-3.5 w-3.5 mr-2" />
+                Select Dataset
+              </>
+            )}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

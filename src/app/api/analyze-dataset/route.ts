@@ -49,18 +49,21 @@ export async function POST(request: NextRequest) {
         type: col.type,
       }));
 
-      const columnPrompt = `You are a technical data analyst.
-Dataset schema: ${JSON.stringify(schema)}
-Sample rows: ${JSON.stringify(sampleData.slice(0, 5))}
-Profile: ${JSON.stringify(analysisResult.profile)}
+      const columnPrompt = `You are a Lead Data Scientist at Synthara.
+Analyze these dataset column profiles and provide structured JSON insights.
 
-For each column, provide a concise summary, quality issues, and 1 action. Use technical language.
-Return JSON ONLY:
-{
-  "columnInsights": [
-    { "name": "col", "summary": "desc", "qualityIssues": ["issue"], "recommendations": ["action"] }
-  ]
-}`;
+Rules:
+- DO NOT provide any reasoning, thinking, or introduction text.
+- START your response directly with the opening bracket {
+- ENSURE the output is strictly valid JSON.
+
+Data Quality Legend:
+- missingness: percentage of null values
+- health: 100 - missingness
+
+Columns for analysis:
+${JSON.stringify(analysisResult.profile.columns, null, 2)}
+`;
 
       const columnAnalysis = await SimpleAI.generateWithSchema<{
         columnInsights: Array<{
@@ -81,30 +84,26 @@ Return JSON ONLY:
             },
           ],
         },
-        model: process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b:free',
-        maxTokens: 800,
+        model: process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free',
+        maxTokens: 4000,
         temperature: 0.2,
       });
 
       const deepPrompt = `You are a Lead Data Architect at Synthara.
 Analyze this comprehensive dataset profile: ${JSON.stringify(analysisResult.profile)}
 
-Your objective is to map "Entity Relationships" across the entire schema. 
-Even if the statistical correlation matrix is sparse or empty, use your intelligence to identify:
-1. Semantic dependencies between categorical fields (e.g., "Most 'Action' movies have 'High' budgets").
-2. Observed hierarchies or logical groupings.
-3. Interesting patterns in value distributions across different columns.
+Task: Identify entity relationships and provide high-priority technical recommendations.
 
-Provide:
-1. One-sentence technical summary of the dataset's architecture.
-2. Top correlation/relationship insights mapped as entities.
-3. 3-5 high-priority technical recommendations for synthesis or optimization.
+Rules:
+- DO NOT provide any reasoning, thinking, or introduction text.
+- START your response directly with the opening bracket {
+- ENSURE the output is strictly valid JSON.
 
-Return JSON ONLY:
+JSON Structure:
 {
-  "summary": "...",
+  "summary": "one sentence architecture summary",
   "correlations": [
-    { "columnA": "First Column", "columnB": "Second Column", "strength": "Strong | Moderate | Weak", "insight": "Describe the semantic or statistical connection." }
+    { "columnA": "...", "columnB": "...", "strength": "Strong|Moderate|Weak", "insight": "..." }
   ],
   "recommendations": ["..."]
 }`;
@@ -132,9 +131,9 @@ Return JSON ONLY:
           ],
           recommendations: ['rec 1'],
         },
-        model: process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b:free',
-        maxTokens: 800,
-        temperature: 0.2,
+        model: process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free',
+        maxTokens: 1000, // Increased maxTokens for deep analysis
+        temperature: 0.3, // Slightly increased temperature for more creative insights
       });
 
       aiInsights = {

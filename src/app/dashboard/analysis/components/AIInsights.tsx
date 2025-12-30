@@ -115,7 +115,7 @@ export function AIInsights({ data, profile, aiInsights, className, view = 'all' 
                   <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary">Intelligence Report</h3>
                 </div>
                 <p className="text-lg text-foreground font-black leading-relaxed tracking-tight">
-                  {deepInsights.summary}
+                  {deepInsights.summary || "Intelligence synthesis finalized. No specific architectural summary was generated for this data slice."}
                 </p>
               </div>
 

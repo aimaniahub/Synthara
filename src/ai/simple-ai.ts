@@ -52,7 +52,7 @@ export interface StructureRelevantChunksInput {
 
 export class SimpleAI {
   static async generate(input: SimpleAIInput): Promise<SimpleAIOutput> {
-    const { prompt, model = 'tngtech/deepseek-r1t2-chimera:free', maxTokens = 8000, temperature = 0.7 } = input;
+    const { prompt, model = process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free', maxTokens = 8000, temperature = 0.7 } = input;
 
     if (!openRouterClient) {
       throw new Error('OpenRouter not initialized. Please set OPENROUTER_API_KEY environment variable.');
@@ -71,13 +71,29 @@ export class SimpleAI {
         model: model,
         messages: [{ role: 'user', content: prompt }],
         temperature: temperature,
-        max_tokens: maxTokens
+        max_tokens: maxTokens,
+        response_format: prompt.toLowerCase().includes('json') ? { type: 'json_object' } : undefined
       }, {
         headers: extraHeaders
       });
 
       // Get the response text from the completion
-      let text = completion.choices[0]?.message?.content || '';
+      const choice = completion.choices[0];
+      let text = choice?.message?.content || '';
+
+      // Final fallback for models that use reasoning field, but we prefer content
+      if (!text && (choice?.message as any)?.reasoning) {
+        text = (choice?.message as any).reasoning;
+      }
+
+      // If still empty, check for reasoning_content (OpenAI O1/R1 style)
+      if (!text && (choice?.message as any)?.reasoning_content) {
+        text = (choice?.message as any).reasoning_content;
+      }
+
+      if (!text || text.trim().length === 0) {
+        console.warn(`[SimpleAI] Model ${model} returned an empty response. Choices:`, JSON.stringify(completion.choices));
+      }
 
       return {
         text,
@@ -146,6 +162,10 @@ ${JSON.stringify(schema, null, 2)}`;
     const tryParseJson = (raw: string): T => {
       const text = raw.trim();
 
+      if (!text) {
+        throw new Error('AI returned an empty response');
+      }
+
       // Strategy 1: direct parse
       try {
         return JSON.parse(text) as T;
@@ -153,12 +173,16 @@ ${JSON.stringify(schema, null, 2)}`;
 
       // Strategy 2: strip markdown fences
       let cleaned = text;
-      if (cleaned.startsWith('```json')) {
-        cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-      } else if (cleaned.startsWith('```')) {
-        cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      // Handle the case where the model might include multiple blocks or prefixes
+      const jsonFences = cleaned.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonFences && jsonFences[1]) {
+        cleaned = jsonFences[1].trim();
+      } else {
+        const anyFences = cleaned.match(/```\s*([\s\S]*?)\s*```/);
+        if (anyFences && anyFences[1]) {
+          cleaned = anyFences[1].trim();
+        }
       }
-      cleaned = cleaned.trim();
 
       try {
         return JSON.parse(cleaned) as T;
@@ -176,6 +200,18 @@ ${JSON.stringify(schema, null, 2)}`;
           return JSON.parse(c.trim()) as T;
         } catch {
           // continue
+        }
+      }
+
+      // Strategy 3.1: More aggressive extraction (handle prefixes like "JSON: {...")
+      if (!candidates.length) {
+        const startIdx = cleaned.indexOf('{');
+        const endIdx = cleaned.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+          const slice = cleaned.slice(startIdx, endIdx + 1);
+          try {
+            return JSON.parse(slice) as T;
+          } catch { }
         }
       }
 
@@ -197,22 +233,27 @@ ${JSON.stringify(schema, null, 2)}`;
       const healAndParse = (snippet: string): T | null => {
         let s = snippet.trim();
 
+        // If it starts with { but doesn't end with }, or matches [ but doesn't end with ],
+        // it's likely truncated.
+
+        // Remove trailing commas which often happen just before truncation
+        s = s.replace(/,\s*$/, '');
+
         // Balance quotes
         const quoteCount = (s.match(/"/g) || []).length;
         if (quoteCount % 2 === 1) {
           s += '"';
         }
 
-        // Balance curly braces
-        const openCurly = (s.match(/\{/g) || []).length;
-        const closeCurly = (s.match(/\}/g) || []).length;
+        // Extremely basic balancing for objects and arrays
+        let openCurly = (s.match(/\{/g) || []).length;
+        let closeCurly = (s.match(/\}/g) || []).length;
         if (openCurly > closeCurly) {
           s += '}'.repeat(openCurly - closeCurly);
         }
 
-        // Balance square brackets
-        const openSquare = (s.match(/\[/g) || []).length;
-        const closeSquare = (s.match(/\]/g) || []).length;
+        let openSquare = (s.match(/\[/g) || []).length;
+        let closeSquare = (s.match(/\]/g) || []).length;
         if (openSquare > closeSquare) {
           s += ']'.repeat(openSquare - closeSquare);
         }
@@ -220,6 +261,16 @@ ${JSON.stringify(schema, null, 2)}`;
         try {
           return JSON.parse(s) as T;
         } catch {
+          // If still failing, try to find the last complete object/array element if it's an array
+          try {
+            if (s.startsWith('[') && !s.endsWith(']')) {
+              const lastComma = s.lastIndexOf(',');
+              if (lastComma !== -1) {
+                const truncated = s.slice(0, lastComma) + ']';
+                return JSON.parse(truncated) as T;
+              }
+            }
+          } catch { }
           return null;
         }
       };
@@ -232,7 +283,7 @@ ${JSON.stringify(schema, null, 2)}`;
         if (healed) return healed;
       }
 
-      throw new Error('AI returned invalid JSON format');
+      throw new Error(`AI returned invalid JSON format. Raw output: ${text.slice(0, 100)}...`);
     };
 
     try {
@@ -362,7 +413,7 @@ Return your response as a JSON object with this exact structure:
     const result = await SimpleAI.generateWithSchema<StructuredDataset>({
       prompt,
       schema: schemaShape,
-      model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
+      model: process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free',
       maxTokens: 5000,
       temperature: 0.3,
       sessionId,

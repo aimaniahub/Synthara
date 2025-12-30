@@ -109,7 +109,23 @@ export async function POST(req: NextRequest) {
     };
 
     const colSummary = schema.map((c) => `${c.name}:${c.type}`).join(', ');
-    const prompt = `You are a data scientist. Analyze the provided dataset schema and small sample to propose a training plan and a minimal Python script using only pandas, numpy, scikit-learn.\n\nSchema: ${colSummary}\nRows sample (first ${limitedRows.length}): ${JSON.stringify(limitedRows).slice(0, 12000)}\n\nRequirements:\n- Choose the most suitable target column based on predictability.\n- Choose features without leakage; avoid using obvious IDs.\n- Decide modelType: classification if target is categorical with small cardinality; regression if numeric.\n- Propose simple params: testSplit within [0.05, 0.5], epochs in [8,20], batchSize in {32,64,128}.\n- Produce a single-file Python training script that loads a pandas DataFrame named df (assume df is already loaded), preprocesses (scale numeric, one-hot categorical), trains a simple model (${`LogisticRegression`}/LinearRegression), evaluates (accuracy for classification; MAE and RMSE for regression), and prints the metric(s).\n- Do not use any libraries other than pandas, numpy, scikit-learn.\n- The script must be concise and runnable.\n- Return strictly valid JSON per the required schema.`;
+    const prompt = `You are a high-level data scientist. Analyze the dataset schema and sample to propose a professional training strategy.
+    
+    Schema: ${colSummary}
+    Sample (first ${limitedRows.length}): ${JSON.stringify(limitedRows).slice(0, 12000)}
+
+    Requirements:
+    1. Select optimal targetColumn, modelType (classification/regression), and features.
+    2. Suggest params (testSplit, epochs, batchSize).
+    3. Generate a standalone Python script that:
+       - Includes !pip install for required libraries.
+       - Contains a placeholder cell for data loading (from CSV).
+       - Implements robust preprocessing using scikit-learn ColumnTransformer (scaling numeric, one-hot encoding categorical).
+       - Build a suitable scikit-learn pipeline (LogisticRegression for classification, LinearRegression for regression).
+       - Includes evaluation metrics and code to print a professional report.
+    4. Provide a 'rationale' explaining why these choices were made.
+    
+    Return strictly valid JSON.`;
 
     let plan: Plan | null = null;
     try {
@@ -120,7 +136,7 @@ export async function POST(req: NextRequest) {
         maxTokens: 3000,
       });
       plan = ai;
-    } catch (e) {}
+    } catch (e) { }
 
     if (!plan) {
       const base = suggestPlan(schema, limitedRows);
