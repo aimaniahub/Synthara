@@ -185,28 +185,32 @@ ${JSON.stringify(schema, null, 2)}`;
 
       // Strategy 3: extract first JSON object or array substring
       const candidates: string[] = [];
-      const objectMatch = cleaned.match(/\{[\s\S]*\}/);
-      if (objectMatch) candidates.push(objectMatch[0]);
-      const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (arrayMatch) candidates.push(arrayMatch[0]);
+
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1) {
+        if (lastBrace !== -1 && lastBrace > firstBrace) {
+          candidates.push(cleaned.slice(firstBrace, lastBrace + 1));
+        } else {
+          candidates.push(cleaned.slice(firstBrace)); // Take to end if no closing brace
+        }
+      }
+
+      const firstBracket = cleaned.indexOf('[');
+      const lastBracket = cleaned.lastIndexOf(']');
+      if (firstBracket !== -1) {
+        if (lastBracket !== -1 && lastBracket > firstBracket) {
+          candidates.push(cleaned.slice(firstBracket, lastBracket + 1));
+        } else {
+          candidates.push(cleaned.slice(firstBracket)); // Take to end if no closing bracket
+        }
+      }
 
       for (const c of candidates) {
         try {
           return JSON.parse(c.trim()) as T;
         } catch {
-          // continue
-        }
-      }
-
-      // Strategy 3.1: More aggressive extraction (handle prefixes like "JSON: {...")
-      if (!candidates.length) {
-        const startIdx = cleaned.indexOf('{');
-        const endIdx = cleaned.lastIndexOf('}');
-        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-          const slice = cleaned.slice(startIdx, endIdx + 1);
-          try {
-            return JSON.parse(slice) as T;
-          } catch { }
+          // continue to healing
         }
       }
 

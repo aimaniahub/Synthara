@@ -133,7 +133,7 @@ Columns:\n${columnHints}`;
           prompt,
           schema: schemaShape,
           model,
-          maxTokens: 1500,
+          maxTokens: 3000,
           temperature: 0.2,
         });
 
