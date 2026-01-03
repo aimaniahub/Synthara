@@ -26,6 +26,7 @@ export type SuggestChartsRequest = {
   columns: ColumnInfo[];
   userGoal?: string;
   availableTypes?: Array<'bar' | 'line' | 'scatter' | 'pie' | 'radar'>;
+  sampleRows?: Record<string, any>[];
 };
 
 export type SuggestChartsResponse = {

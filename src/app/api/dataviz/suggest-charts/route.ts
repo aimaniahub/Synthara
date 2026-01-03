@@ -6,58 +6,68 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120; // 2 minutes for AI operations
 
-function pickCharts(columns: ColumnInfo[]): ChartSpec[] {
+function pickCharts(columns: ColumnInfo[], datasetName?: string): ChartSpec[] {
   const nums = columns.filter(c => c.type === 'number');
   const cats = columns.filter(c => c.type === 'string' || c.type === 'boolean');
   const dates = columns.filter(c => c.type === 'date');
   const charts: ChartSpec[] = [];
 
-  if (dates.length && nums.length) {
+  // 1. Time Series Count (Always useful if dates exist)
+  if (dates.length) {
     charts.push({
-      id: 'line_1',
-      title: `${nums[0].name} over ${dates[0].name}`,
-      description: `Trend of ${nums[0].name} by ${dates[0].name}`,
+      id: 'timeline_1',
+      title: `Event Frequency over ${dates[0].name}`,
+      description: `Timeline of activities recorded by ${dates[0].name}`,
       type: 'line',
       xField: dates[0].name,
-      yField: nums[0].name,
-      aggregation: 'sum'
+      yField: '__count__',
+      aggregation: 'count'
     });
   }
 
-  if (cats.length && nums.length) {
+  // 2. Numeric Trends or Categorical Distributions
+  if (nums.length && cats.length) {
     charts.push({
       id: 'bar_1',
       title: `${nums[0].name} by ${cats[0].name}`,
-      description: `Average ${nums[0].name} per ${cats[0].name}`,
+      description: `Average ${nums[0].name} distribution across ${cats[0].name}`,
       type: 'bar',
       xField: cats[0].name,
       yField: nums[0].name,
       aggregation: 'mean'
     });
-  }
-
-  if (nums.length >= 2) {
-    charts.push({
-      id: 'scatter_1',
-      title: `${nums[0].name} vs ${nums[1].name}`,
-      description: `Relationship between ${nums[0].name} and ${nums[1].name}`,
-      type: 'scatter',
-      xField: nums[0].name,
-      yField: nums[1].name
-    });
-  }
-
-  // Fallback: if we still have capacity and at least one categorical column,
-  // add a simple row-count bar chart that works even without numeric fields.
-  if (cats.length && charts.length < 3) {
+  } else if (cats.length >= 2) {
     charts.push({
       id: 'bar_count_1',
-      title: `Records per ${cats[0].name}`,
-      description: `Number of records for each ${cats[0].name}`,
+      title: `Top ${cats[0].name} Categories`,
+      description: `Distribution of records across ${cats[0].name}`,
       type: 'bar',
       xField: cats[0].name,
       yField: '__count__',
       aggregation: 'count',
+    });
+  }
+
+  // 3. Proportions or Relationships
+  if (nums.length >= 2) {
+    charts.push({
+      id: 'scatter_1',
+      title: `${nums[0].name} vs ${nums[1].name}`,
+      description: `Correlation analysis between ${nums[0].name} and ${nums[1].name}`,
+      type: 'scatter',
+      xField: nums[0].name,
+      yField: nums[1].name
+    });
+  } else if (cats.length > 0 && charts.length < 3) {
+    const catIdx = cats.length > 1 ? 1 : 0;
+    charts.push({
+      id: 'pie_1',
+      title: `Share by ${cats[catIdx].name}`,
+      description: `Proportional breakdown of ${cats[catIdx].name}`,
+      type: 'pie',
+      xField: cats[catIdx].name,
+      yField: '__count__',
+      aggregation: 'count'
     });
   }
 
@@ -99,8 +109,12 @@ export async function POST(req: NextRequest) {
           ? body.availableTypes.join(', ')
           : 'line, bar, scatter, histogram, box, pie, radar';
 
+        const sampleDataHint = body.sampleRows
+          ? `Sample Data (First 5 rows):\n${JSON.stringify(body.sampleRows, null, 2)}`
+          : '';
+
         const prompt = `You are a senior Data Science and Machine Learning assistant.
-Given ONLY the dataset schema below, propose 1-3 highly effective visualizations that provide deep ML insights. 
+Given ONLY the dataset schema and sample rows below, propose 1-3 highly effective visualizations that provide deep ML insights even if the data is purely categorical/textual.
 You may choose from: ${available}.
 
 Rules:
@@ -109,24 +123,21 @@ Rules:
 - ENSURE the output is strictly valid JSON.
 
 Chart Types and Rules:
-- line: Best for time-series or trends; xField must be a date; yField must be number.
-- bar: Best for comparing categories; xField must be categorical; yField must be number or count.
-- scatter: Best for identifying correlations between two numeric variables; xField number; yField number.
-- histogram: Best for identifying data distribution and skewness of a single numeric variable; xField number; yField __count__; aggregation count.
-- box: Best for identifying outliers and statistical spread; xField categorical (optional); yField number.
-- pie: Best for showing proportions; xField categorical; yField count.
-- radar: Best for multivariate feature comparison.
+- line: Best for time-series or trends; xField MUST be a date; yField can be number OR '__count__' (for frequency over time).
+- bar: Best for comparing categories; xField must be categorical; yField number or '__count__'.
+- scatter: Best for correlations between two numeric variables; xField number; yField number.
+- histogram: Distribution of a single numeric variable; xField number; yField __count__.
+- box: Statistical spread; xField categorical (optional); yField number.
+- pie: Proportions; xField categorical; yField '__count__'.
+- radar: Multivariate comparison.
 
 ML Insight Requirement:
-For EACH chart, provide a "mlInsight" field. This MUST be a concise, professional 1-point summary from an ML perspective.
-
-Constraints:
-- Use only columns that exist in the schema.
-- Return strictly valid JSON matching the schema below.
-- Prioritize charts that reveal data quality, correlations, or distribution patterns.
+Provide a "mlInsight" field for EACH chart. It MUST be a concise, professional 1-point summary from an ML perspective (e.g., "Identifies high-cardinality clusters in event types" or "Highlights temporal skew in market updates").
 
 Dataset: ${body.datasetName || 'Untitled Dataset'}
-Columns:\n${columnHints}`;
+Columns:\n${columnHints}
+
+${sampleDataHint}`;
 
         const model = process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free';
         const ai = await SimpleAI.generateWithSchema<SuggestChartsResponse>({
@@ -175,7 +186,7 @@ Columns:\n${columnHints}`;
       }
     }
 
-    const charts = (aiCharts && aiCharts.length) ? aiCharts.slice(0, 3) : pickCharts(body.columns);
+    const charts = (aiCharts && aiCharts.length) ? aiCharts.slice(0, 3) : pickCharts(body.columns, body.datasetName);
 
     const res: SuggestChartsResponse = { charts, meta: { aiUsed: !!aiCharts, model: aiModel } };
     return NextResponse.json(res);

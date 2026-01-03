@@ -16,28 +16,47 @@ const DatasetSelector = dynamic(
 );
 
 function inferType(values: any[]): ColumnInfo['type'] {
-  let num = 0, str = 0, dat = 0, bool = 0;
+  let num = 0, str = 0, dat = 0, bool = 0, total = 0;
   const max = Math.min(values.length, 200);
   for (let i = 0; i < max; i++) {
     const v = values[i];
     if (v === null || v === undefined || v === '') continue;
+    total++;
     if (typeof v === 'boolean') { bool++; continue; }
     if (typeof v === 'number' && Number.isFinite(v)) { num++; continue; }
     if (typeof v === 'string') {
-      const t = v.trim().toLowerCase();
-      if (t === 'true' || t === 'false') { bool++; continue; }
-      const n = Number(v);
-      if (Number.isFinite(n)) { num++; continue; }
-      const d = Date.parse(v);
-      if (Number.isFinite(d)) { dat++; continue; }
+      const t = v.trim();
+      const tLower = t.toLowerCase();
+      if (tLower === 'true' || tLower === 'false') { bool++; continue; }
+
+      // Strict number check (avoiding empty strings or things that are just whitespace)
+      if (t.length > 0 && !isNaN(Number(t))) {
+        num++;
+        continue;
+      }
+
+      // Improved date detection: check for common patterns or Date.parse
+      if (t.length >= 8) {
+        // Simple regex for YYYY-MM-DD, DD/MM/YYYY etc
+        if (/^\d{4}-\d{2}-\d{2}/.test(t) || /^\d{2}[/-]\d{2}[/-]\d{4}/.test(t)) {
+          dat++;
+          continue;
+        }
+        const d = Date.parse(t);
+        if (Number.isFinite(d)) { dat++; continue; }
+      }
+
       str++;
       continue;
     }
     str++;
   }
-  if (num >= dat && num >= bool && num >= str) return 'number';
-  if (dat >= num && dat >= bool && dat >= str) return 'date';
-  if (bool >= num && bool >= dat && bool >= str) return 'boolean';
+
+  if (total === 0) return 'string';
+
+  if (num / total > 0.8) return 'number';
+  if (dat / total > 0.6) return 'date';
+  if (bool / total > 0.8) return 'boolean';
   return 'string';
 }
 
@@ -72,7 +91,12 @@ export default function AIChartSuggestionsPage() {
       const res = await fetch('/api/dataviz/suggest-charts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ datasetName, columns, userGoal: 'explore correlations and key metrics' }),
+        body: JSON.stringify({
+          datasetName,
+          columns,
+          userGoal: 'explore correlations and key metrics',
+          sampleRows: rows.slice(0, 5) // Send 5 sample rows for context
+        }),
       });
       const payload = await res.json().catch(() => null) as SuggestChartsResponse | null;
       if (!res.ok || !payload?.charts) {

@@ -18,9 +18,19 @@ import {
   ArrowUpRight,
   Database,
   Sparkles,
-  Loader2
+  Loader2,
+  Plus,
+  Trash2
 } from "lucide-react";
 import type { ColumnInfo, ChartSpec, SuggestChartsResponse } from "@/types/dataviz";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "@/components/ui/use-toast";
 
 const MLInsightBadge = dynamic(
   () => import("@/components/dataviz/MLInsightBadge").then(m => m.MLInsightBadge),
@@ -41,28 +51,36 @@ const DatasetPicker = dynamic(
 );
 
 function inferType(values: any[]): ColumnInfo['type'] {
-  let num = 0, str = 0, dat = 0, bool = 0;
+  let num = 0, str = 0, dat = 0, bool = 0, total = 0;
   const max = Math.min(values.length, 200);
   for (let i = 0; i < max; i++) {
     const v = values[i];
     if (v === null || v === undefined || v === '') continue;
+    total++;
     if (typeof v === 'boolean') { bool++; continue; }
     if (typeof v === 'number' && Number.isFinite(v)) { num++; continue; }
     if (typeof v === 'string') {
-      const t = v.trim().toLowerCase();
-      if (t === 'true' || t === 'false') { bool++; continue; }
-      const n = Number(v);
-      if (Number.isFinite(n)) { num++; continue; }
-      const d = Date.parse(v);
-      if (Number.isFinite(d)) { dat++; continue; }
+      const t = v.trim();
+      const tLower = t.toLowerCase();
+      if (tLower === 'true' || tLower === 'false') { bool++; continue; }
+      if (t.length > 0 && !isNaN(Number(t))) { num++; continue; }
+      if (t.length >= 8) {
+        if (/^\d{4}-\d{2}-\d{2}/.test(t) || /^\d{2}[/-]\d{2}[/-]\d{4}/.test(t)) {
+          dat++;
+          continue;
+        }
+        const d = Date.parse(t);
+        if (Number.isFinite(d)) { dat++; continue; }
+      }
       str++;
       continue;
     }
     str++;
   }
-  if (num >= dat && num >= bool && num >= str) return 'number';
-  if (dat >= num && dat >= bool && dat >= str) return 'date';
-  if (bool >= num && bool >= dat && bool >= str) return 'boolean';
+  if (total === 0) return 'string';
+  if (num / total > 0.8) return 'number';
+  if (dat / total > 0.6) return 'date';
+  if (bool / total > 0.8) return 'boolean';
   return 'string';
 }
 
@@ -74,6 +92,18 @@ export default function DataVisualizationPage() {
   const [datasetName, setDatasetName] = useState<string>('');
   const [datasetMeta, setDatasetMeta] = useState<{ id?: string; name: string; source: 'saved' | 'uploaded' } | null>(null);
   const [aiMeta, setAiMeta] = useState<SuggestChartsResponse['meta']>();
+  const [mode, setMode] = useState<'ai' | 'manual'>('ai');
+  const [manualConfig, setManualConfig] = useState<{
+    xField: string;
+    yField: string;
+    type: ChartSpec['type'];
+    aggregation: ChartSpec['aggregation'];
+  }>({
+    xField: '',
+    yField: '',
+    type: 'bar',
+    aggregation: 'count',
+  });
 
   const columns: ColumnInfo[] = useMemo(() => {
     if (!rows.length) return [];
@@ -100,22 +130,54 @@ export default function DataVisualizationPage() {
       const res = await fetch('/api/dataviz/suggest-charts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ datasetName, columns, userGoal: 'explore correlations and key metrics', availableTypes: ['bar', 'line', 'scatter'] }),
+        body: JSON.stringify({
+          datasetName,
+          columns,
+          userGoal: 'explore correlations and key metrics',
+          availableTypes: ['bar', 'line', 'scatter', 'pie', 'radar', 'histogram', 'box'],
+          sampleRows: rows.slice(0, 5)
+        }),
       });
       const payload = await res.json().catch(() => null);
       if (!res.ok || !payload?.charts) {
         throw new Error(payload?.error || 'Failed to get chart suggestions');
       }
-      const charts = (payload.charts as ChartSpec[]).filter(
-        (c) => c && (c.type === 'bar' || c.type === 'line' || c.type === 'scatter')
-      );
-      setSpecs(charts);
+      setSpecs(payload.charts);
       setAiMeta(payload.meta);
     } catch (e: any) {
       setError(e?.message || 'Failed to suggest charts');
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const addManualChart = () => {
+    if (!manualConfig.xField) {
+      setError("Please select at least an X-axis column");
+      return;
+    }
+
+    // Auto-labeling logic
+    const title = manualConfig.yField === '__count__'
+      ? `Frequency of ${manualConfig.xField}`
+      : `${manualConfig.yField} by ${manualConfig.xField}`;
+
+    const newSpec: ChartSpec = {
+      id: `manual_${Date.now()}`,
+      title,
+      description: `Manually configured ${manualConfig.type} chart`,
+      type: manualConfig.type,
+      xField: manualConfig.xField,
+      yField: manualConfig.yField,
+      aggregation: manualConfig.aggregation,
+    };
+
+    setSpecs([newSpec, ...specs]);
+    setError(null);
+  };
+
+  const removeChart = (id: string) => {
+    setSpecs(specs.filter(s => s.id !== id));
   };
 
   // Pull forwarded specs/rows from sessionStorage when navigating from AI Chart Suggestions
@@ -156,27 +218,122 @@ export default function DataVisualizationPage() {
 
           <div className="space-y-4">
             <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Generator Mode</Label>
-            <div className="flex gap-2">
-              <Button variant="secondary" className="flex-1 h-12 text-xs font-black uppercase tracking-widest rounded-xl border border-primary/20 bg-primary/5 text-primary">
+            <div className="flex gap-2 p-1 bg-muted/20 rounded-2xl border border-border/5">
+              <Button
+                variant={mode === 'ai' ? 'secondary' : 'ghost'}
+                onClick={() => setMode('ai')}
+                className={`flex-1 h-12 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${mode === 'ai' ? 'border border-primary/20 bg-primary/5 text-primary' : 'text-muted-foreground hover:bg-muted/50'}`}
+              >
                 <Sparkles className="size-4 mr-2" /> AI Suggested
               </Button>
-              <Button variant="ghost" className="flex-1 h-12 text-xs font-black uppercase tracking-widest rounded-xl text-muted-foreground hover:bg-muted/50" disabled>
+              <Button
+                variant={mode === 'manual' ? 'secondary' : 'ghost'}
+                onClick={() => setMode('manual')}
+                className={`flex-1 h-12 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${mode === 'manual' ? 'border border-primary/20 bg-primary/5 text-primary' : 'text-muted-foreground hover:bg-muted/50'}`}
+              >
                 <Settings className="size-4 mr-2" /> Manual Forge
               </Button>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <Button
-              onClick={requestSuggestions}
-              disabled={!hasData || isGenerating}
-              className="flex-1 h-14 rounded-2xl font-black uppercase tracking-[0.1em] text-xs bg-primary shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
-            >
-              {isGenerating ? <Loader2 className="size-4 animate-spin mr-2" /> : <TrendingUp className="size-4 mr-2" />}
-              {isGenerating ? "Synthesizing..." : "Generate Canvas"}
-            </Button>
+            {mode === 'ai' ? (
+              <Button
+                onClick={requestSuggestions}
+                disabled={!hasData || isGenerating}
+                className="flex-1 h-14 rounded-2xl font-black uppercase tracking-[0.1em] text-xs bg-primary shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                {isGenerating ? <Loader2 className="size-4 animate-spin mr-2" /> : <TrendingUp className="size-4 mr-2" />}
+                {isGenerating ? "Synthesizing..." : "Generate Canvas"}
+              </Button>
+            ) : (
+              <Button
+                onClick={addManualChart}
+                disabled={!hasData || !manualConfig.xField}
+                className="flex-1 h-14 rounded-2xl font-black uppercase tracking-[0.1em] text-xs bg-primary shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              >
+                <Plus className="size-4 mr-2" />
+                Add to Canvas
+              </Button>
+            )}
           </div>
         </div>
+
+        {mode === 'manual' && hasData && (
+          <div className="px-6 pb-6 pt-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-2 duration-300">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">X-Axis / Category</Label>
+              <Select value={manualConfig.xField} onValueChange={(v) => setManualConfig({ ...manualConfig, xField: v })}>
+                <SelectTrigger className="h-11 rounded-xl bg-background/40 border-border/10 focus:ring-primary/20">
+                  <SelectValue placeholder="Select column" />
+                </SelectTrigger>
+                <SelectContent>
+                  {columns.map(c => (
+                    <SelectItem key={c.name} value={c.name}>{c.name} <span className="text-[10px] opacity-50 ml-1 uppercase">({c.type})</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Y-Axis / Value</Label>
+              <Select value={manualConfig.yField} onValueChange={(v) => {
+                const isCount = v === '__count__';
+                setManualConfig({
+                  ...manualConfig,
+                  yField: v,
+                  aggregation: isCount ? 'count' : 'sum'
+                });
+              }}>
+                <SelectTrigger className="h-11 rounded-xl bg-background/40 border-border/10 focus:ring-primary/20">
+                  <SelectValue placeholder="Select column" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__count__">Count (Frequency)</SelectItem>
+                  {columns.filter(c => c.type === 'number').map(c => (
+                    <SelectItem key={c.name} value={c.name}>{c.name} <span className="text-[10px] opacity-50 ml-1 uppercase">(Value)</span></SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Chart Type</Label>
+              <Select value={manualConfig.type} onValueChange={(v: any) => setManualConfig({ ...manualConfig, type: v })}>
+                <SelectTrigger className="h-11 rounded-xl bg-background/40 border-border/10 focus:ring-primary/20">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bar">Bar Chart</SelectItem>
+                  <SelectItem value="line">Line Chart</SelectItem>
+                  <SelectItem value="pie">Pie Chart</SelectItem>
+                  <SelectItem value="scatter">Scatter Plot</SelectItem>
+                  <SelectItem value="radar">Radar Chart</SelectItem>
+                  <SelectItem value="histogram">Histogram</SelectItem>
+                  <SelectItem value="box">Box Plot</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 ml-1">Aggregation</Label>
+              <Select
+                value={manualConfig.aggregation}
+                onValueChange={(v: any) => setManualConfig({ ...manualConfig, aggregation: v })}
+                disabled={manualConfig.yField === '__count__'}
+              >
+                <SelectTrigger className="h-11 rounded-xl bg-background/40 border-border/10 focus:ring-primary/20">
+                  <SelectValue placeholder="Select aggregation" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sum">Sum</SelectItem>
+                  <SelectItem value="mean">Average</SelectItem>
+                  <SelectItem value="count">Count</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
       </Card>
 
       {rows.length > 0 && !specs.length && (
@@ -276,9 +433,14 @@ export default function DataVisualizationPage() {
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60">{spec.type} ANALYTICS SEQUENCE</span>
                       </div>
                     </div>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                      <Button size="icon" variant="ghost" className="rounded-xl size-10 hover:bg-primary/10 hover:text-primary transition-all">
-                        <ArrowUpRight className="size-4" />
+                    <div className="flex gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => removeChart(spec.id)}
+                        className="rounded-xl size-10 hover:bg-destructive/10 hover:text-destructive transition-all"
+                      >
+                        <Trash2 className="size-4" />
                       </Button>
                       <Button size="icon" variant="ghost" className="rounded-xl size-10 hover:bg-primary/10 hover:text-primary transition-all">
                         <Settings className="size-4" />

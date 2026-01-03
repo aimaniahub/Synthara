@@ -125,18 +125,17 @@ export async function generateSearchUrls(input: GenerateSearchUrlsInput): Promis
 
     try {
       const aiResponse = await SimpleAI.generateWithSchema<{ queries: AISearchQuery[] }>({
-        prompt: `Generate 5 simple, diverse search queries for web search.
+        prompt: `Generate exactly 5 simple, diverse search queries for web search.
+        
+CRITICAL: Be extremely concise. No monologues. No reasoning loops.
 
 User Query: "${validatedInput.userQuery}"
 
-Generate queries that:
-1. Are simple and natural (how humans search)
-2. Use plain keywords without advanced operators
-3. Focus on finding relevant data sources
-4. Are DIFFERENT from each other (avoid similar queries)
-5. Cover different aspects of the topic
-
-AVOID: site: operators, OR operators, quotes, exclusions, date filters, duplicate concepts
+Rules:
+1. Queries: Simple keywords. NO advanced operators.
+2. DIFFERENT: Each query must cover a unique aspect.
+3. Reasoning: Keep each "reasoning" under 15 words.
+4. Language: If the user query has typos like "discored", interpret them as the likely intended word (e.g. "discovered").
 
 Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] }`,
         schema: {
@@ -149,8 +148,8 @@ Return JSON: { "queries": [{"query": "...", "reasoning": "...", "priority": 1}] 
           ],
         },
         model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
-        maxTokens: 800,
-        temperature: 0.4,
+        maxTokens: 300,
+        temperature: 0.1, // Lower temperature for more focused output
       });
 
       if (aiResponse && Array.isArray(aiResponse.queries)) {

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GeminiService } from '@/services/gemini-service';
+import { SimpleAI } from '@/ai/simple-ai';
 
 export const runtime = 'nodejs';
+
 
 type ColType = 'number' | 'string';
 
@@ -281,8 +282,13 @@ Sample rows (first ${limited.length}): ${JSON.stringify(limited).slice(0, 11000)
 
     let plan: CleaningPlan | null = null;
     try {
-      const gemini = new GeminiService();
-      const { text } = await gemini.generateContent(prompt);
+      const result = await SimpleAI.generate({
+        prompt: prompt,
+        model: process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free',
+        maxTokens: 4000,
+        temperature: 0.3,
+      });
+      const text = result.text;
 
       // Extract JSON from potential markdown code blocks
       let jsonText = text.trim();
@@ -307,7 +313,7 @@ Sample rows (first ${limited.length}): ${JSON.stringify(limited).slice(0, 11000)
         plan = parsed as CleaningPlan;
       }
     } catch (err: any) {
-      console.error('[SmartFix] Gemini planning failed, falling back to default plan:', err?.message || err);
+      console.error('[SmartFix] AI planning failed, falling back to default plan:', err?.message || err);
     }
 
     if (!plan) plan = buildDefaultPlan(schema, target);

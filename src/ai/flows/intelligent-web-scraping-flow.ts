@@ -2,10 +2,9 @@
 
 import { z } from 'zod';
 import { generateSearchUrls } from './generate-search-urls-flow';
-import { writeFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'fs';
+import { writeFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { SimpleAI } from '@/ai/simple-ai';
-import { crawl4aiService } from '@/services/crawl4ai-service';
 import { inferSchema } from '@/lib/data-processing/schema-inference';
 import { generateCSV } from '@/lib/data-processing/csv-generator';
 import { getWritableTempDir } from '@/lib/utils/fs-utils';
@@ -14,7 +13,7 @@ import { getWritableTempDir } from '@/lib/utils/fs-utils';
 const IntelligentWebScrapingInputSchema = z.object({
   userQuery: z.string().min(1, 'User query is required'),
   numRows: z.number().min(1).max(300).default(300),
-  maxUrls: z.number().min(1).max(15).default(8), // LIMITED TO 4 URLs MAX
+  maxUrls: z.number().min(1).max(15).default(10), // LIMITED TO 15 URLs MAX
   useAI: z.boolean().default(true),
   sessionId: z.string().optional(),
 });
@@ -300,106 +299,20 @@ export async function intelligentWebScraping(
       };
     }
 
-    logger?.log('Step 3: Extracting structured rows via Crawl4AI + Gemini...');
-    logger?.progress('AI Structuring', 3, 6, 'Extracting structured rows via Crawl4AI service');
+    // Step 3: Extract structured rows via Direct Snapshot Analysis (Gemini)
+    logger?.log('Step 3: Extracting structured rows via Direct Analysis (Gemini)...');
+    logger?.progress('AI Structuring', 3, 5, 'Analyzing scraped snapshot JSON');
 
-    const extraction = await crawl4aiService.extractStructuredBulk(
-      scrapedResults.map(item => item.url),
-      {
-        query: validatedInput.userQuery,
-        targetRows: validatedInput.numRows,
-        chunking: { window_size: 600, overlap: 60 },
-        llm: {
-          provider: 'gemini',
-          model: process.env.CRAWL4AI_GEMINI_MODEL || process.env.GEMINI_MODEL_ID || 'gemini-2.5-pro',
-          temperature: 0.1,
-          json_mode: true,
-        },
-      }
+    const geminiResult = await analyzeScrapedFileWithGemini(
+      tempFilePath!,
+      validatedInput.userQuery,
+      validatedInput.numRows,
+      logger,
+      validatedInput.sessionId
     );
 
-    let allRows: Array<Record<string, any>> = [];
-    let usedFallback = false;
-
-    if (extraction.success && Array.isArray(extraction.results) && extraction.results.length > 0) {
-      allRows = extraction.results.flatMap(result => {
-        if (!Array.isArray(result.rows)) return [];
-        return result.rows.map((row: Record<string, any>) => {
-          const out: Record<string, any> = { ...(row || {}) };
-          // Ensure each row carries a `source` column pointing to its originating URL
-          if (out.source === undefined || out.source === null || String(out.source).trim() === '') {
-            out.source = result.url || '';
-          }
-          return out;
-        });
-      });
-    }
-
-    // Fallback: If Crawl4AI failed or returned no rows, try direct Gemini analysis
-    if (tempFilePath && allRows.length < validatedInput.numRows) {
-      const baseMsg =
-        allRows.length === 0
-          ? (extraction.error || 'Crawl4AI extraction returned 0 rows')
-          : `Crawl4AI extraction returned only ${allRows.length}/${validatedInput.numRows} rows`;
-
-      logger?.error(
-        `Primary extraction incomplete: ${baseMsg}. Attempting fallback to direct Gemini/OpenRouter analysis of scraped snapshot...`
-      );
-      logger?.progress('AI Structuring', 3, 6, 'Primary incomplete, using fallback AI analysis to augment rows');
-
-      try {
-        let keepAlive: NodeJS.Timeout | undefined;
-        if (logger) {
-          let elapsedSeconds = 0;
-          keepAlive = setInterval(() => {
-            elapsedSeconds += 10;
-            logger.progress(
-              'Scraped Analysis',
-              4,
-              7,
-              `Analyzing scraped content JSON with OpenRouter (Grok 4.1) — still running (${elapsedSeconds}s elapsed)`
-            );
-          }, 10000);
-        }
-
-        const geminiResult = await analyzeScrapedFileWithGemini(
-          tempFilePath,
-          validatedInput.userQuery,
-          validatedInput.numRows,
-          logger,
-          validatedInput.sessionId
-        );
-
-        if (keepAlive) {
-          clearInterval(keepAlive);
-        }
-
-        if (geminiResult.rows.length > 0) {
-          usedFallback = true;
-
-          if (allRows.length === 0) {
-            allRows = geminiResult.rows;
-            logger?.success(
-              `✅ Fallback analysis successful! Generated ${allRows.length} rows from scraped snapshot.`
-            );
-          } else {
-            const deficit = Math.max(0, validatedInput.numRows - allRows.length);
-            const extraRows = deficit > 0 ? geminiResult.rows.slice(0, deficit) : [];
-            allRows.push(...extraRows);
-            logger?.success(
-              `✅ Fallback analysis added ${extraRows.length} rows from scraped snapshot (now ${allRows.length}/${validatedInput.numRows}).`
-            );
-          }
-        } else {
-          logger?.error('Fallback analysis also returned 0 rows.');
-        }
-      } catch (fallbackError: any) {
-        logger?.error(`Fallback analysis failed: ${fallbackError.message}`);
-      }
-    }
-
-    if (!allRows.length) {
-      const errorMsg = 'Both primary extraction and fallback analysis failed to generate data';
+    if (!geminiResult.rows.length) {
+      const errorMsg = 'AI analysis failed to generate data from scraped content';
       logger?.error(errorMsg);
       return {
         success: false,
@@ -409,6 +322,7 @@ export async function intelligentWebScraping(
       };
     }
 
+    const allRows = geminiResult.rows;
     const schema = inferSchema(allRows);
 
     const normalizedRows = allRows.map((row: Record<string, any>) => {
@@ -423,7 +337,7 @@ export async function intelligentWebScraping(
     const csv = generateCSV(limitedRows, schema);
 
     logger?.log('Step 4: Saving CSV to output folder...');
-    logger?.progress('Complete', 4, 6, 'Saving CSV file and finalizing');
+    logger?.progress('Complete', 4, 5, 'Saving CSV file and finalizing');
 
     const chunkInfo = writeRowChunksToTemp(
       limitedRows,
@@ -452,7 +366,7 @@ export async function intelligentWebScraping(
       schema,
       urls: searchResult.urls.map(url => url.url),
       searchQueries: searchResult.searchQueries.map(q => q.query),
-      feedback: 'Crawl4AI+Gemini structuring of scraped corpus',
+      feedback: 'Gemini direct analysis of scraped snapshot',
       metadata: {
         totalUrls: searchResult.urls.length,
         scrapedPages: scrapedResults.length,
@@ -470,7 +384,7 @@ export async function intelligentWebScraping(
     };
 
     logger?.success(
-      `🎉 Web scraping completed via Crawl4AI+Gemini! Generated ${limitedRows.length} rows from ${searchResult.urls.length} URLs`
+      `🎉 Web scraping completed! Generated ${limitedRows.length} rows from ${searchResult.urls.length} URLs`
     );
     logger?.success(`📁 CSV saved to: ${csvFilePath}`);
     return resultSummary;
@@ -486,434 +400,6 @@ export async function intelligentWebScraping(
   }
 }
 
-/* Legacy chunk-based AI structuring path (commented out)
-
-    function buildContentChunksForRetrieval(
-      scrapedContent: Array<{ url: string; title: string; content: string }>,
-      maxChunkSize: number = 1500,
-      overlap: number = 200
-    ): ContentChunk[] {
-      const chunks: ContentChunk[] = [];
-
-      for (const item of scrapedContent) {
-        const text = item.content || '';
-        if (!text) continue;
-
-        const cleanText = text.replace(/\s+/g, ' ').trim();
-        if (!cleanText) continue;
-
-        let start = 0;
-        let index = 0;
-        while (start < cleanText.length) {
-          const end = Math.min(cleanText.length, start + maxChunkSize);
-          const slice = cleanText.slice(start, end);
-          chunks.push({
-            url: item.url,
-            title: item.title,
-            chunkIndex: index,
-            content: slice,
-          });
-          if (end === cleanText.length) {
-            break;
-          }
-          start = end - overlap;
-          if (start < 0) start = 0;
-          index += 1;
-        }
-      }
-
-      return chunks;
-    }
-
-    function selectRelevantChunks(
-      chunks: ContentChunk[],
-      userQuery: string,
-      maxChunks: number = 80
-    ): ContentChunk[] {
-      if (!chunks.length) return [];
-
-      const terms = userQuery
-        .toLowerCase()
-        .split(/[^a-z0-9]+/i)
-        .map(t => t.trim())
-        .filter(t => t.length > 2);
-
-      if (!terms.length) {
-        return chunks.slice(0, Math.min(maxChunks, chunks.length));
-      }
-
-      const scored = chunks.map(chunk => {
-        const text = chunk.content.toLowerCase();
-        let score = 0;
-        for (const term of terms) {
-          if (!term) continue;
-          if (text.includes(term)) {
-            score += 1;
-          }
-        }
-        const len = text.length;
-        const lengthBoost = len > 300 && len < 2500 ? 0.5 : 0;
-        return { chunk, score: score + lengthBoost };
-      });
-
-      scored.sort((a, b) => b.score - a.score);
-      const limited = scored.slice(0, Math.min(maxChunks, scored.length));
-      return limited
-        .filter(item => item.score > 0)
-        .map(item => item.chunk);
-    }
-
-    const allChunks = buildContentChunksForRetrieval(scrapedResults);
-    let relevantChunks: ContentChunk[] = selectRelevantChunks(allChunks, validatedInput.userQuery, 80);
-    let usingCombinedReadme = false;
-
-    // Prefer analyzing the combined readme directly when available.
-    // Instead of picking a single 170k slice, split the full text into sequential slices
-    // so the AI can see as much of the corpus as possible across multiple calls.
-    if (tempFilePath) {
-      const combinedPath = tempFilePath as string;
-      if (existsSync(combinedPath)) {
-        try {
-          const md = readFileSync(combinedPath, 'utf8');
-          const totalLength = md.length;
-          const SLICE_SIZE = 150000; // keep each slice safely under SimpleAI's 170k per-call budget
-          const slices: ContentChunk[] = [];
-          let index = 0;
-
-          for (let start = 0; start < totalLength; start += SLICE_SIZE) {
-            const chunkText = md.slice(start, start + SLICE_SIZE);
-            if (!chunkText.trim()) continue;
-            slices.push({
-              url: combinedPath,
-              title: 'Combined Readme',
-              chunkIndex: index,
-              content: chunkText,
-            });
-            index += 1;
-          }
-
-          if (slices.length > 0) {
-            relevantChunks = slices;
-            usingCombinedReadme = true;
-            logger?.log(
-              `Using combined readme split into ${slices.length} sequential slices for AI analysis (total ${totalLength} chars)`
-            );
-          }
-        } catch {}
-      }
-    }
-
-    if (relevantChunks.length === 0) {
-      const errorMsg = 'No relevant text chunks found for AI structuring';
-      logger?.error(errorMsg);
-      return {
-        success: false,
-        error: errorMsg,
-        urls: searchResult.urls.map(url => url.url),
-        searchQueries: searchResult.searchQueries.map(q => q.query),
-      };
-    }
-
-    logger?.log(`Selected ${relevantChunks.length} relevant chunks out of ${allChunks.length} total chunks`);
-
-    if (!validatedInput.useAI) {
-      const errorMsg = 'AI processing is disabled (useAI=false) and Crawl4AI returned no structured rows';
-      logger?.error(errorMsg);
-      return {
-        success: false,
-        error: errorMsg,
-        urls: searchResult.urls.map(url => url.url),
-        searchQueries: searchResult.searchQueries.map(q => q.query),
-      };
-    }
-
-    logger?.log('Step 4: AI structuring of relevant chunks (OpenRouter)...');
-    logger?.progress('AI Structuring', 4, 6, 'Converting relevant chunks into structured rows');
-
-    let aiRows: Array<Record<string, any>> = [];
-    let aiSchema: Array<{ name: string; type: string }> = [];
-    let rawAiFilePath: string | undefined;
-
-    try {
-      // Build groups of chunks for AI calls.
-      // When using the combined readme, we send exactly one sequential slice per AI call
-      // so each call sees a different part of the corpus without internal truncation overlap.
-      const groups: ContentChunk[][] = [];
-
-      if (usingCombinedReadme) {
-        for (const chunk of relevantChunks) {
-          groups.push([chunk]);
-        }
-      } else {
-        const maxAiCalls = 4;
-        const chunksPerGroup = Math.max(1, Math.ceil(relevantChunks.length / maxAiCalls));
-        for (let i = 0; i < relevantChunks.length; i += chunksPerGroup) {
-          groups.push(relevantChunks.slice(i, i + chunksPerGroup));
-        }
-      }
-
-      logger?.log(`Dispatching AI structuring over ${groups.length} chunk groups`);
-
-      for (let gIndex = 0; gIndex < groups.length; gIndex++) {
-        const group = groups[gIndex];
-        if (!group.length) continue;
-
-        logger?.log(`AI call ${gIndex + 1}/${groups.length}: processing ${group.length} chunks`);
-
-        // Keep-alive progress while the AI call is running
-        const keepAlive = setInterval(() => {
-          logger?.progress('AI Structuring', 4, 6, `Working on group ${gIndex + 1}/${groups.length}`);
-        }, 10000);
-        const dataset = await SimpleAI.structureRelevantChunksToDataset({
-          chunks: group.map((chunk: ContentChunk) => ({
-            url: chunk.url,
-            title: chunk.title,
-            content: chunk.content,
-          })),
-          userQuery: validatedInput.userQuery,
-          numRows: validatedInput.numRows,
-          sessionId: validatedInput.sessionId,
-        });
-        clearInterval(keepAlive);
-
-        const groupRows = Array.isArray(dataset.data) ? dataset.data : [];
-        const groupSchema = Array.isArray(dataset.schema)
-          ? dataset.schema.map((col: { name: string; type?: string }) => ({
-              name: String(col.name),
-              type: String(col.type || 'string'),
-            }))
-          : [];
-
-        if (groupRows.length) {
-          aiRows.push(...groupRows);
-
-          if (!aiSchema.length && groupSchema.length) {
-            aiSchema = [...groupSchema];
-          } else if (groupSchema.length) {
-            const existingNames = new Set(aiSchema.map(col => col.name));
-            for (const col of groupSchema) {
-              if (!existingNames.has(col.name)) {
-                aiSchema.push(col);
-                existingNames.add(col.name);
-              }
-            }
-          }
-
-          rawAiFilePath = (dataset as any)?.rawFilePath as string | undefined;
-
-          logger?.log(
-            `AI call ${gIndex + 1} produced ${groupRows.length} rows (total so far: ${aiRows.length})`
-          );
-
-          if (aiRows.length >= validatedInput.numRows) {
-            logger?.log(
-              `Reached requested row target (${validatedInput.numRows}) after ${gIndex + 1} AI calls; stopping further calls`
-            );
-            break;
-          }
-        } else {
-          logger?.log(`AI call ${gIndex + 1} returned 0 rows for its chunk group`);
-        }
-      }
-
-      if (!aiRows.length) {
-        const errorMsg = 'AI structuring produced no rows from scraped content';
-        logger?.error(errorMsg);
-        return {
-          success: false,
-          error: errorMsg,
-          urls: searchResult.urls.map(url => url.url),
-          searchQueries: searchResult.searchQueries.map(q => q.query),
-        };
-      }
-    } catch (err: any) {
-      const errorMsg = `AI structuring from scraped content failed: ${err?.message || 'No structured data generated'}`;
-      logger?.error(errorMsg);
-      return {
-        success: false,
-        error: errorMsg,
-        urls: searchResult.urls.map(url => url.url),
-        searchQueries: searchResult.searchQueries.map(q => q.query),
-      };
-    }
-
-    if (!aiSchema.length) {
-      const keys: string[] = Array.from(new Set(aiRows.flatMap(r => Object.keys(r || {}))));
-      function infer(values: any[]): string {
-        const nonNull = values.filter((v: any) => v !== null && v !== undefined);
-        if (nonNull.length === 0) return 'string';
-        const boolCount = nonNull.filter((v: any) => typeof v === 'boolean' || v === 'true' || v === 'false').length;
-        if (boolCount === nonNull.length) return 'boolean';
-        const numCount = nonNull.filter(
-          (v: any) => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))
-        ).length;
-        if (numCount === nonNull.length) return 'number';
-        const dateCount = nonNull.filter((v: any) => !isNaN(new Date(v as any).getTime())).length;
-        if (dateCount === nonNull.length) return 'date';
-        return 'string';
-      }
-      aiSchema = keys.map(k => ({ name: k, type: infer(aiRows.map(r => (r ? r[k] : undefined))) }));
-    }
-
-    let normalizedAiRows = aiRows.map((row: Record<string, any>) => {
-      const obj: Record<string, any> = {};
-      for (const col of aiSchema) {
-        obj[col.name] = row && col.name in row ? row[col.name] : '';
-      }
-      return obj;
-    });
-
-    let limitedAiRows = normalizedAiRows.slice(0, validatedInput.numRows);
-    if (limitedAiRows.length < validatedInput.numRows) {
-      logger?.log(`AI returned ${limitedAiRows.length}/${validatedInput.numRows}. Attempting expansion rounds to fetch more sources and re-analyze...`);
-
-      // Iterative expansion: fetch more URLs, scrape, update readme, and re-run AI to accumulate rows
-      const knownUrls = new Set(scrapedResults.map(r => r.url));
-      const maxExpansionRounds = 3;
-
-      for (let round = 1; round <= maxExpansionRounds && aiRows.length < validatedInput.numRows; round++) {
-        logger?.progress('Expansion', 4, 6, `Round ${round}: discovering more sources`);
-
-        // Request more URLs (increasing maxUrls per round) and dedupe
-        const extraSearch = await generateSearchUrls({
-          userQuery: validatedInput.userQuery,
-          maxUrls: Math.min(validatedInput.maxUrls * (round + 1), 80),
-        });
-
-        if (!extraSearch.success || extraSearch.urls.length === 0) {
-          logger?.log(`Expansion round ${round}: no additional URLs found`);
-          continue;
-        }
-
-        const extraCandidates = extraSearch.urls.map(u => u.url).filter(isScrapableUrl);
-        const newUrls = extraCandidates.filter(u => !knownUrls.has(u)).slice(0, 15);
-
-        if (newUrls.length === 0) {
-          logger?.log(`Expansion round ${round}: no new unique URLs available`);
-          continue;
-
-        logger?.log(`Expansion round ${round}: scraping ${newUrls.length} new URLs`);
-        const extraScrape = await scrapeUrlsWithCrawl4AI(newUrls, logger);
-        if (extraScrape.success && Array.isArray(extraScrape.content) && extraScrape.content.length > 0) {
-          const uniqueNew = extraScrape.content.filter((item: { url: string }) => !knownUrls.has(item.url));
-          uniqueNew.forEach((item: { url: string }) => knownUrls.add(item.url));
-          scrapedResults.push(...uniqueNew);
-          logger?.log(`Expansion round ${round}: added ${uniqueNew.length} new pages (total scraped: ${scrapedResults.length})`);
-              try {
-                const md = readFileSync(combinedPath, 'utf8');
-                const limited = md.slice(0, 170000);
-                rerunChunks = [{ url: combinedPath, title: 'Combined Readme', chunkIndex: 0, content: limited }];
-              } catch {
-                const all = buildContentChunksForRetrieval(scrapedResults);
-                rerunChunks = selectRelevantChunks(all, validatedInput.userQuery, 80);
-              }
-            } else {
-              const all = buildContentChunksForRetrieval(scrapedResults);
-              rerunChunks = selectRelevantChunks(all, validatedInput.userQuery, 80);
-            }
-          } else {
-            const all = buildContentChunksForRetrieval(scrapedResults);
-            rerunChunks = selectRelevantChunks(all, validatedInput.userQuery, 80);
-          }
-
-          if (!rerunChunks.length) {
-            logger?.log(`Expansion round ${round}: no rerun chunks found, skipping`);
-            continue;
-          }
-
-          // Re-run AI over the updated chunks and append rows
-          logger?.log(`Expansion round ${round}: re-analyzing with AI over ${rerunChunks.length} chunk group(s)`);
-
-          try {
-            // Use the same multi-call aggregator over chunk groups
-            const maxAiCalls = 4;
-            const chunksPerGroup = Math.max(1, Math.ceil(rerunChunks.length / maxAiCalls));
-            const groups: ContentChunk[][] = [];
-            for (let i = 0; i < rerunChunks.length; i += chunksPerGroup) {
-              groups.push(rerunChunks.slice(i, i + chunksPerGroup));
-            }
-
-            for (let gIndex = 0; gIndex < groups.length && aiRows.length < validatedInput.numRows; gIndex++) {
-              const group = groups[gIndex];
-              if (!group.length) continue;
-
-              const keepAlive = setInterval(() => {
-                logger?.progress('AI Structuring', 4, 6, `Expansion ${round}, group ${gIndex + 1}/${groups.length}`);
-              }, 10000);
-
-              const dataset = await SimpleAI.structureRelevantChunksToDataset({
-                chunks: group.map((chunk: ContentChunk) => ({ url: chunk.url, title: chunk.title, content: chunk.content })),
-                userQuery: validatedInput.userQuery,
-                numRows: validatedInput.numRows,
-                sessionId: validatedInput.sessionId,
-              });
-              clearInterval(keepAlive);
-
-              const groupRows = Array.isArray(dataset.data) ? dataset.data : [];
-              const groupSchema = Array.isArray(dataset.schema)
-                ? dataset.schema.map((c: any) => ({ name: String(c.name), type: String(c.type || 'string') }))
-                : [];
-
-              if (groupRows.length) {
-                aiRows.push(...groupRows);
-                if (!aiSchema.length && groupSchema.length) aiSchema = [...groupSchema];
-                else if (groupSchema.length) {
-                  const have = new Set(aiSchema.map(x => x.name));
-                  for (const col of groupSchema) if (!have.has(col.name)) { aiSchema.push(col); have.add(col.name); }
-                }
-                logger?.log(`Expansion ${round} AI group ${gIndex + 1}: +${groupRows.length} rows (total: ${aiRows.length})`);
-              }
-            }
-          } catch (e: any) {
-            logger?.log(`Expansion round ${round}: AI re-analysis failed: ${e?.message || 'unknown error'}`);
-          }
-        } else {
-          logger?.log(`Expansion round ${round}: scraping produced no usable content`);
-        }
-      }
-
-      if (!aiSchema.length) {
-        const keys: string[] = Array.from(new Set(aiRows.flatMap(r => Object.keys(r || {}))));
-        function infer(values: any[]): string {
-          const nonNull = values.filter((v: any) => v !== null && v !== undefined);
-          if (nonNull.length === 0) return 'string';
-          const boolCount = nonNull.filter((v: any) => typeof v === 'boolean' || v === 'true' || v === 'false').length;
-          if (boolCount === nonNull.length) return 'boolean';
-          const numCount = nonNull.filter((v: any) => typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))).length;
-          if (numCount === nonNull.length) return 'number';
-          const dateCount = nonNull.filter((v: any) => !isNaN(new Date(v as any).getTime())).length;
-          if (dateCount === nonNull.length) return 'date';
-          return 'string';
-        }
-        aiSchema = keys.map(k => ({ name: k, type: infer(aiRows.map(r => (r ? r[k] : undefined))) }));
-      }
-
-      normalizedAiRows = aiRows.map((row: Record<string, any>) => {
-        const obj: Record<string, any> = {};
-        for (const col of aiSchema) obj[col.name] = row && col.name in row ? row[col.name] : '';
-        return obj;
-      });
-      limitedAiRows = normalizedAiRows.slice(0, validatedInput.numRows);
-
-      logger?.log(`After expansion, rows available: ${limitedAiRows.length}/${validatedInput.numRows}`);
-    }
-
-    // Write chunk files to temp/chunks for resumable, file-based streaming
-    const chunkInfo = writeRowChunksToTemp(limitedAiRows, aiSchema, validatedInput.sessionId, logger);
-
-    logger?.log('Step 5: Generating CSV format from AI-structured rows...');
-    logger?.progress('CSV Generation', 5, 6, 'Creating downloadable CSV');
-    const aiCsv = generateCSV(limitedAiRows, aiSchema);
-
-    logger?.log('Step 6: Saving CSV to output folder...');
-    logger?.log(`Creating CSV file with ${limitedAiRows.length} rows`);
-    logger?.progress('Complete', 6, 6, 'Saving CSV file and finalizing');
-
-    const aiOutputDir = join(process.cwd(), 'output');
-    if (!existsSync(aiOutputDir)) {
-      mkdirSync(aiOutputDir, { recursive: true });
-    }
- */
 async function scrapeUrlsWithCrawl4AI(
   urls: string[],
   logger?: WebScrapingLogger
@@ -1365,7 +851,8 @@ async function dumpScrapedDataToTempFile(
     logger?.log(`🧹 Noise reduction: ${comprehensiveData.metadata.averageNoiseReduction}% average`);
     logger?.log(`📝 Content: ${comprehensiveData.metadata.originalContentLength} → ${comprehensiveData.metadata.totalContentLength} characters`);
 
-    return scrapedRawPath || tempFilePath;
+    // Always return the JSON file path (not the .txt) so that analyzeScrapedFileWithGemini can parse it
+    return tempFilePath;
   } catch (error: any) {
     logger?.error(`Failed to create temp file: ${error.message}`);
     return null;
@@ -1380,6 +867,9 @@ interface GeminiStructuredResult {
   modelId: string;
 }
 
+/**
+ * Main entry point - now uses Map-Reduce for multi-source extraction
+ */
 async function analyzeScrapedFileWithGemini(
   scrapedFilePath: string,
   userQuery: string,
@@ -1388,86 +878,70 @@ async function analyzeScrapedFileWithGemini(
   sessionId?: string
 ): Promise<GeminiStructuredResult> {
   const raw = readFileSync(scrapedFilePath, 'utf8');
-
-  logger?.log(
-    `Using OpenRouter (SimpleAI) to analyze full scraped JSON file: ${scrapedFilePath} with target ${numRows} rows`
-  );
-
   const modelId = process.env.OPENROUTER_MODEL || 'tngtech/deepseek-r1t2-chimera:free';
 
-  const schemaShape = {
-    schema: [
-      {
-        name: 'column_name',
-        type: 'String|Number|Date|Boolean',
-        description: 'what this column represents',
-      },
-    ],
-    data: [
-      {
-        column1: 'value1',
-        column2: 'value2',
-      },
-    ],
-    reasoning: 'text',
-  };
+  logger?.log(`📂 Loading scraped data from: ${scrapedFilePath}`);
 
-  const prompt = `You are an expert at data structuring and schema design.\n\n` +
-    `User Query: "${userQuery}"\n` +
-    `Target Rows: ${numRows}\n\n` +
-    `You are given a scraped JSON snapshot that contains metadata and a list of sources with cleaned content.\n` +
-    `Your job is to:\n` +
-    `1) Design a useful tabular schema that best answers the user query.\n` +
-    `2) Extract as many grounded rows as possible from the JSON, up to Target Rows.\n` +
-    `3) Never invent entities that are not clearly supported by the JSON content.\n` +
-    `4) It is OK if many cells are empty; do not drop rows just because of missing values.\n` +
-    `5) Prefer clinically confirmed, human-relevant entities when applicable.\n\n` +
-    `TARGET ROWS & RECALL RULES (VERY IMPORTANT):\n` +
-    `- Always treat Target Rows as the main upper limit on how many rows to output.\n` +
-    `- Extract as many real, grounded rows as possible, up to Target Rows.\n` +
-    `- When the JSON clearly contains many entities (lists, tables, catalogs), avoid summarising them into a small sample. Prefer one row per entity.\n` +
-    `- It is fine for many fields in a row to be empty or null; do NOT discard a row just because some columns are missing.\n` +
-    `- Never hallucinate or invent entities that are not clearly supported by the JSON content.\n\n` +
-    `Return your answer as strict JSON that matches the required schema.\n\n` +
-    `SCRAPED_JSON_START\n` +
-    raw +
-    `\nSCRAPED_JSON_END`;
+  // Parse the scraped JSON to extract individual sources
+  let scrapedData: { sources?: Array<{ id: number; url: string; title: string; content: string }> };
+  try {
+    scrapedData = JSON.parse(raw);
+  } catch (parseErr: any) {
+    logger?.error(`Failed to parse scraped JSON: ${parseErr?.message}`);
+    return { rows: [], schema: [], reasoning: 'Failed to parse scraped data', modelId };
+  }
 
-  const dataset = await SimpleAI.generateWithSchema<{
-    schema: Array<{ name: string; type?: string; description?: string }>;
-    data: Array<Record<string, any>>;
-    reasoning?: string;
-    _rawFilePath?: string;
-  }>({
-    prompt,
-    schema: schemaShape,
-    model: modelId,
-    maxTokens: 12000,
-    temperature: 0.25,
-    sessionId,
+  const sources = scrapedData.sources || [];
+
+  if (sources.length === 0) {
+    logger?.error('No sources found in scraped data');
+    return { rows: [], schema: [], reasoning: 'No sources found in scraped data', modelId };
+  }
+
+  logger?.info(`📊 Found ${sources.length} sources with total content length: ${sources.reduce((sum, s) => sum + (s.content?.length || 0), 0).toLocaleString()} characters`);
+
+  // Reverting to single-file analysis logic (as requested: "instead of mapping and logic")
+  // Using SimpleAI.structureRelevantChunksToDataset which handles character limits and single prompt extraction
+  const result = await SimpleAI.structureRelevantChunksToDataset({
+    chunks: sources.map(s => ({
+      url: s.url,
+      title: s.title,
+      content: s.content
+    })),
+    userQuery,
+    numRows,
+    sessionId: sessionId || `session-${Date.now()}`,
+    logger
   });
 
-  const schema: Array<{ name: string; type: string }> = Array.isArray(dataset.schema)
-    ? dataset.schema.map(col => ({
-      name: String(col.name),
-      type: String(col.type || 'string'),
-    }))
-    : [];
+  // Save raw AI analysis result
+  try {
+    const analyzedDir = getWritableTempDir('analyzed');
+    const sid = sessionId || Date.now().toString();
+    const analyzedPath = join(analyzedDir, `${sid}-ai-analysis.json`);
 
-  const rawRows: Array<Record<string, any>> = Array.isArray(dataset.data)
-    ? (dataset.data as Array<Record<string, any>>)
-    : [];
+    // SimpleAI already saves to analyzedPath if sessionId is provided, 
+    // but we ensure it matches the expected return format here.
 
-  const rows: Array<Record<string, any>> = rawRows.slice(0, numRows);
-
-  const rawAiFilePath = (dataset as any)?._rawFilePath as string | undefined;
-
-  return {
-    rows: rows || [],
-    schema: schema || [],
-    reasoning: dataset.reasoning,
-    rawAiFilePath,
-    modelId,
-  };
+    return {
+      rows: result.data,
+      schema: result.schema,
+      reasoning: result.reasoning || '',
+      rawAiFilePath: result.rawFilePath || analyzedPath,
+      modelId,
+    };
+  } catch (saveErr: any) {
+    console.error(`[analyzeScrapedFileWithGemini] Error finalizing result: ${saveErr?.message}`);
+    return {
+      rows: result.data,
+      schema: result.schema,
+      reasoning: result.reasoning || '',
+      rawAiFilePath: result.rawFilePath,
+      modelId,
+    };
+  }
 }
+
+
+
 

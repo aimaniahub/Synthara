@@ -169,13 +169,24 @@ export function CsvPreviewTable({
               <TableBody>
                 {currentPageData.map((row, rowIndex) => (
                   <TableRow key={startIndex + rowIndex}>
-                    {schema.map((column, colIndex) => (
-                      <TableCell key={colIndex} className="max-w-xs">
-                        <div className="truncate" title={String(row[column.name] || '')}>
-                          {String(row[column.name] || '')}
-                        </div>
-                      </TableCell>
-                    ))}
+                    {schema.map((column, colIndex) => {
+                      const value = ((): any => {
+                        if (row.hasOwnProperty(column.name)) return row[column.name];
+                        const normalizedCol = column.name.toLowerCase().trim();
+                        for (const key in row) {
+                          if (key.toLowerCase().trim() === normalizedCol) return row[key];
+                        }
+                        return undefined;
+                      })();
+
+                      return (
+                        <TableCell key={colIndex} className="max-w-xs">
+                          <div className="truncate" title={String(value || '')}>
+                            {String(value || '')}
+                          </div>
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 ))}
               </TableBody>

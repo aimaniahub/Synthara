@@ -341,10 +341,12 @@ export function DataGenerationClient() {
     streamedRowCountRef.current = 0;
 
     try {
-      // Scroll to terminal
-      if (terminalLoggerRef.current) {
-        terminalLoggerRef.current.scrollIntoView({ behavior: 'smooth' });
-      }
+      // Scroll to terminal with a slight delay to ensure it's rendered
+      setTimeout(() => {
+        if (terminalLoggerRef.current?.scrollIntoView) {
+          terminalLoggerRef.current.scrollIntoView();
+        }
+      }, 100);
 
       // Create request data for internal generation pipeline
       const requestData = {

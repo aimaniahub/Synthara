@@ -42,9 +42,18 @@ const teamMembers = [
 
 export default async function HomePage() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } = { user: null } } = supabase
-    ? await withTimeout<any>(supabase.auth.getUser(), 2000, { data: { user: null } })
-    : ({ data: { user: null } } as any);
+  let user = null;
+  
+  if (supabase) {
+    try {
+      const { data } = await withTimeout<any>(supabase.auth.getUser(), 2000, { data: { user: null } });
+      user = data?.user ?? null;
+    } catch (error: any) {
+      // Handle invalid refresh token or other auth errors gracefully
+      console.warn('[HomePage] Auth error (likely expired/invalid session):', error?.message);
+      user = null;
+    }
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background relative">

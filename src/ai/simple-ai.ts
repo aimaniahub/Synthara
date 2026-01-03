@@ -49,6 +49,13 @@ export interface StructureRelevantChunksInput {
   userQuery: string;
   numRows: number;
   sessionId?: string;
+  logger?: {
+    log: (msg: string) => void;
+    info: (msg: string) => void;
+    success: (msg: string) => void;
+    error: (msg: string) => void;
+    progress: (step: string, current: number, total: number, details?: string) => void;
+  };
 }
 
 export class SimpleAI {
@@ -68,12 +75,28 @@ export class SimpleAI {
         extraHeaders["X-Title"] = process.env.OPENROUTER_SITE_NAME;
       }
 
+      // Determine if this is a JSON request
+      const isJsonRequest = prompt.toLowerCase().includes('json');
+
+      // Build messages with system prompt to enforce JSON output
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+
+      if (isJsonRequest) {
+        // Updated system message: Allow thinking but require final JSON
+        messages.push({
+          role: 'system',
+          content: `You are a data extraction assistant. You may reason or think step-by-step to ensure accuracy, but you MUST end your response with a valid JSON object matching the requested schema. The JSON block should be clearly identifiable and the very last thing in your response.`
+        });
+      }
+
+      messages.push({ role: 'user', content: prompt });
+
       const completion = await openRouterClient.chat.completions.create({
         model: model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: messages,
         temperature: temperature,
         max_tokens: maxTokens,
-        response_format: prompt.toLowerCase().includes('json') ? { type: 'json_object' } : undefined
+        // Removed response_format: 'json_object' to allow for thinking preambles
       }, {
         headers: extraHeaders
       });
@@ -153,12 +176,16 @@ ${JSON.stringify(schema, null, 2)}`;
       console.error('[SimpleAI] Failed to save raw AI response:', saveError?.message || saveError);
     }
 
-    // Helper: best-effort JSON extraction and parsing
+    // Helper: best-effort JSON extraction and parsing - NEVER THROWS, always returns valid data
     const tryParseJson = (raw: string): T => {
       const text = raw.trim();
 
+      // Create empty fallback that matches expected schema
+      const emptyFallback = { schema: [], data: [], reasoning: 'Failed to parse AI response - returning empty result' } as T;
+
       if (!text) {
-        throw new Error('AI returned an empty response');
+        console.warn('[SimpleAI] AI returned empty response, using fallback');
+        return emptyFallback;
       }
 
       // Strategy 1: direct parse
@@ -183,32 +210,47 @@ ${JSON.stringify(schema, null, 2)}`;
         return JSON.parse(cleaned) as T;
       } catch { }
 
-      // Strategy 3: extract first JSON object or array substring
+      // Strategy 2.5: Heal truncated JSON
+      try {
+        const healed = this.healJson(cleaned);
+        if (healed) return JSON.parse(healed) as T;
+      } catch { }
+
+      // Strategy 3: extract JSON blocks, prioritizing the one matching the schema found from the end
       const candidates: string[] = [];
 
+      // Find all { and [ to find the largest/most complete blocks
       const firstBrace = cleaned.indexOf('{');
       const lastBrace = cleaned.lastIndexOf('}');
-      if (firstBrace !== -1) {
-        if (lastBrace !== -1 && lastBrace > firstBrace) {
-          candidates.push(cleaned.slice(firstBrace, lastBrace + 1));
-        } else {
-          candidates.push(cleaned.slice(firstBrace)); // Take to end if no closing brace
-        }
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        candidates.push(cleaned.slice(firstBrace, lastBrace + 1));
       }
 
       const firstBracket = cleaned.indexOf('[');
       const lastBracket = cleaned.lastIndexOf(']');
-      if (firstBracket !== -1) {
-        if (lastBracket !== -1 && lastBracket > firstBracket) {
-          candidates.push(cleaned.slice(firstBracket, lastBracket + 1));
-        } else {
-          candidates.push(cleaned.slice(firstBracket)); // Take to end if no closing bracket
-        }
+      if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+        candidates.push(cleaned.slice(firstBracket, lastBracket + 1));
+      }
+
+      // Also try searching from the END for the last block (often where the real JSON is after thinking)
+      const lastBraceStart = cleaned.lastIndexOf('{');
+      if (lastBraceStart !== -1 && lastBraceStart !== firstBrace) {
+        candidates.push(cleaned.slice(lastBraceStart, lastBrace + 1));
+      }
+
+      // Specifically look for the block containing "data" and "schema"
+      const dataSchemaMatch = cleaned.match(/\{[\s\S]*?"schema"[\s\S]*?"data"[\s\S]*?\}/g);
+      if (dataSchemaMatch) {
+        candidates.push(dataSchemaMatch[dataSchemaMatch.length - 1]); // Take the last one
       }
 
       for (const c of candidates) {
         try {
-          return JSON.parse(c.trim()) as T;
+          const parsed = JSON.parse(c.trim());
+          // If it looks like our structured dataset, we found it
+          if (parsed && (Array.isArray(parsed.data) || Array.isArray(parsed.schema))) {
+            return parsed as T;
+          }
         } catch {
           // continue to healing
         }
@@ -282,7 +324,97 @@ ${JSON.stringify(schema, null, 2)}`;
         if (healed) return healed;
       }
 
-      throw new Error(`AI returned invalid JSON format. Raw output: ${text.slice(0, 100)}...`);
+      // Strategy 6: For thinking/reasoning models - find the LAST complete JSON object in the text
+      // Thinking models often output reasoning first, then JSON at the end
+      try {
+        // Find all positions of { and } to locate JSON objects
+        const allBraces = [];
+        let depth = 0;
+        let startPos = -1;
+
+        for (let i = 0; i < text.length; i++) {
+          if (text[i] === '{') {
+            if (depth === 0) startPos = i;
+            depth++;
+          } else if (text[i] === '}') {
+            depth--;
+            if (depth === 0 && startPos !== -1) {
+              allBraces.push({ start: startPos, end: i });
+              startPos = -1;
+            }
+          }
+        }
+
+        // Try parsing from the LAST JSON object (thinking models usually put it at the end)
+        for (let i = allBraces.length - 1; i >= 0; i--) {
+          const { start, end } = allBraces[i];
+          const jsonCandidate = text.slice(start, end + 1);
+          try {
+            const parsed = JSON.parse(jsonCandidate);
+            // Validate it has expected structure
+            if (parsed && (parsed.schema || parsed.data || Array.isArray(parsed))) {
+              console.log(`[SimpleAI] Found valid JSON at position ${start}-${end} (Strategy 6)`);
+              return parsed as T;
+            }
+          } catch { }
+        }
+      } catch { }
+
+      // Strategy 7: Extract structured data from thinking/reasoning text (deepseek-r1t2 pattern)
+      // When thinking models output reasoning with patterns like "- Name: value" or "CMP_Rs: 123.45"
+      try {
+        const lines = text.split('\n');
+        const extractedRows: Record<string, any>[] = [];
+        let currentRow: Record<string, any> | null = null;
+        const columnNames: string[] = [];
+
+        // Pattern 1: Look for "Row N:" followed by field assignments
+        for (const line of lines) {
+          const rowMatch = line.match(/^Row\s*(\d+)[\s:]/i);
+          if (rowMatch) {
+            if (currentRow && Object.keys(currentRow).length > 0) {
+              extractedRows.push(currentRow);
+            }
+            currentRow = {};
+          }
+
+          // Pattern 2: Look for "- field: value" patterns
+          const fieldMatch = line.match(/^[-•]\s*(\w[\w_\s]*?):\s*(.+)$/);
+          if (fieldMatch && currentRow) {
+            const key = fieldMatch[1].trim().replace(/\s+/g, '_');
+            const value = fieldMatch[2].trim();
+            currentRow[key] = value;
+            if (!columnNames.includes(key)) columnNames.push(key);
+          }
+
+          // Pattern 3: Look for "Name: \"value\"" or "Name = value" patterns  
+          const directMatch = line.match(/^(\w[\w_\s]*?)\s*[:=]\s*["']?([^"'\n,]+)["']?$/);
+          if (directMatch && currentRow) {
+            const key = directMatch[1].trim().replace(/\s+/g, '_');
+            const value = directMatch[2].trim();
+            if (key.length > 1 && key.length < 30 && value.length > 0) {
+              currentRow[key] = value;
+              if (!columnNames.includes(key)) columnNames.push(key);
+            }
+          }
+        }
+
+        // Push last row if exists
+        if (currentRow && Object.keys(currentRow).length > 0) {
+          extractedRows.push(currentRow);
+        }
+
+        // If we found multiple rows with consistent columns, return as structured data
+        if (extractedRows.length >= 2 && columnNames.length >= 2) {
+          console.log(`[SimpleAI] Extracted ${extractedRows.length} rows from thinking text (Strategy 7)`);
+          const schema = columnNames.map(name => ({ name, type: 'String' }));
+          return { schema, data: extractedRows, reasoning: 'Extracted from thinking text' } as any as T;
+        }
+      } catch { }
+
+      // Strategy 8: ULTIMATE FALLBACK - never throw, return empty valid structure
+      console.warn(`[SimpleAI] All JSON parsing strategies failed. Returning empty fallback. Raw preview: ${text.slice(0, 200)}...`);
+      return emptyFallback;
     };
 
     try {
@@ -291,11 +423,10 @@ ${JSON.stringify(schema, null, 2)}`;
         parsed._rawFilePath = rawResponsePath;
       }
       return parsed as T;
-    } catch (parseError) {
-      const preview = result.text.length > 1000 ? `${result.text.slice(0, 1000)}…` : result.text;
-      console.error('[SimpleAI] Failed to parse JSON response (preview):', preview);
-      console.error('[SimpleAI] Parse error:', parseError);
-      throw parseError;
+    } catch (parseError: any) {
+      // This should never happen now, but just in case
+      console.error('[SimpleAI] Unexpected parse error (should not happen):', parseError?.message);
+      return { schema: [], data: [], reasoning: 'Unexpected parsing error' } as T;
     }
   }
 
@@ -336,61 +467,87 @@ Title: ${item.title}
 Content: ${item.content}`)
       .join('\n\n');
 
-    const prompt = `You are an expert at data structuring and schema design.
-Given refined web content and a user query, create a structured dataset with appropriate columns and data.
+    const totalChars = sourcesText.length;
+    const estTokens = Math.round(totalChars / 4);
+
+    const statsMsg = `[SimpleAI] Sending ${totalChars.toLocaleString()} characters (~${estTokens.toLocaleString()} tokens) to AI from ${limited.length} sources.`;
+    console.log(statsMsg);
+    input.logger?.info(`📊 Data Batch: ${limited.length} pages, ${totalChars.toLocaleString()} chars (~${estTokens.toLocaleString()} tokens)`);
+
+    // STEP 1: EXHAUSTIVE DRAFT EXTRACTION
+    const p1Msg = `Phase 1: Researching & Extracting Data Exhaustively...`;
+    console.log(`[SimpleAI] ${p1Msg} for "${userQuery}"...`);
+    input.logger?.log(`🔍 ${p1Msg}`);
+    input.logger?.progress('Research Phase', 3, 5, 'Collecting every relevant detail from corpus');
+    const draftPrompt = `You are a data researcher. Your goal is to EXHAUSTIVELY extract every single entity and detail from the provided corpus that relates to the user query.
 
 User Query: "${userQuery}"
-Target Rows: ${numRows}
 
-IMPORTANT ABOUT TARGET ROWS:
-- Always treat Target Rows as the main limit on how many rows to output.
-- If the user text mentions phrases like "top 10" or "top N" but Target Rows is larger, you should ignore that smaller number and aim to produce as many grounded rows as possible, up to Target Rows.
-
-Refined Content:
+<corpus>
 ${sourcesText}
+</corpus>
 
-PROCESSING STRATEGY (FOLLOW THIS):
-- First, scan the overall structure to understand how the data is organized across sources.
-- Identify sections that contain entity lists, tables, bullet lists, A-to-Z indexes, catalogs, or other repeated patterns that match the user query.
-- Prefer well-structured sources (tables, lists, IMDB-style pages, A–Z lists) but still use other sources as support.
-- Break the content mentally by source and process each source independently.
-- Recognize patterns like "Name | Location | Type" or similar repeated structures and extract rows from them.
-- Filter out JavaScript/CSS/HTML boilerplate, navigation, ads, and other noise.
+INSTRUCTIONS:
+1. Go through EVERY source.
+2. Extract ALL relevant entities (e.g., if query is about cars, list every car model, price, and launch date mentioned).
+3. Do not worry about JSON format yet. Just provide a clear, comprehensive list of all data found.
+4. If no exact matches are found, extract closely related entities.
+5. Provide as much detail as possible for each entity discovered.`;
 
-ROW GRANULARITY (VERY IMPORTANT):
-- Treat each distinct real-world entity mentioned in the sources as one row. Examples of entities:
-  - For medical queries: each disease, condition, symptom group, treatment protocol, guideline, or dataset.
-  - For products: each individual product or SKU.
-  - For places: each hospital, clinic, college, or location.
-- When a page lists many entities (e.g. a long list of diseases, symptoms, guidelines, or products), you should create one row per entity rather than summarizing them into a few broad rows.
+    const draftResult = await this.generate({
+      prompt: draftPrompt,
+      model: process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free',
+      temperature: 0.7, // Higher for better discovery
+      maxTokens: 16384, // High limit for research phase
+      sessionId: sessionId ? `${sessionId}-draft` : undefined,
+    });
 
-MERGING AND DEDUPLICATION:
-- Use information from ALL sources to fill in each row. If multiple sources clearly describe the same entity, you may merge their details into a single consolidated row.
-- Do NOT over-merge: if there is any doubt whether two mentions are the same entity, keep them as separate rows.
+    const draftContent = draftResult.text;
 
-ROW COUNT AND RECALL:
-- It is OK if some columns are empty or unknown for a row. Do NOT drop a row just because some fields are missing.
-- Extract as many **real** rows as possible, up to the Target Rows value.
-- If the sources clearly contain many entities (e.g. hundreds of diseases or products) and Target Rows is large, prefer generating close to Target Rows rather than only a small representative sample.
-- Never invent entities that are not grounded in the sources.
+    // Persist the Draft so the user can see it
+    try {
+      const tempDir = getWritableTempDir();
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const draftPath = join(tempDir, `ai-research-draft-${timestamp}.txt`);
+      writeFileSync(draftPath, draftContent, 'utf8');
+      const saveMsg = `Phase 1 Research Draft saved: ${draftPath}`;
+      console.log(`[SimpleAI] ${saveMsg}`);
+      input.logger?.log(`📝 ${saveMsg}`);
+    } catch (e: any) {
+      console.warn(`[SimpleAI] Failed to save Step 1 draft: ${e.message}`);
+    }
 
-Return your response as a JSON object with this exact structure:
+    // STEP 2: DYNAMIC SCHEMA & STRICT FORMATTING
+    const p2Msg = `Phase 2: Inducing Dynamic Schema & Creating Dataset...`;
+    console.log(`[SimpleAI] ${p2Msg} (Target: Up to ${numRows} rows)...`);
+    input.logger?.log(`🏗️ ${p2Msg}`);
+    input.logger?.progress('Structuring Phase', 4, 5, 'Mapping best-fit columns to discovered data');
+    const finalPrompt = `You are a data architect. Convert the provided Research Draft into a strict JSON dataset.
+
+<research_draft>
+${draftContent}
+</research_draft>
+
+INSTRUCTIONS:
+1. INDUCE SCHEMA: First, analyze the draft to identify the most relevant 3-7 columns that capture the discovered data. 
+2. DATA DENSITY: Do NOT include columns if they will be mostly empty (N/A). Only create columns that have high coverage across the entities.
+3. Rows: Extract UP TO ${numRows} UNIQUE entities.
+4. NO PADDING: If you found fewer than ${numRows} unique entities, stop there. Do not repeat.
+5. NO MONOLOGUE: Return ONLY the JSON object. No preamble. No side-text. No listing of what you skipped.
+6. FORMAT: Ensure the JSON matches the schema you define.
+
+JSON Structure Template:
 {
   "schema": [
-    {
-      "name": "column_name",
-      "type": "String|Number|Date|Boolean",
-      "description": "what this column represents"
-    }
+    { "name": "col_one", "type": "String", "description": "..." },
+    { "name": "col_two", "type": "String", "description": "..." }
   ],
   "data": [
-    {
-      "column1": "value1",
-      "column2": "value2"
-    }
+    { "col_one": "value", "col_two": "value" }
   ],
-  "reasoning": "explanation of the schema design and data extraction approach"
-}`;
+  "reasoning": "Summary of extraction"
+}
+`;
 
     const schemaShape = {
       schema: [
@@ -406,15 +563,15 @@ Return your response as a JSON object with this exact structure:
           column2: 'value2',
         },
       ],
-      reasoning: 'text',
+      reasoning: 'Brief explanation of findings',
     };
 
     const result = await SimpleAI.generateWithSchema<StructuredDataset>({
-      prompt,
+      prompt: finalPrompt,
       schema: schemaShape,
       model: process.env.OPENROUTER_MODEL || 'nvidia/nemotron-3-nano-30b-a3b:free',
-      maxTokens: 5000,
-      temperature: 0.3,
+      temperature: 0.1, // Lower for strict JSON adherence
+      maxTokens: 16384, // Ensure we have enough space for the full dataset
       sessionId,
     });
 
@@ -441,6 +598,52 @@ Return your response as a JSON object with this exact structure:
     }
 
     return result;
+  }
+
+  /**
+   * Attempts to heal truncated JSON by closing open brackets/braces
+   */
+  private static healJson(json: string): string | null {
+    let text = json.trim();
+    if (!text) return null;
+
+    // Remove any trailing commas that make it invalid before closing
+    text = text.replace(/,\s*$/, "");
+
+    // Count open/close structures
+    let openBraces = (text.match(/\{/g) || []).length;
+    let closeBraces = (text.match(/\}/g) || []).length;
+    let openBrackets = (text.match(/\[/g) || []).length;
+    let closeBrackets = (text.match(/\]/g) || []).length;
+
+    // If it's already balanced, just return
+    if (openBraces === closeBraces && openBrackets === closeBrackets) return text;
+
+    let healed = text;
+
+    // If it ends mid-string, close the string
+    const lastQuote = text.lastIndexOf('"');
+    const isUnclosedString = (text.match(/"/g) || []).length % 2 !== 0;
+    if (isUnclosedString) {
+      // If we are mid-key or mid-value, try to find a stopping point
+      healed += '"';
+    }
+
+    // Close objects then arrays in reverse order of found opening
+    // This is a simple stack-based closer
+    const stack: string[] = [];
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '{') stack.push('}');
+      else if (text[i] === '[') stack.push(']');
+      else if (text[i] === '}') stack.pop();
+      else if (text[i] === ']') stack.pop();
+    }
+
+    while (stack.length > 0) {
+      healed += stack.pop();
+    }
+
+    return healed;
   }
 }
 

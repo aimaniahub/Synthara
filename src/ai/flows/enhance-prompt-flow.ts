@@ -36,23 +36,31 @@ export async function enhancePrompt(input: EnhancePromptInput): Promise<EnhanceP
 A user has provided the following data generation prompt:
 "${input.currentPrompt}"
 
-Your task is to help the user enhance this prompt. Your goal is to make their request clearer, more focused, and better structured so an AI can generate high-quality data based on their intent.
+Your task is to help the user enhance this prompt. Make their request clearer and more focused so we can find relevant web sources and extract data.
 
-Focus on:
-- Improving the wording for clarity and precision
-- Suggesting ways to structure the request if it's too loose or narrative
-- Helping to narrow the scope or add necessary constraints if the prompt is too broad or ambiguous
-- Pointing out if any parts are unclear or could lead to poor or irrelevant data generation
-- If the user hinted at specific columns, data types, or examples, you can refine those descriptions or suggest related aspects that would improve data quality
-- The enhanced prompt should still sound like it's the user's request, but improved
-- If the original prompt is already quite good and specific, acknowledge this and offer minor refinements
+IMPORTANT - KEEP IT SIMPLE:
+- Focus on clarifying WHAT TYPE of entities the user wants (e.g., "movies", "restaurants", "products")
+- Do NOT add specific column requirements - columns will be discovered automatically from scraped data
+- Keep the prompt search-friendly and concise
+- Add useful filters if obvious (e.g., time period, location, category)
+- If the original prompt is already clear, make minimal changes
 
-IMPORTANT: Do not add the word "synthetic" or "artificial" to the enhanced prompt. Focus on making the request clearer and more specific.
+AVOID:
+- Adding column specifications like "include title, genre, release date" - these limit data extraction
+- Making the prompt too long or complex
+- Adding unrealistic requirements for data that may not exist online
+
+GOOD EXAMPLE:
+- Original: "list of movies 2026"
+- Enhanced: "List of upcoming Indian movies scheduled for release in 2026"
+
+BAD EXAMPLE (too specific about columns):
+- Enhanced: "List of 2026 movies including title, genre, director, budget, box office" ← DON'T do this
 
 Respond with a JSON object containing:
 {
   "enhancedPrompt": "The improved version of the user's prompt",
-  "reasoning": "Brief explanation of how your suggestions will help get better, more relevant data"
+  "reasoning": "Brief explanation of how your suggestions will help find better data"
 }`;
 
     const response = await SimpleAI.generate({

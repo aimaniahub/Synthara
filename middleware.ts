@@ -75,11 +75,26 @@ export async function middleware(request: NextRequest) {
     p.catch(() => null);
     return Promise.race([p, timeoutPromise]).finally(() => clearTimeout(timeout)) as Promise<T>;
   }
-  const { data: { user } = { user: null } } = await withTimeout<any>(
-    supabase.auth.getUser(),
-    2000,
-    { data: { user: null } }
-  )
+
+  let user = null;
+  try {
+    const { data } = await withTimeout<any>(
+      supabase.auth.getUser(),
+      2000,
+      { data: { user: null } }
+    );
+    user = data?.user ?? null;
+  } catch (error: any) {
+    // Handle invalid refresh token error gracefully by clearing stale cookies
+    console.warn('[Middleware] Auth error, clearing session:', error?.message);
+
+    // Clear Supabase auth cookies to force fresh login
+    const cookiesToClear = ['sb-otpghqglrqbytbladyqa-auth-token', 'sb-otpghqglrqbytbladyqa-auth-token-code-verifier'];
+    for (const cookieName of cookiesToClear) {
+      response.cookies.set(cookieName, '', { maxAge: 0, path: '/' });
+    }
+    user = null;
+  }
 
   const { pathname } = request.nextUrl
 

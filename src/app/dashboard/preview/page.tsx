@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { getUserDatasets, type SavedDataset, getDatasetById } from '@/lib/supabase/actions';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import Papa from 'papaparse';
 
 
 function DataPreviewContent() {
@@ -59,21 +60,20 @@ function DataPreviewContent() {
           if (dataset) {
             setLoadedDataset(dataset);
             if (dataset.data_csv) {
-              const rows = dataset.data_csv.split('\n');
-              const headers = rows[0]?.split(',') || [];
-              const parsedRows = rows.slice(1).map(rowStr => {
-                const values = rowStr.split(',');
-                return headers.reduce((obj, header, index) => {
-                  obj[header] = values[index];
-                  return obj;
-                }, {} as Record<string, any>);
-              }).filter(row => Object.values(row).some(val => val && String(val).trim() !== ''));
+              const result = Papa.parse(dataset.data_csv, {
+                header: true,
+                skipEmptyLines: true,
+                transformHeader: (h) => h.trim().replace(/^"|"$/g, '')
+              });
+
+              const parsedRows = result.data as Record<string, any>[];
               setLoadedDataRows(parsedRows);
 
               if (dataset.schema_json && Array.isArray(dataset.schema_json)) {
                 setLoadedSchema(dataset.schema_json as { name: string, type: string }[]);
-              } else if (parsedRows.length > 0 && headers.length > 0) {
-                setLoadedSchema(headers.map(key => ({ name: key, type: 'String' }))); // Basic inference
+              } else if (parsedRows.length > 0) {
+                const headers = Object.keys(parsedRows[0]);
+                setLoadedSchema(headers.map(key => ({ name: key, type: 'String' })));
               }
             } else {
               setLoadedDataRows([]);
@@ -287,15 +287,27 @@ function DataPreviewContent() {
                         <TableBody>
                           {loadedDataRows.slice(0, 20).map((row: Record<string, any>, rowIndex: number) => (
                             <TableRow key={rowIndex} className="border-border/10 hover:bg-primary/[0.02] transition-colors group">
-                              {loadedSchema.map((col: { name: string, type: string }) => (
-                                <TableCell key={col.name} className="px-6 py-4 text-sm font-bold text-muted-foreground group-hover:text-foreground transition-colors max-w-[300px] truncate">
-                                  {row[col.name] === null || row[col.name] === undefined || String(row[col.name]).trim() === '' ? (
-                                    <span className="opacity-30 italic font-medium">null</span>
-                                  ) : (
-                                    String(row[col.name])
-                                  )}
-                                </TableCell>
-                              ))}
+                              {loadedSchema.map((col: { name: string, type: string }) => {
+                                // Robust field lookup (case-insensitive and trimmed)
+                                const cellValue = ((): any => {
+                                  if (row.hasOwnProperty(col.name)) return row[col.name];
+                                  const normalizedCol = col.name.toLowerCase().trim();
+                                  for (const key in row) {
+                                    if (key.toLowerCase().trim() === normalizedCol) return row[key];
+                                  }
+                                  return undefined;
+                                })();
+
+                                return (
+                                  <TableCell key={col.name} className="px-6 py-4 text-sm font-bold text-muted-foreground group-hover:text-foreground transition-colors max-w-[300px] truncate">
+                                    {cellValue === null || cellValue === undefined || String(cellValue).trim() === '' ? (
+                                      <span className="opacity-30 italic font-medium">null</span>
+                                    ) : (
+                                      String(cellValue)
+                                    )}
+                                  </TableCell>
+                                );
+                              })}
                             </TableRow>
                           ))}
                         </TableBody>

@@ -91,19 +91,20 @@ function getFieldCaseInsensitive(obj: Record<string, any>, field: string): any {
 function parseXValue(v: any): string {
   if (v instanceof Date) return v.toISOString().slice(0, 10);
   if (typeof v === 'number') {
-    if (v >= 1900 && v <= 2100) return String(v);
-    if (v > 1000000000) return new Date(v).toISOString().slice(0, 10);
+    if (v >= 1900 && v <= 2100) return String(v); // It's a year
+    if (v > 1000000000) return new Date(v).toISOString().slice(0, 10); // Epoch
     return String(v);
   }
-  if (typeof v === 'string') {
+  if (typeof v === 'string' && v.trim() !== '') {
     const t = Date.parse(v);
-    if (Number.isFinite(t)) {
+    if (!isNaN(t)) {
       const d = new Date(t);
+      // If it looks like a full timestamp, just use YYYY-MM-DD
       return d.toISOString().slice(0, 10);
     }
     return v;
   }
-  return String(v || '');
+  return String(v ?? '');
 }
 
 function toNumber(v: any): number | null {
@@ -133,18 +134,27 @@ export function NivoChartRenderer({ spec, rows }: Props) {
       switch (spec.type) {
         case 'line': {
           if (!spec.xField || !spec.yField) return <EmptyChartState title={spec.title} />;
-          const byX = new Map<string, number[]>();
+          const isCount = spec.yField === '__count__' || spec.aggregation === 'count';
+          const byX = new Map<string, number>();
+
           for (const r of rows) {
             const xv = getFieldCaseInsensitive(r, spec.xField);
             const xStr = parseXValue(xv);
-            const yv = toNumber(getFieldCaseInsensitive(r, spec.yField));
-            if (yv === null) continue;
-            const arr = byX.get(xStr) || [];
-            arr.push(yv);
-            byX.set(xStr, arr);
+            if (!xStr) continue;
+
+            if (isCount) {
+              byX.set(xStr, (byX.get(xStr) || 0) + 1);
+            } else {
+              const yv = toNumber(getFieldCaseInsensitive(r, spec.yField!));
+              if (yv !== null) {
+                // For simplicity in line charts, we sum if there are multiple values for same X
+                byX.set(xStr, (byX.get(xStr) || 0) + yv);
+              }
+            }
           }
+
           const points = Array.from(byX.entries())
-            .map(([k, vals]) => ({ x: k, y: aggregate(vals, spec.aggregation) }))
+            .map(([k, v]) => ({ x: k, y: v }))
             .sort((a, b) => String(a.x).localeCompare(String(b.x)));
 
           if (!points.length) return <EmptyChartState title={spec.title} />;
@@ -183,9 +193,13 @@ export function NivoChartRenderer({ spec, rows }: Props) {
             const counts = new Map<string, number>();
             for (const r of rows) {
               const kv = getFieldCaseInsensitive(r, xKey);
-              if (kv === null || kv === undefined) continue;
-              const key = String(kv);
-              counts.set(key, (counts.get(key) || 0) + 1);
+              if (kv === null || kv === undefined || kv === '') continue;
+
+              // Handle comma separated tags (e.g. "Equity, Commodity")
+              const vals = String(kv).split(',').map(s => s.trim()).filter(Boolean);
+              for (const val of vals) {
+                counts.set(val, (counts.get(val) || 0) + 1);
+              }
             }
             data = Array.from(counts.entries()).map(([k, count]) => ({ [xKey]: k, [yKey]: count }));
           } else {
@@ -193,11 +207,14 @@ export function NivoChartRenderer({ spec, rows }: Props) {
             for (const r of rows) {
               const kv = getFieldCaseInsensitive(r, xKey);
               const yv = toNumber(getFieldCaseInsensitive(r, yKey));
-              if (kv === null || kv === undefined || yv === null) continue;
-              const key = String(kv);
-              const arr = byCat.get(key) || [];
-              arr.push(yv);
-              byCat.set(key, arr);
+              if (kv === null || kv === undefined || kv === '' || yv === null) continue;
+
+              const vals = String(kv).split(',').map(s => s.trim()).filter(Boolean);
+              for (const val of vals) {
+                const arr = byCat.get(val) || [];
+                arr.push(yv);
+                byCat.set(val, arr);
+              }
             }
             data = Array.from(byCat.entries()).map(([k, vals]) => ({ [xKey]: k, [yKey]: aggregate(vals, spec.aggregation) }));
           }
